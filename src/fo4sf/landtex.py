@@ -139,6 +139,32 @@ def cell_weights(layers) -> Dict[int, np.ndarray]:
     return out
 
 
+def cell_layer_presence(layers) -> Dict[int, np.ndarray]:
+    """{ltex: (33, 33) raw opacity} of one cell, ignoring what lies on top: the base texture counts 1 over its
+    quadrant, an alpha layer its own VTXT opacity (max if a texture appears twice). Skyrim grows a texture's grass
+    wherever that texture is painted as a layer, even under an opaque layer above it (2026-11-23: modders' reports, and
+    the owner's Riverwood screenshots: a dense carpet where the visible top textures are NoGrass / dirt)."""
+    out: Dict[int, np.ndarray] = {}
+    owner = np.zeros((33, 33), np.int64)
+    owner[:, 17:] += 1
+    owner[17:, :] += 2
+    for q in range(4):
+        r0, c0 = QUAD_ORIGIN[q]
+        mask = owner == q
+        for _q, fid, _layer, ops in (x for x in layers if x[0] == q):
+            op = np.zeros((33, 33))
+            if ops is None:
+                op[:] = 1.0
+            else:
+                for pos, v in ops.items():
+                    r, c = divmod(pos, 17)
+                    if 0 <= r < 17 and 0 <= c < 17:
+                        op[r0 + r, c0 + c] = min(max(v, 0.0), 1.0)
+            cur = out.setdefault(fid, np.zeros((33, 33)))
+            np.maximum(cur, op * mask, out=cur)
+    return out
+
+
 def land_colours(data: bytes) -> Optional[np.ndarray]:
     """A LAND record's VCLR vertex colours as (33, 33, 3) uint8 (row 0 = south; 255 = no tint), or None."""
     for sig, d in fo4land.iter_subrecords(data):
@@ -147,10 +173,11 @@ def land_colours(data: bytes) -> Optional[np.ndarray]:
     return None
 
 
-def read_world_textures(esm: str, world: str = "Tamriel", colours: Optional[dict] = None):
+def read_world_textures(esm: str, world: str = "Tamriel", colours: Optional[dict] = None,
+                        presence: Optional[dict] = None):
     """({(cx, cy): {ltex: (33, 33) weight}}, {ltex: {"edid", "diffuse"}}) for every cell with LAND texture data.
     colours: a dict to fill with {(cx, cy): (33, 33, 3) VCLR} for those cells (Skyrim multiplies the ground textures
-    by these per-vertex colours)."""
+    by these per-vertex colours). presence: a dict to fill with {(cx, cy): cell_layer_presence(...)}."""
     cells = {}
     with fo4land.Plugin(esm) as p:
         ltex = read_ltex(p)
@@ -171,6 +198,8 @@ def read_world_textures(esm: str, world: str = "Tamriel", colours: Optional[dict
                                 lay = land_layers(data)
                                 if lay:
                                     cells[cell[1]] = cell_weights(lay)
+                                    if presence is not None:
+                                        presence[cell[1]] = cell_layer_presence(lay)
                                     if colours is not None:
                                         vc = land_colours(data)
                                         if vc is not None:

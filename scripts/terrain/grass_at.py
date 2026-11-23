@@ -19,6 +19,8 @@ import json
 import os
 import sys
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
@@ -85,6 +87,52 @@ def describe(near, ltex_info, ltex_grass, gras_sky, mapping, overrides, report):
     return out
 
 
+CELL = 4096.0
+STEP = CELL / 32.0
+
+
+def presence_shares(presence, xu, yu, radius_u, grassy):
+    """Over the LAND vertices within radius_u of (xu, yu): ({ltex: share of vertices where it is painted as a layer
+    at all (raw opacity > 0)}, share of vertices with any grassy texture painted), grassy = set of ltex with grass."""
+    hits, anyg, n = {}, 0, 0
+    for cx in range(int((xu - radius_u) // CELL), int((xu + radius_u) // CELL) + 1):
+        for cy in range(int((yu - radius_u) // CELL), int((yu + radius_u) // CELL) + 1):
+            ps = presence.get((cx, cy))
+            if not ps:
+                continue
+            gx = cx * CELL + np.arange(33) * STEP
+            gy = cy * CELL + np.arange(33) * STEP
+            inside = ((gy[:, None] - yu) ** 2 + (gx[None, :] - xu) ** 2) <= radius_u ** 2
+            if not inside.any():
+                continue
+            n += int(inside.sum())
+            g = np.zeros((33, 33), bool)
+            for fid, op in ps.items():
+                on = (op > 0) & inside
+                hits[fid] = hits.get(fid, 0) + int(on.sum())
+                if fid in grassy:
+                    g |= on
+            anyg += int(g.sum())
+    if not n:
+        return {}, 0.0
+    return {f: h / n for f, h in hits.items()}, anyg / n
+
+
+def presence_lines(shares, any_grass, visible, ltex_info, ltex_grass, gras_sky):
+    """The Skyrim-rule summary: grassy textures painted here as layers against their visible share on top."""
+    out = ["Skyrim's grass rule (a texture's grass grows wherever it is painted as a layer, also under other layers):",
+           f"  a grassy texture is painted under {100 * any_grass:.0f} % of the ground here; visible on top: "
+           f"{100 * sum(v for f, v in visible.items() if ltex_grass.get(f)):.0f} %"]
+    for fid, sh in sorted(shares.items(), key=lambda kv: -kv[1]):
+        gs = [gras_sky[g]["edid"] for g in ltex_grass.get(fid, []) if g in gras_sky]
+        if not gs or sh <= 0:
+            continue
+        edid = ltex_info.get(fid, {}).get("edid", f"{fid:08X}")
+        out.append(f"  {edid:<22} painted under {100 * sh:3.0f} % (visible {100 * visible.get(fid, 0.0):3.0f} %): "
+                   + ", ".join(gs))
+    return out
+
+
 def skyrim_units(ov, pos=None, spawn_at=None, skyrim_pos=None):
     """The spot in Skyrim units: --skyrim-pos as given, else the Starfield position shifted into the overlay frame
     (through the coc marker when spawn_at is given) and scaled by 70 units per metre."""
@@ -133,13 +181,19 @@ def main(argv=None):
         sys.exit(f"{rp} not found: run skyrim_grass_native.py first")
     with open(rp, encoding="utf-8") as f:
         report = json.load(f)
-    cells, ltex = landtex.read_world_textures(a.skyrim)
+    presence = {}
+    cells, ltex = landtex.read_world_textures(a.skyrim, presence=presence)
     near = ground_tone.area_textures(cells, {}, xu, yu, a.radius * 70.0)
     if not near:
         sys.exit(f"no Skyrim LAND textures within {a.radius:g} m of ({a.pos[0]:g}, {a.pos[1]:g})")
     ltex_grass, gras_sky = skyrimgrass.read_grass(a.skyrim)
     print(f"within {a.radius:g} m of Skyrim ({xu:.0f}, {yu:.0f}) units, cell ({int(xu // 4096)}, {int(yu // 4096)}):")
     for line in describe(near, ltex, ltex_grass, gras_sky, mapping, prm.get("ltex_overrides") or [], report):
+        print(line)
+    total = sum(v[0] for v in near.values()) or 1.0
+    shares, any_grass = presence_shares(presence, xu, yu, a.radius * 70.0, set(ltex_grass))
+    for line in presence_lines(shares, any_grass, {f: v[0] / total for f, v in near.items()}, ltex, ltex_grass,
+                               gras_sky):
         print(line)
     return 0
 

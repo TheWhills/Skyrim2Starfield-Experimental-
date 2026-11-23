@@ -510,6 +510,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   grass_at now takes `--skyrim-pos X Y` (Skyrim's own getpos at the spot), no frame shift involved. Also seen at the
   Riverwood mill (verified, screenshots): Skyrim's green grass on the riverbank meadow, ours a few straw clumps on
   the dirt edges and none on the meadow.
+  Owner (14:45 / 14:46, no grass mod in Skyrim): grass_at at Skyrim's own getpos (17448, -48815) in a dense grass
+  carpet: visible top textures LFieldGrass02NoGrass 34 %, LDirt02 29 %, LPineForest02NoGrass 19 %, LFieldGrass02
+  11 %, LPineForest01 8 %. **Supported hypothesis: Skyrim grows a texture's grass wherever that texture is painted
+  as a layer, even under an opaque layer above it** (modders: "any portion of a cell with even 10% opacity of a
+  grassy texture has a chance of having those grasses show up"; "there must be still some texture underneath that
+  has grass"), while our terrain and its ground cover only know the visible top texture. landtex.cell_layer_presence
+  (raw layer opacity, base = 1 over its quadrant) and grass_at's "Skyrim's grass rule" section measure it at a spot.
+  If confirmed, the fix is per-location: grassy duplicates of the slots (same textures, Skyrim's grasses as ground
+  cover) painted where Skyrim has a grassy layer underneath.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

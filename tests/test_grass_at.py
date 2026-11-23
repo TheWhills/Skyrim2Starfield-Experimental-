@@ -55,5 +55,24 @@ class PositionTest(unittest.TestCase):
         self.assertEqual(G.skyrim_units(ov, [5.0, 4.0], [3.0, 4.0]), ((12 + 100) * 70.0, (20 - 50) * 70.0))
 
 
+class PresenceTest(unittest.TestCase):
+    def test_grass_under_an_opaque_layer_counts(self):
+        import numpy as np
+        from fo4sf import landtex
+        # quadrant 0: base LFieldGrass (grassy), an opaque NoGrass layer over all of it
+        layers = [(0, 0x1, -1, None), (0, 0x2, 0, {p: 1.0 for p in range(289)})]
+        w = landtex.cell_weights(layers)
+        self.assertEqual(float(w.get(0x1, np.zeros((33, 33)))[:16, :16].sum()), 0.0)   # invisible on top
+        pres = landtex.cell_layer_presence(layers)
+        self.assertTrue((pres[0x1][:17, :17] == 1.0).all())                          # but painted
+        self.assertEqual(float(pres[0x1][20:, 20:].sum()), 0.0)                      # only in its quadrant
+        shares, any_g = G.presence_shares({(0, 0): pres}, 500.0, 500.0, 300.0, {0x1})
+        self.assertEqual(any_g, 1.0)
+        self.assertEqual(shares[0x2], 1.0)
+        lines = G.presence_lines(shares, any_g, {0x2: 1.0}, {0x1: {"edid": "LFieldGrass02"}}, {0x1: [0x10]}, GRAS)
+        self.assertIn("painted under 100 % of the ground here; visible on top: 0 %", lines[1])
+        self.assertIn("LFieldGrass02          painted under 100 % (visible   0 %): ForestGrass01", lines[2])
+
+
 if __name__ == "__main__":
     unittest.main()
