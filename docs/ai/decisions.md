@@ -2834,3 +2834,13 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   Skyrim in game shows grass where Skyrim.esm's ground grows none. Alternatives: Skyrim.esm only (the pre-Update ground,
   kept as official=False / --skyrim-esm-only); the full mod load order (skyrimload.LoadOrder; not needed for vanilla).
   Heights and placed objects still read Skyrim.esm alone (open).
+
+## 2026-11-23 — Any weapon in the left hand, as in Skyrim: runtime copy, through reverse engineering
+- Owner: any weapon usable as a weapon in the left hand, as in Skyrim. Choices (owner): the left model is a runtime copy
+  of the real weapon's 3D (object mods, glow, legendary looks kept), no pre-built per-weapon copies; then an "equip to
+  left hand" hotkey (OSF Settings, proven with S2SDodge); then left-hand damage and the sheathed look.
+- Why runtime: only it shows the exact weapon; the build-time route (--left-hand-mod) stays for what exists.
+- First step: the Ghidra + ReVa setup (docs/re/ghidra-ai-setup.md, versions updated: ReVa 7.3.1 for Ghidra 12.1.3,
+  JDK 21) and the first session's targets (NiObject clone virtual, NiNode attach, what the equip path calls after
+  attaching a weapon so it is drawn). Owner has not installed Ghidra yet.
+

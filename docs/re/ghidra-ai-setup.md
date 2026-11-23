@@ -12,9 +12,9 @@ install things once, run the first analysis, and test in game.
 ## 1. Install (once)
 
 1. **Pick the versions from ReVa's release page** (github.com/cyberkaida/reverse-engineering-assistant/releases): each
-   release names the Ghidra version it is built for; ReVa only loads in that exact Ghidra version. As of 2026-10-27
-   Ghidra 12.2 is the newest (12.1.4 the last 12.1).
-   - Ghidra 12.2 or later: Java (JDK) 25. Ghidra 12.0 / 12.1: JDK 21. Adoptium Temurin is fine.
+   release names the Ghidra version it is built for; ReVa only loads in that exact Ghidra version. As of 2026-11-23 the
+   newest ReVa is 7.3.1 (2026-09-03), with builds for Ghidra 12.0 and 12.1 (12.1.3), not 12.2: install **Ghidra 12.1.3**
+   and **JDK 21** (Adoptium Temurin is fine), and take ReVa's zip for 12.1.
 2. **Ghidra**: download the matching zip from github.com/NationalSecurityAgency/ghidra/releases, unzip to e.g.
    `C:\Tools\ghidra_12.x`. Give it memory for a 100 MB+ executable: in `support\launch.properties` set
    `MAXMEM=16G` (or about half your RAM).
@@ -27,7 +27,9 @@ install things once, run the first analysis, and test in game.
 
        claude mcp add --scope user --transport http ReVa -- http://localhost:8080/mcp/message
 
-   In Claude Code, `/mcp` should list ReVa as connected. Optional: `/permissions` -> allow `mcp__ReVa` so it does not
+   In Claude Code, `/mcp` should list ReVa as connected. (ReVa 7.3 picks a random port and API key only when its
+   `mcp-reva` launcher starts a headless Ghidra; with the Ghidra GUI and the plugin, use the address the ReVa plugin
+   shows / its README names if 8080 does not connect.) Optional: `/permissions` -> allow `mcp__ReVa` so it does not
    ask before every tool call. Optional skills: `claude plugin marketplace add cyberkaida/reverse-engineering-assistant`.
    ReVa only listens on localhost by default; leave it that way (it can run scripts).
 
