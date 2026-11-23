@@ -162,9 +162,10 @@ def main(argv=None):
     ap.add_argument("--control", action="store_true",
                     help="control test: every converted Skyrim texture gets the vanilla ground cover the world's land "
                          "biome (Jemison's forest) uses most (vanilla grass models), no Skyrim grass converted")
-    ap.add_argument("--biome-masks", default="all",
-                    help="terrain masks of the added biome entries: 'all' (0-6: Base, Solid, FlatOuter, FlatInner, "
-                         "Talus, Flow, Path) or a comma list, e.g. 0")
+    ap.add_argument("--biome-masks", default="2,3,4,5",
+                    help="terrain masks of the added biome entries: a comma list (0-6: Base, Solid, FlatOuter, "
+                         "FlatInner, Talus, Flow, Path) or 'all'; default 2,3,4,5: the Creation Kit wiki's Grass page "
+                         "says not to add ground cover to the Solid, Base or Path masks")
     ap.add_argument("--allow-procgen", action="store_true",
                     help="test (2026-11-22, after the planet biome and the vanilla control grew nothing): also set the "
                          "Skyrim world's Allow ProcGen flag (WRLD FNAM bit 3), which no vanilla world sets; the engine "

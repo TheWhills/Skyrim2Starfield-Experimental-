@@ -283,6 +283,19 @@ Max Density; what a vanilla grass model needs. Two tools:
     cell from prebuilt files (cell grass) rather than from the biome. Next: `cellgrass_survey.py` (which grass files
     the archives hold, per world), the console checks (bAllowCreateGrass, bAllowProcGenOnOverlays, CreateGrassAt's
     usage), and the control cover reached by landing on Nirn by ship instead of coc.
+  **Creation Kit wiki, Grass page (owner's copy, 2026-11-22; Bethesda's documentation, edited 2026-10-19):**
+  - Grass reaches the world only through a biome: GRAS -> GCVR -> the biome's Terrain Data ground cover drop-downs ->
+    the biome on a planet (Galaxy View). **"Do not add Ground [cover] to Solid, Base, or Path masks."** Our builds added
+    entries for all 7 masks; the default is now 2,3,4,5 (FlatOuter, FlatInner, Talus, Flow).
+  - GCVR "Painter Material Threshold": hand-painted landscape (the Landscape Tool's materials, blended weights such as
+    60 % grass / 40 % dirt) gets the ground cover where the material passes the threshold. So painted overlay terrain
+    is meant to grow ground cover (refutes "only generated surfaces"), through the biome it is painted with.
+  - Grass materials: VegetationTranslucent1Layer shader model (2-layer / emissive variants), AlphaTestThreshold no
+    lower than 0.2, the vegetation (wind) settings, TerrainTintSettings on to blend with the ground. Our converted
+    grass models use the ordinary static material: no wind, no terrain tint. To fix once grass grows at all.
+  - Field meanings: Distribution, Contrast, Max Density; Min / Max Slope, Fit to Slope, Above / Below Water Clamp
+    (fDistanceFromWaterLevelAbove), Apply Between; Height Range, Color Range (random darkening), Uniform Scaling,
+    Vertex Lighting, Wind Frequency (cycles per game minute); GCVR Override Density.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
