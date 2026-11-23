@@ -136,6 +136,42 @@ def with_material(nif_bytes: bytes, material_path: str) -> bytes:
     return nifmod.serialize(n)
 
 
+MODEL_TYPES = (b"GRAS", b"STAT", b"MSTT", b"FLOR", b"TREE", b"ACTI", b"MISC", b"SCOL", b"PKIN", b"MOVS", b"BNDS")
+
+
+def norm_model(p: str) -> str:
+    """A model path as the archives list it: lower case, backslashes, under meshes\\."""
+    p = p.replace("/", "\\").lower().lstrip("\\")
+    return p if p.startswith("meshes\\") else "meshes\\" + p
+
+
+def unused_grass_paths(sf_data: str, plugins=None):
+    """Grass NIF paths shipped in the game's mesh archives (meshes\\landscape\\grass\\) that no record of the
+    game's own plugins names, sorted. 2026-11-23: the grass system loads a model only at a path the game already
+    ships (our file over GrassMossMounds04.nif grew; the same file at any new path did not), so our grass models go
+    over vanilla grass paths nothing uses: nothing vanilla changes."""
+    import glob
+    from fo4sf import ba2
+    shipped = set()
+    for p in sorted(glob.glob(os.path.join(sf_data, "Starfield - Meshes*.ba2"))):
+        for n in ba2.Ba2(p).names:
+            k = norm_model(n)
+            if k.startswith("meshes\\landscape\\grass\\") and k.endswith(".nif"):
+                shipped.add(k)
+    if plugins is None:
+        plugins = [os.path.join(sf_data, f) for f in sorted(os.listdir(sf_data))
+                   if f.lower().endswith(".esm") and (f.lower().startswith(("starfield", "sfbgs", "shatteredspace",
+                                                                             "constellation", "oldmars",
+                                                                             "blueprintships")))]
+    used = set()
+    for esm in plugins:
+        for _t, _h, subs, _fid in sfplugin.records(esm, MODEL_TYPES):
+            for sig, d in subs:
+                if sig == b"MODL":
+                    used.add(norm_model(bytes(d).rstrip(b"\0").decode("latin-1", "replace")))
+    return sorted(shipped - used), len(shipped), len(used & shipped)
+
+
 def template_nif(sf_data: str, model: str) -> bytes:
     """A vanilla model's NIF bytes from the game's archives."""
     import glob
@@ -287,6 +323,10 @@ def main(argv=None):
                          "another vanilla grass model's path, e.g. Landscape\\Grass\\GrassMossMounds04.nif, and named "
                          "by every grass. Flowers = the grass loader reads mod files at known paths; moss mounds = it "
                          "reads only the game's archives")
+    ap.add_argument("--vanilla-paths", action="store_true",
+                    help="put each converted Skyrim grass model over a grass model path the game ships but none of "
+                         "its records names (2026-11-23: the grass system only loads models at paths the game "
+                         "already ships)")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -400,7 +440,11 @@ def main(argv=None):
             sys.exit("no vanilla GRAS / GCVR template found")
         report["templates"] = {"gras": sfplugin.edid(gt[2]), "gcvr": sfplugin.edid(ct[2]),
                                "gras_dnam": sfgrass.parse_gras_dnam(dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"])}
-        geometry = copied = None
+        geometry = copied = free = None
+        if a.vanilla_paths:
+            free, n_shipped, n_used = unused_grass_paths(os.path.join(a.starfield, "Data"))
+            report["vanilla_path_pool"] = {"shipped": n_shipped, "used_by_records": n_used, "free": len(free)}
+            print(f"vanilla grass models: {n_shipped} shipped, {n_used} named by the game's records, {len(free)} free")
         if a.copy_template_nif or a.replace_vanilla:
             tmodel = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
             copied = template_nif(os.path.join(a.starfield, "Data"), tmodel)
@@ -450,6 +494,16 @@ def main(argv=None):
                     model = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
                 else:
                     model = convert_model(conv, name, tints.get(r["model"]), staging, a.vanilla_material, geometry)
+                    if free is not None:             # --vanilla-paths: move it over an unused vanilla grass path
+                        if not free:
+                            raise RuntimeError("no unused vanilla grass path left")
+                        vpath = free.pop(0)
+                        src_p = os.path.join(staging, "meshes", *model.split("\\"))
+                        dst_p = os.path.join(staging, *vpath.split("\\"))
+                        os.makedirs(os.path.dirname(dst_p), exist_ok=True)
+                        shutil.move(src_p, dst_p)
+                        report.setdefault("vanilla_paths", {})[r["edid"]] = vpath
+                        model = vpath.split("\\", 1)[1]
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"
                 continue

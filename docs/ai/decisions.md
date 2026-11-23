@@ -2792,3 +2792,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   dropped, S2SDodge sets only bNoAim) and the shipped Player_Melee's give-up range widened (--head-track-limit,
   default 180). Unresolved until the owner's run.
 
+- 2026-11-23 Native grass models go over grass model paths the game ships but no vanilla record names
+  (`--vanilla-paths`). Why: verified in game that the grass system loads a model only at a path the game already
+  ships (our file over GrassMossMounds04.nif grew; the identical file at any new path, in our archive, loose, via
+  MO2 or with our archive in sResourceArchiveList, never did). Alternatives: replacing used vanilla grass (changes
+  other planets), finding the check in Starfield.exe (Ghidra; open).

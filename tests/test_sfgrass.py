@@ -374,6 +374,32 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertIn("which our archive replaces with the template's NIF", log)
         self.assertIn("files: loose (meshes", log)
 
+    def test_unused_grass_paths(self):
+        import skyrim_grass_native as N
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        from test_formats import build_ba2_v1_gnrl
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "Starfield - Meshes01.ba2"), "wb") as fh:
+                fh.write(build_ba2_v1_gnrl({"meshes\\landscape\\grass\\Used01.nif": b"a",
+                                            "meshes\\landscape\\grass\\grass\\Spare01.nif": b"b",
+                                            "meshes\\landscape\\grass\\Spare02.nif": b"c",
+                                            "meshes\\setdressing\\Chair.nif": b"d"}))
+            h = struct.pack("<4sIII", b"GRAS", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+            with open(os.path.join(d, "Starfield.esm"), "wb") as fh:
+                fh.write(sfplugin.build([(b"GRAS", h, [(b"EDID", b"G\0"), (b"MODL", b"Landscape\\Grass\\used01.nif\0")],
+                                          0x10)], {"hedr_version": 0.96, "form_version": 555}, masters=()))
+            free, shipped, used = N.unused_grass_paths(d)
+        self.assertEqual(free, ["meshes\\landscape\\grass\\grass\\spare01.nif", "meshes\\landscape\\grass\\spare02.nif"])
+        self.assertEqual((shipped, used), (3, 1))
+
+    def test_vanilla_paths_build(self):
+        import skyrim_grass_native as N
+        pool = (["meshes\\landscape\\grass\\spare01.nif"], 5, 4)
+        with mock.patch.object(N, "unused_grass_paths", return_value=pool):
+            _raw, by, log = self._run(["--vanilla-paths", "--loose"])
+        self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"landscape\\grass\\spare01.nif\0")
+        self.assertIn("5 shipped, 4 named by the game's records, 1 free", log)
+
     def test_loose_build(self):
         _raw, by, log = self._run(["--loose"])
         self.assertIn("files: loose (meshes", log)

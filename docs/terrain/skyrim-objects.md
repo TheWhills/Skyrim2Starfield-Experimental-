@@ -441,6 +441,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   Next: `--replace-vanilla Landscape\Grass\GrassMossMounds04.nif` writes the hellebore NIF in our archive over
   that vanilla path and names it from every grass. Flowers = the grass loader reads mod files, but only at paths it
   already knows; moss mounds = it reads only the game's own archives.
+  **`--replace-vanilla` (owner, 12:46 / 12:48, verified in game): pink flowers grow.** Our archive's file over a
+  vanilla grass path is used; the same file at a new path never is. So the grass system reads mod files, but only at
+  model paths the game already ships (a lookup against the game's own file index? unresolved why). Workaround
+  (`--vanilla-paths`): `unused_grass_paths` lists the grass NIFs the mesh archives ship under
+  meshes\landscape\grass\ that no record of the game's own plugins names (GRAS, STAT, MSTT, FLOR, TREE, ACTI,
+  MISC, SCOL, PKIN, MOVS, BNDS), and each converted Skyrim grass model goes over one of them: nothing vanilla that
+  is placed or grown changes. Our .mesh / .mat files stay at our own paths (to be seen whether those load).
+  Owner's question (12:49): these are not placed objects; every plant seen in these tests was grown by Starfield's
+  ground cover from our GRAS / GCVR records (the hellebore and moss-mound grasses are flower / moss clumps, sparse at
+  Skyrim's densities). Placed (baked) grass is off in these builds.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
