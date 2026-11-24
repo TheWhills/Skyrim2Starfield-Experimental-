@@ -604,16 +604,20 @@ LeftCopyResult MakeLeftCopy(const LeftCopyOptions& opt) {
     reinterpret_cast<void (*)(void*, void*, bool)>(attach)(left, copy, true);
     if (ReadChildren(left, g_children, data, size)) left_after = size;
     const bool hung = ParentOf(copy) == left;
-    const auto original = ReadXform(copy, 0x40);
+    // under the grip node (L_Wrist) the copy is held at WeaponLeft's rest grip, as the worn blade; elsewhere it keeps
+    // the right weapon's local transform
+    const bool at_grip = !opt.grip_node.empty() && lk.left_name == opt.grip_node;
+    const auto original = at_grip ? combat::left_grip() : ReadXform(copy, 0x40);
     WriteXform(copy, 0x40, combat::oriented(original, opt.turn, opt.degrees));
     g_left_copy = {copy, left, original};
     const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
     return {hung, std::format("weapon node '{}' subtree:{}; model {} cloned ({} at 0x{:X}, CreateClone +0x{:X}); copy "
-                              "{} attached under {} (children {} -> {}, parent {}); turn {}, rotation {} {} {}; local t ({:.2f} {:.2f} {:.2f}) "
+                              "{} attached under {} (children {} -> {}, parent {}){}; turn {}, rotation {} {} {}; local t ({:.2f} {:.2f} {:.2f}) "
                               "scale {:.2f}; lookup {:.1f} ms{}, copy {:.1f} ms",
                               right_node, subtree, Describe(model), copy == model ? "SAME OBJECT" : "new object",
                               reinterpret_cast<std::uintptr_t>(copy), create - base, Describe(copy), Describe(left),
-                              left_before, left_after, hung ? "set" : "NOT SET", opt.turn, opt.degrees[0],
+                              left_before, left_after, hung ? "set" : "NOT SET", at_grip ? " at the left grip" : "",
+                              opt.turn, opt.degrees[0],
                               opt.degrees[1], opt.degrees[2], original.t[0], original.t[1], original.t[2], original.s,
                               t_find * 1000.0, cached ? " (cached)" : "",
                               (Now() - t0 - t_find) * 1000.0)};

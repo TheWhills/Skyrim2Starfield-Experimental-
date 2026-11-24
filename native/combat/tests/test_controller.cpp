@@ -676,6 +676,13 @@ static void power_in_combo() {
     ctl.on_key(256, true, 1.6, s);                                        // a quick press still buffers
     cs = ctl.on_key(256, false, 1.65, s);
     CHECK(count(cs, Command::Kind::SendEvent) == 0 && count(cs, Command::Kind::Log) == 1);
+    // a release whose press the plugin never saw (pressed in a menu): nothing, not a minutes-long "power" hold
+    // (owner's run 2026-11-23: clicks in the inventory sent MeleeAttackPowerStart into the graph)
+    Controller m;
+    m.on_key(256, true, 0.0, s);
+    m.on_key(256, false, 0.1, s);
+    m.on_anim_event("preHitFrame", "", 1.0);
+    CHECK(m.on_key(256, false, 60.0, s).empty());
     CHECK(!parse_config("[Combat]\nbPowerInCombo = 0\n").power_in_combo);
     // Starfield's power attack key (V = 47): the game's own when standing, ours during a combo
     Controller v;

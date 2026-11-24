@@ -138,3 +138,11 @@ degrees), written into the copy's local transform after the attach; `iLeftCopyTu
 live and logs the number. The weapon node and the left node are remembered per player 3D (checked before use), so
 only the first press walks the 3D.
 
+Owner's run 2026-11-23 (third build): the dual stance came on with the copy (verified: `dual wield: left blade worn
+(left-hand copy) -> stance S2S_StanceDual`), but under WeaponLeft the copy faced outward in turns (the vanilla turn /
+idle clips leave WeaponLeft away from the hand, as with the worn blade on 2026-10-26). Fourth build: the copy hangs
+under L_Wrist (`sLeftCopyNodes = L_Wrist, WeaponLeft`) held at WeaponLeft's rest grip (`sLeftCopyGripNode`,
+s2s left_grip() = skyrimweapon.left_grip_metres(), tests/test_left_copy_grip.py), so it stays in the hand in every
+clip, as the worn blade. Also fixed: an attack-key release whose press came in a menu (inventory / console clicks) was
+taken as a minutes-long hold and sent MeleeAttackPowerStart into the graph (the same log: 3 sends with menus open).
+

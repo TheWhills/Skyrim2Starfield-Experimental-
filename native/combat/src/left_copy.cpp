@@ -119,6 +119,13 @@ bool parse_degrees(std::string_view text, float out[3]) {
     return true;
 }
 
+Xform left_grip() {
+    Xform g;
+    g.r = {{{-0.179094f, 0.980503f, 0.080866f}, {-0.231144f, 0.037960f, -0.972179f}, {-0.956294f, -0.192803f, 0.219839f}}};
+    g.t = {0.068f, -0.011f, -0.038f};
+    return g;
+}
+
 Xform oriented(const Xform& original, int turn_index, const float degrees[3]) {
     Xform out = original;
     out.r = mul(original.r, mul(turn(turn_index).r, euler_degrees(degrees[0], degrees[1], degrees[2]).r));

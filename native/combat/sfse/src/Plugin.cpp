@@ -105,6 +105,7 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     if (auto it = plugin.find("sleftcopymodel"); it != plugin.end()) settings_.left_copy_model = it->second;
     if (auto it = plugin.find("sleftcopyskip"); it != plugin.end()) settings_.left_copy_skip = it->second;
     settings_.left_copy_dual = to_int(plugin, "bleftcopydual", 1) != 0;
+    if (auto it = plugin.find("sleftcopygripnode"); it != plugin.end()) settings_.left_copy_grip_node = it->second;
     settings_.left_copy_turn = ((to_int(plugin, "ileftcopyturn", 0) % 24) + 24) % 24;
     left_copy_turn_now_ = settings_.left_copy_turn;
     settings_.left_copy_turn_key = static_cast<std::uint32_t>(to_int(plugin, "ileftcopyturnkey", 0));
@@ -390,6 +391,7 @@ void Plugin::DoLeftCopy(combat::LeftCopy::Action a) {
     o.left_nodes = settings_.left_copy_nodes;
     o.model = settings_.left_copy_model;
     o.skip = settings_.left_copy_skip;
+    o.grip_node = settings_.left_copy_grip_node;
     o.turn = left_copy_turn_now_;
     for (int i = 0; i < 3; ++i) o.degrees[i] = settings_.left_copy_rotation[i];
     SFSE::GetTaskInterface()->AddTask([this, a, o]() {

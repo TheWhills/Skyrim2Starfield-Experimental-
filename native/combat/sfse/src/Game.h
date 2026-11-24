@@ -52,6 +52,7 @@ struct LeftCopyResult { bool ok = false; std::string text; };
 // copy's orientation under the left node (s2s/left_copy.h oriented()).
 struct LeftCopyOptions {
     std::string right_node, left_nodes, model, skip;
+    std::string grip_node = "L_Wrist";    // under this node the copy is held at the left grip (s2s left_grip())
     int turn = 0;
     float degrees[3] = {0, 0, 0};
 };

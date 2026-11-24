@@ -40,10 +40,11 @@ struct Settings {
     // Left-hand copy test (s2s/left_copy.h): the key (0 = off), the right weapon node, the left nodes to try.
     std::uint32_t left_copy_key = 0;
     std::string left_copy_weapon_node = "Weapon";
-    std::string left_copy_nodes = "WeaponLeft, L_Wrist";
+    std::string left_copy_nodes = "L_Wrist, WeaponLeft";
     std::string left_copy_model;                                  // "" = first child not in left_copy_skip
     std::string left_copy_skip = "R_HandIk, L_HandIk";
     bool left_copy_dual = true;                    // the dual moveset while a copy is on
+    std::string left_copy_grip_node = "L_Wrist";   // under this node the copy is held at the left grip ("" = never)
     int left_copy_turn = 0;                        // 0..23: s2s/left_copy.h turn()
     float left_copy_rotation[3] = {0, 0, 0};       // degrees about x, y, z, after the turn
     std::uint32_t left_copy_turn_key = 0;          // steps through the 24 turns while a copy is on (0 = off)

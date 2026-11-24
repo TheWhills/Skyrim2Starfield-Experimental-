@@ -125,6 +125,17 @@ static void turns_and_angles() {
     CHECK(near(flipped.r[0][0], -1) && near(flipped.r[2][2], -1) && flipped.t == o.t);
 }
 
+static void grip_is_a_rotation() {
+    const auto g = left_grip();
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) {
+            float dot = 0;
+            for (int k = 0; k < 3; ++k) dot += g.r[i][k] * g.r[j][k];
+            CHECK(std::fabs(dot - (i == j ? 1.0f : 0.0f)) < 2e-3f);   // rows orthonormal (6-digit constants)
+        }
+    CHECK(near(g.t[0], 0.068f) && near(g.t[1], -0.011f) && near(g.t[2], -0.038f) && g.s == 1.0f);
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -137,6 +148,7 @@ int main() {
     sheathe_unequip_and_load_drop();
     names_and_model_pick();
     turns_and_angles();
+    grip_is_a_rotation();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);

@@ -50,6 +50,12 @@ Xform turn(int index);
 Xform euler_degrees(float x, float y, float z);
 // "x y z" (spaces or commas); false (out untouched) unless three numbers.
 bool parse_degrees(std::string_view text, float out[3]);
+// WeaponLeft's rest grip on L_Wrist (Starfield skeleton, skeletonmap.LEFT_GRIP; = skyrimweapon.left_grip_metres(),
+// checked by tests/test_left_copy_grip.py): a weapon model's local transform under L_Wrist that holds it where the dual
+// clips put WeaponLeft. Metres. Owner's run 2026-11-23: under WeaponLeft the copy faced outward in turns (the vanilla
+// turn / idle clips leave WeaponLeft at its rest, away from the hand; the worn blade had the same problem, fixed by
+// skinning it to L_Wrist at this grip, decisions.md 2026-10-26).
+Xform left_grip();
 // The copy's local transform: `original` with its rotation turned (translation and scale kept).
 Xform oriented(const Xform& original, int turn_index, const float degrees[3]);
 

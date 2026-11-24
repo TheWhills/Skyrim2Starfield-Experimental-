@@ -606,7 +606,10 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
     if (key == cfg_.attack_key && cfg_.buffer_attacks) {
         if (down) {
             buffer_.press(t);
-        } else {
+        } else if (buffer_.holding()) {
+            // (a release without a press seen: the press came in a menu, where the game side drops presses but
+            // lets releases through. Owner's run 2026-11-23: such a click in the inventory measured its hold from
+            // the press before, minutes earlier, and sent the combo power attack into the graph.)
             AttackKind kind = buffer_.release(t);
             if (kind == AttackKind::Power && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
                 buffer_.clear();
