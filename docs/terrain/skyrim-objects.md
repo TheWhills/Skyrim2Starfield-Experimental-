@@ -842,6 +842,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   fills the ground cover of every converted grassy texture in the overlay palette (docs/re/ground-cover-density.md,
   route B), from `SFSE\Plugins\S2SGrass.ini` written by `skyrim_grass_native.py --palette-hook`. The terrain goes back
   to the converted textures (no slot placeholders), no biome override; Skyrim's underwater grasses are left out.
+  **Owner's run (verified in game, 2026-11-24)**: S2SGrass.log "hook installed", "17 of 17 ground textures have a
+  ground cover", SKY_Tamriel palette "61 entries, 17 given our ground cover"; grass on the pine forest and tundra.
+* **Terrain fix (2026-11-24, verified offline)**: the byte-6 grass test (terrain_byte6.ps1, 2026-11-22/23) was never
+  undone: byte 6 = LDefault003FlatIn in all 21,316 land quadrants (each has all five layers), so the FlatIn placeholder
+  took the base layer's share and drew Nirn's vanilla FlatInner ground. The 1 km slot test's backup kept that state
+  and both slot restores put it back. Measured by the dominant texture at every 4th Skyrim LAND vertex against the BTD
+  sample there: where Skyrim paints LRocks01NoRocks our terrain drew it 3 % of the time (90 % the placeholder), now
+  92 %; LRocks01 20 % -> 83 %; LSnow01 90 % -> 98 %; Skyrim's default dirt 81 % -> 96 %. Fixed with
+  `btd_byte6.py restore` (byte 6 = 0, as the converter writes it) on the staged files and the slot test's backup;
+  `grass_hook.ps1` now always runs it. Probably also the pale "snow" ground of the first slot test.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

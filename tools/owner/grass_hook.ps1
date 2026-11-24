@@ -42,6 +42,11 @@ if (-not $GrassOnly) {
     } else {
         Write-Host "  no slot placeholders to undo"
     }
+    # 2026-11-24: the byte-6 grass test (terrain_byte6.ps1, 2026-11-22/23) left LDefault003FlatIn in byte 6 of every
+    # land quadrant; as a sixth layer it took the base layer's share (90 % of Skyrim's LRocks01NoRocks ground drew
+    # Nirn's FlatInner ground). The converter writes byte 6 = 0, so clearing it is always right here.
+    python -I scripts\terrain\btd_byte6.py restore --staging $Staging
+    if ($LASTEXITCODE -ne 0) { Fail "btd_byte6 restore" }
     Step "2. reinstall the exterior"
     if (Test-Path "$SF\Data\SkyrimExterior.deploy.json") {
         python -I scripts\deploy_skyrim_exterior.py uninstall --starfield $SF --staging $Staging

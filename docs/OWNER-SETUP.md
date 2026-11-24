@@ -314,6 +314,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    cover, S2SGrass.ini and S2SGrass.dll in its SFSE\Plugins). Start through SFSE. In game: the fall forest beside
    Riverwood, the Reach, marshes: grass where Skyrim has it? Send Documents\My Games\Starfield\SFSE\Logs\S2SGrass.log
    (lines "overlay palette ... given our ground cover"). -GrassOnly rebuilds only the grass mod.
+   Second run (after the terrain fix: rock ground had drawn Nirn's vanilla ground): the same command, without -GrassOnly
+   (it reinstalls the terrain).
 8l. (2026-11-24) Skyrim's grass on all of Tamriel, 7 grass textures (after 8k worked). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\grass_tamriel.ps1
    (terrain: the 7 textures as slot placeholders everywhere; reinstall; grass mod with all 7 covers, own material,
