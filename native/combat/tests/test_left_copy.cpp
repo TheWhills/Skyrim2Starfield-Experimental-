@@ -163,6 +163,16 @@ static void follow_steps() {
     CHECK(follow_step(false, false, 0, 2, false) == F::Forget);    // never touched again once it left the wrist
 }
 
+static void slots_per_hand() {
+    const auto two = hand_slots(0x4F760, 0x26D8A5);              // axe left, cutlass right
+    CHECK(two.right_weapon == kSlotRightHand && two.left_weapon == kSlotLeftHand);
+    const auto same = hand_slots(0x26D8A5, 0x26D8A5);            // two cutlasses: one record
+    CHECK(same.right_weapon == kSlotRightHand && same.left_weapon == 0);
+    const auto no_right = hand_slots(0x4F760, 0);
+    CHECK(no_right.right_weapon == 0 && no_right.left_weapon == kSlotLeftHand);
+    CHECK(two.right_weapon != kSlotEitherHand && two.left_weapon != kSlotEitherHand);   // the 2026-11-24 mistake
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -179,6 +189,7 @@ int main() {
     copy_names();
     form_ids();
     follow_steps();
+    slots_per_hand();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);

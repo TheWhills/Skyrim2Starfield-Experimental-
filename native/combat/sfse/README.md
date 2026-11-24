@@ -202,3 +202,9 @@ by then) pushed the axe out of LeftHand (GetEquippedWeapon(1) = none right after
 The follower's moves worked meanwhile ("moved ... ok", then "the game took the left model off" as it went). Fix: while
 a native left weapon is on, the stance re-equip unequips / equips the right weapon in the RightHand slot.
 
+Owner's run 2026-11-24 (RightHand re-equip build): both stayed equipped (GetEquippedWeapon 0 = cutlass, 1 = axe), but
+both models sat in the left hand and nothing hung under the "Weapon" bone: with both records EitherHand the right
+weapon's model was attached under WeaponLeft too (the attach node follows the weapon's own slot; only the right-hand
+slot maps to "Weapon"), and the follower kept moving whichever model sat there. Fix (`bLeftEquipHandSlots`, formerly
+bLeftEquipEitherHand): the right weapon's record RightHand, the left one's LeftHand (s2s hand_slots, tested).
+

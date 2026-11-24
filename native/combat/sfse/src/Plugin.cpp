@@ -112,7 +112,9 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.left_equip_key = static_cast<std::uint32_t>(to_int(plugin, "ileftequipkey", 0));
     if (auto it = plugin.find("sleftequipweapon"); it != plugin.end())
         settings_.left_equip_weapon = combat::parse_form_id(it->second).value_or(0);
-    settings_.left_equip_either_hand = to_int(plugin, "bleftequipeitherhand", 1) != 0;
+    // bLeftEquipHandSlots (named bLeftEquipEitherHand in the first builds of 2026-11-24)
+    settings_.left_equip_either_hand =
+        to_int(plugin, "bleftequiphandslots", to_int(plugin, "bleftequipeitherhand", 1)) != 0;
     settings_.left_equip_grip = to_int(plugin, "bleftequipgrip", 1) != 0;
     settings_.left_equip_same_copy = to_int(plugin, "bleftequipsamecopy", 1) != 0;
     if (auto it = plugin.find("sleftcopyrotation"); it != plugin.end() && !it->second.empty() &&

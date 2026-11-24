@@ -1016,13 +1016,17 @@ std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either
     st.right = weap_r ? right_id : 0;
     std::string out;
     if (either_hand) {
-        for (auto* w : {weap_r, weap_l}) {
-            if (!w) continue;
+        // each weapon's record to its own hand (s2s hand_slots): RightHand attaches to "Weapon", LeftHand to WeaponLeft
+        const auto hs = combat::hand_slots(left_id, weap_r ? right_id : 0);
+        for (auto [w, slot_id] : {std::pair{weap_r, hs.right_weapon}, std::pair{weap_l, hs.left_weapon}}) {
+            if (!w || !slot_id) continue;
+            auto* slot = slot_id == combat::kSlotRightHand ? right : left;
             auto* type = static_cast<RE::BGSEquipType*>(w);
-            if (type->equipSlot == either) continue;
-            out += std::format("{:08X} slot {} -> EitherHand (in memory); ", w->GetFormID(), SlotName(type->equipSlot));
+            if (type->equipSlot == slot) continue;
+            out += std::format("{:08X} slot {} -> {} (in memory); ", w->GetFormID(), SlotName(type->equipSlot),
+                               SlotName(slot));
             st.changed.emplace_back(w, type->equipSlot);
-            type->equipSlot = either;
+            type->equipSlot = slot;
         }
         if (weap_r) {   // the right one again, into RightHand only, so LeftHand is free
             RE::BGSObjectInstance item_r(weap_r, nullptr);

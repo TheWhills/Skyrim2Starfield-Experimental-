@@ -73,6 +73,14 @@ std::string copy_node_name(std::string_view name);
 // player's melee weapons (CombatKnife, RescueAxe, ...) are BothHands (read from Starfield.esm, 2026-11-24).
 inline constexpr std::uint32_t kSlotRightHand = 0x00013F42, kSlotLeftHand = 0x00013F43, kSlotEitherHand = 0x00013F44,
                                kSlotBothHands = 0x00013F45;
+// The equip slot each weapon's record gets (in memory) while the native left weapon is on. Owner's runs 2026-11-24:
+// melee weapons are BothHands (a LeftHand equip bumped the right weapon); with both set to EitherHand the right weapon's
+// model was built under WeaponLeft too (the attach node follows the weapon's own slot: only the right-hand slot maps to
+// "Weapon", findings.md TESRace__GetEquipSlotAttachNodeName). So: the right weapon RightHand, the left one LeftHand;
+// one record for both hands (two of the same weapon) stays RightHand (the game builds no left model for it anyway).
+struct HandSlots { std::uint32_t right_weapon = 0, left_weapon = 0; };   // 0 = no record to change
+HandSlots hand_slots(std::uint32_t left_id, std::uint32_t right_id);
+
 // A FormID from the INI: "0x0001234F", "0001234F", "1234f" (hex); "" or 0 or anything else -> nullopt.
 std::optional<std::uint32_t> parse_form_id(std::string_view text);
 

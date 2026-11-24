@@ -124,6 +124,13 @@ std::string copy_node_name(std::string_view name) {
     return std::string(kCopyNamePrefix) + std::string(name);
 }
 
+HandSlots hand_slots(std::uint32_t left_id, std::uint32_t right_id) {
+    HandSlots h;
+    if (right_id) h.right_weapon = kSlotRightHand;
+    if (left_id && left_id != right_id) h.left_weapon = kSlotLeftHand;
+    return h;
+}
+
 std::optional<std::uint32_t> parse_form_id(std::string_view text) {
     while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) text.remove_prefix(1);
     while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.remove_suffix(1);
