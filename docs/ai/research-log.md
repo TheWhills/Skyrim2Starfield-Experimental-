@@ -3,6 +3,20 @@
 New findings go here (newest first). Each entry: question, method, evidence, **status**: verified /
 supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and docs/spikes/; link, don't copy.
 
+## 2026-11-24 Claude: where Starfield grows ground cover on an overlay world
+- Question: why does ground cover on SKY_Tamriel grow in the same small patches whatever our BTD says, and do the
+  ProcGen density maps decide it?
+- Method: Starfield.exe 1.16.244 (MD5 0a73ecdc...) in the owner's analysed Ghidra project, queried headless with
+  `scripts/re/ghidra_query.py`; followed BGSGrassManager's per-cell job, the terrain sampler, the planet palette and
+  the overlay merge. Details, addresses, excerpts: docs/re/ground-cover-density.md.
+- Evidence: 0x140bf45f0 is the GetBiomeMaskValue condition (the only density-map reader besides procedural block
+  code); the grass path FUN_1406235b0 -> FUN_1409a8bd0 -> FUN_1409a0b50 / FUN_1409a07d0 reads the world's BTD (bytes
+  0..4 and 6, 3-bit alphas, last layer = remainder); FUN_1409a9570 gives an overlay LTEX a GCVR only via an LDefault
+  placeholder slot, replaced by the biome's slot.
+- Status: density maps drive grass **refuted**; grass weight = BTD blend weight of a placeholder layer, byte 6 =
+  remainder layer **verified** (code, and it explains all of the owner's 2026-11-22..24 tests); one biome per overlay
+  from the anchor cell and GCVR +0x88 = threshold **supported hypothesis**; BIOM LNAM -> slot loader **unresolved**.
+
 ## 2026-10-12 Claude: correction, which teleports raise "Boundary Reached" in a merged overlay
 - Question: core64c's first plan (PR #76) and PR #74's commonwealth-scale.md said a single teleport more than about
   4 cells from where the player stood raised "Boundary Reached", and that core64b's 300 m hops were verified safe.

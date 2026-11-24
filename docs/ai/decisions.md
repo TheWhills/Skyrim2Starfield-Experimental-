@@ -2844,3 +2844,18 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   JDK 21) and the first session's targets (NiObject clone virtual, NiNode attach, what the equip path calls after
   attaching a weapon so it is drawn). Owner has not installed Ghidra yet.
 
+
+## 2026-11-24 — Ground cover on SKY_Tamriel: drop density maps; grass through LDefault slots or an SFSE palette hook (Claude, proposed)
+- Decision: stop the density-map route (`skyrim_grass_native.py --density-maps`). Make Skyrim's grass follow Skyrim's
+  ground in one of two ways: (A, data only) paint Starfield's `LDefault...` mask placeholders as ordinary BTD layers
+  with Skyrim's alphas where Skyrim is grassy, set the overlay biome's slot for that mask to {converted Skyrim texture,
+  its GCVR}, low GCVR threshold; or (B) an SFSE hook after FUN_1409a9570 that writes our GCVR into the overlay palette
+  entry of each Skyrim LTEX. Proposed order: test A on one slot around Riverwood (cheap, no code), then B if 7 grass
+  textures per world are too few.
+- Why: Starfield.exe (docs/re/ground-cover-density.md) grows grass from the overlay's own BTD blend weights, but only
+  for palette entries with a GCVR, and an overlay LTEX gets one only through a placeholder slot of the anchor biome
+  (verified). Byte 6 is only a "leftover" sixth layer, which is why grass grew at edges alone. Density maps are read
+  by the GetBiomeMaskValue condition, not by grass.
+- Alternatives: keep byte 6 = one mask and tune alphas (the leftover weight cannot follow Skyrim's textures);
+  naming our LTEX records `LDefault...` (would replace the vanilla slot defaults); baked grass patches (the current
+  fallback; no Starfield fading).

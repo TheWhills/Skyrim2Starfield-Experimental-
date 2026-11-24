@@ -667,6 +667,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   RIP-relative: the tool found no code refs). Supported hypothesis: ground-cover density on any world comes from the
   ProcGen density maps of the planet's procedural blocks; our overlay has none of its own, so the planet's show
   through. Next: decompile 0x140bf45f0 and its callers (Ghidra headless).
+  **Starfield.exe decompiled (Claude, 2026-11-24, Ghidra headless; details and addresses:
+  docs/re/ground-cover-density.md). The hypothesis above is refuted:** 0x140bf45f0 is only the GetBiomeMaskValue
+  condition. Grass never reads density maps (keyed by procedural block anyway); it reads OUR BTD's bytes and alphas
+  (verified). Only palette entries with a GCVR grow anything, and an overlay LTEX gets a GCVR only if it is an
+  `LDefault...` mask placeholder, which the overlay's biome then swaps for its slot's {LTEX, GCVR} (verified). Byte 6
+  is a sixth layer read only when bytes 0..4 are all set, and it gets the leftover weight prod(1 - a_i): zero wherever
+  any layer is at 7/7. That is the "edges only" pattern of every test above (verified against the code;
+  `scripts/re/ground_cover_weights.py` computes it for a spot). Recipe: paint the LDefault placeholders as ordinary
+  layers with Skyrim's alphas where Skyrim is grassy, biome slot = {converted Skyrim texture, its GCVR}, low GCVR
+  threshold (data only, max 7 grass textures per overlay); or an SFSE hook on FUN_1409a9570 that gives each Skyrim
+  LTEX its own GCVR (exact, no limit). Density maps dropped.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
