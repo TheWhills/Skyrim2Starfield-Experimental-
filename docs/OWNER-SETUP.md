@@ -308,6 +308,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
+8m. (2026-11-24) Skyrim's grass on EVERY grassy texture (S2SGrass SFSE plugin, after 8l worked). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\grass_hook.ps1
+   (builds S2SGrass.dll with xmake; terrain back to the converted textures; reinstall; grass mod with every texture's
+   cover, S2SGrass.ini and S2SGrass.dll in its SFSE\Plugins). Start through SFSE. In game: the fall forest beside
+   Riverwood, the Reach, marshes: grass where Skyrim has it? Send Documents\My Games\Starfield\SFSE\Logs\S2SGrass.log
+   (lines "overlay palette ... given our ground cover"). -GrassOnly rebuilds only the grass mod.
 8l. (2026-11-24) Skyrim's grass on all of Tamriel, 7 grass textures (after 8k worked). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\grass_tamriel.ps1
    (terrain: the 7 textures as slot placeholders everywhere; reinstall; grass mod with all 7 covers, own material,

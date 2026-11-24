@@ -2868,3 +2868,12 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   texture behind its placeholder would draw that texture as a leftover layer (the pale ground of the first test).
 - Alternatives: route B (SFSE hook, every texture its own cover; later if 7 are too few); several Skyrim textures
   sharing a slot (they would render as one texture).
+
+## 2026-11-24 (night): route B, the S2SGrass SFSE plugin (Claude)
+- Decision: an SFSE plugin (native/combat/sfse/grass, target S2SGrass in the combat xmake project) hooks the single
+  call of FUN_1409a9570 and gives every listed converted texture its own ground cover in the overlay palette; the
+  list is an INI written by the grass build. Replaces route A's 7 slots; the terrain keeps its converted textures.
+- Why: the owner's route A run left Skyrim textures outside the 7 bare (23% of the grassy ground above water); the
+  palette entry's GCVR is a plain FormID the game looks up later (verified), so filling it is a small, checkable hook.
+- Alternatives: more textures sharing the 7 slots (they render as one texture); hooking FUN_1409a84d0 (would see the
+  whole merged palette, needs the overlay filter); keeping route A as the fallback without SFSE (it stays available).

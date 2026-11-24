@@ -59,3 +59,26 @@ target("S2SDodge")
     add_headerfiles("dodge/**.h", "src/Game.h", "../include/s2s/*.h")
     add_includedirs("dodge", "src", "../include")
     set_pcxxheader("src/pch.h")
+
+-- S2SGrass: every converted Skyrim ground texture grows its own Skyrim grass (docs/re/ground-cover-density.md route B):
+-- a hook after the game builds an overlay world's palette fills in the ground covers listed in S2SGrass.ini (written
+-- by scripts/terrain/skyrim_grass_native.py --palette-hook). Not built by a plain `xmake`: `xmake build S2SGrass`.
+target("S2SGrass")
+    set_default(false)
+    add_rules("commonlibsf.plugin", {
+        name = "S2SGrass",
+        author = "Skyrim2Starfield",
+        description = "Skyrim's grass on every converted Skyrim ground texture (overlay palette ground covers)"
+    })
+
+    add_files("grass/**.cpp")
+    add_headerfiles("../include/s2s/grass_covers.h")
+    add_includedirs("src", "../include")
+    set_pcxxheader("src/pch.h")
+
+-- The S2SGrass core's test (no game): `xmake build test_grass_covers` then `xmake run test_grass_covers`.
+target("test_grass_covers")
+    set_default(false)
+    set_kind("binary")
+    add_files("../tests/test_grass_covers.cpp")
+    add_includedirs("../include")

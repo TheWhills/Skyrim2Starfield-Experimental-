@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
 sys.path.insert(0, HERE)
 
-from fo4sf import bsa, sfgrass, sfplugin, skyrimconvert, skyrimgrass, skyrimnif  # noqa: E402
+from fo4sf import bsa, grasshook, sfgrass, sfplugin, skyrimconvert, skyrimgrass, skyrimnif  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 
 PLUGIN = "S2SGrass.esm"
@@ -715,6 +715,13 @@ def main(argv=None):
                     help="route A for several textures (2026-11-24, fo4sf.grassslots): each listed Skyrim texture "
                          "gets its cover and is written into the biome's own first LNAM and ANAM of its mask (0..6); "
                          "'default' = DEFAULT_SLOT_MAP (7 land textures). Pair with btd_cover.py slots (same map)")
+    ap.add_argument("--palette-hook", action="store_true",
+                    help="route B (2026-11-24, needs the S2SGrass SFSE plugin): every grassy converted texture gets "
+                         "its own cover, listed in SFSE/Plugins/S2SGrass.ini (fo4sf.grasshook); no biome override. "
+                         "Use with the terrain as converted (btd_cover.py slots-restore)")
+    ap.add_argument("--keep-underwater", action="store_true",
+                    help="with --palette-hook: keep Skyrim's underwater grasses (kelp, coral); dropped by default since "
+                         "the overlay has no water (they would grow on dry lake and river beds)")
     ap.add_argument("--slot-alt", action="store_true",
                     help="with --slot-first: also the biome's first ANAM of each mask names that slot's texture "
                          "(2026-11-24: rewriting the LNAM alone left the placeholder drawing pale sand)")
@@ -790,6 +797,14 @@ def main(argv=None):
         plan["slots"] = {k: v for k, v in plan["slots"].items() if sky_of.get(k) in keep}
         print(f"--only-ltex: ground cover on {len(plan['slots'])} slot(s): "
               + ", ".join(f"{k:08X} ({sky_of[k]})" for k in sorted(plan["slots"])))
+    if a.palette_hook and slot_map:
+        sys.exit("--palette-hook and --slot-map are two routes: pick one")
+    if a.palette_hook and not a.keep_underwater:
+        def underwater(g):
+            r = gras_sky.get(g, {})
+            return r.get("water_rule") in UNDERWATER_RULES or "water" in r.get("edid", "").lower()
+        plan["slots"], wet = grasshook.drop_underwater(plan["slots"], underwater)
+        print(f"--palette-hook: underwater grasses left out; {len(wet)} texture(s) with only those grow nothing")
     report = {"slots": {f"{k:08X}": [gras_sky[g]["edid"] for g in v if g in gras_sky] for k, v in plan["slots"].items()},
               "skipped_textures": plan["skipped"], "grasses": {}, "failed": {}}
     if not plan["slots"] and not a.control:
@@ -1025,6 +1040,8 @@ def main(argv=None):
               f"their re-skin copied from {os.path.basename(terr_p)}")
         if not changed:
             print(f"  (no slot changed: terrain plugin {terr_p or '?'} not found or no re-skin there)")
+    if a.palette_hook:                    # route B: the S2SGrass plugin gives each texture its cover; biome untouched
+        target = None
     if slot_map and target is not None:   # route A, every slot (fo4sf.grassslots): the biome's own entries
         sky_name = {int(o["form_id"]): o["skyrim"].lower() for o in overrides}
         subs = target[2]
@@ -1086,6 +1103,16 @@ def main(argv=None):
     report["masters"] = masters
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, sfplugin.header_info(sf_esm), author="Skyrim2Starfield grass", masters=masters))
+    ini_path = os.path.join(out, *grasshook.INI_DIR, grasshook.INI_NAME)
+    if a.palette_hook:
+        os.makedirs(os.path.dirname(ini_path), exist_ok=True)
+        sky_of = {int(o["form_id"]): o["skyrim"] for o in overrides}
+        with open(ini_path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(grasshook.hook_ini(covers, masters, PLUGIN, sky_of))
+        report["palette_hook"] = {"ini": os.path.relpath(ini_path, out), "covers": len(covers)}
+        print(f"S2SGrass.ini: {len(covers)} ground textures with their own cover (needs S2SGrass.dll)")
+    elif os.path.exists(ini_path):
+        os.remove(ini_path)                       # a route A build: no stale hook list
     if a.density_maps is not None and conv is not None:
         import density_maps
         for stem, btd_path, rels in density_maps.targets(a.terrain):

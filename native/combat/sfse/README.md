@@ -99,3 +99,12 @@ It switches itself off when S2SCombat.dll is loaded (both would send the dodge e
   then leaves the hotkey out and S2SDodge falls back to the INI key). The service
   is declared in `dodge/OsfSettings.h` (ABI 1.0 slot order) instead of including the GPL SDK header.
 
+
+## S2SGrass (ground cover on every converted Skyrim texture, 2026-11-24)
+Not part of the combat plugins; it lives here to share the CommonLibSF build. `grass/main.cpp` + the tested core
+`../include/s2s/grass_covers.h` (`xmake build test_grass_covers`, `xmake run test_grass_covers`; also in CMake).
+Build: `xmake build S2SGrass`. Installed by `tools\owner\grass_hook.ps1` into the grass mod's `SFSE\Plugins` next to
+`S2SGrass.ini` (written by `scripts/terrain/skyrim_grass_native.py --palette-hook`). What it hooks and why:
+docs/re/ground-cover-density.md, route B. Log: `S2SGrass.log` ("overlay palette (world ...): N entries, M given our
+ground cover"; "hook installed"; "K of L ground textures have a ground cover"). Inactive (logged) on another game
+version: it checks the call bytes before patching.

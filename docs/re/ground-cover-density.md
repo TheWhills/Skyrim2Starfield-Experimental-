@@ -205,6 +205,19 @@ come from an INI written by skyrim_grass_native.py. Needs the Address Library ID
 (versionlib, docs/re/ghidra-ai-setup.md step 3). Alternative hook point: `FUN_1409a84d0` (fills the per-index GCVR
 table); there the entry's LTEX is still at +0 of the copied palette.
 
+**Built 2026-11-24 (evening): S2SGrass.dll** (`native/combat/sfse/grass`, core `native/combat/include/s2s/grass_covers.h`
+with a synthetic test). Checked against Starfield.exe 1.16.244 before writing it (**verified**, disassembly and file
+bytes): the only caller of `FUN_1409a9570` is the call at 0x1407955e6 (bytes `e8 85 3f 21 00`); Address Library IDs
+51867 = `FUN_140795410` (call at +0x1D6), 58316 = `FUN_1409a9570`, 58310 = `FUN_1409a84d0`, 47401 = `FUN_1405de3b0`
+(CommonLibSF's `TESForm::LookupByID`, same ID). Entry layout from `FUN_1409a9570`: +0x00 LTEX FormID (the form's +0x28),
++0x04 GCVR FormID (0 for non-placeholders; base placeholders copy the base entry's), +0x08 biome, +0x2C slot,
++0x30 -1, stride 0x38; the output array is {u32 count, pad, entries*}. `FUN_1409a84d0` looks up +0x04 with
+`FUN_1405de3b0` and keeps it only when the form's type byte (+0x2E) is 0xA8 (GCVR). The plugin checks the call
+bytes and target at run time (inactive on another game version), resolves S2SGrass.ini's `Plugin.esm:ID` pairs
+through the load order after data load, keeps only real GCVR forms, and after each call fills +0x04 of entries
+whose LTEX is listed and whose +0x04 is 0. The grass build writes the INI (`skyrim_grass_native.py --palette-hook`,
+`fo4sf.grasshook`; underwater grasses left out). In game: **not yet tested**.
+
 Not recommended: naming our own LTEX records `LDefault...`. FUN_140794510 would turn them into extra slot
 placeholders and replace the vanilla slot defaults (`FUN_140794170` overwrites the per-slot table).
 

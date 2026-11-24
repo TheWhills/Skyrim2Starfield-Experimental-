@@ -832,6 +832,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   2,068 / 1,318 / 779 / 539 / 424; table 56 -> 62) and clears byte 6; `skyrim_grass_native.py --slot-map default`
   puts {texture, its Skyrim grass} in each mask's first LNAM / ANAM of Nirn's ocean biome. Every other grassy texture
   keeps its look and grows nothing (7 slots per world without the SFSE hook, route B). `-Restore` undoes the terrain.
+  **Owner's run (verified in game, 2026-11-24)**: grass grows across the map; tundra / rock grass close to Skyrim's
+  (darker, greyer: scene lighting, maybe Skyrim's terrain-colour tint, unresolved). Bare where the texture has no slot:
+  the fall forest beside Riverwood (most likely LFallForestGrass01, not in the 7; supported hypothesis). The 7 cover
+  45% of Skyrim's grassy ground (whole Tamriel, LAND weights): 77% of the part above water; the largest bare ones
+  LReachGrass01 3.4%, LFallForestGrass01 2.9%, LFrozenMarshGrass01 2.3%, LTundraRocks01 2.0%, LPineForest03 1.0%.
+  Open: the Riverwood mill's flowery ground grows nothing (ground_at at the spot needed).
+* **Every texture (route B, 2026-11-24, to test in game)**: `tools\owner\grass_hook.ps1`. The S2SGrass SFSE plugin
+  fills the ground cover of every converted grassy texture in the overlay palette (docs/re/ground-cover-density.md,
+  route B), from `SFSE\Plugins\S2SGrass.ini` written by `skyrim_grass_native.py --palette-hook`. The terrain goes back
+  to the converted textures (no slot placeholders), no biome override; Skyrim's underwater grasses are left out.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
