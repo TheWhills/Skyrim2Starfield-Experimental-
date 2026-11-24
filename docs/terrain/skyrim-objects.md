@@ -874,6 +874,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   -KindTest` (`--ltex-kind-from LDirtCracked02 --ltex-kind-all`: every converted texture takes the pine-forest
   record's MNAM / QNAM in S2SGrass.esm, look kept). The 2026-11-23 kind test ran before ground covers reached the
   palette (nothing could grow then), so it did not decide this.
+  **Kind test (owner, verified in game): no change** - refuted. **Label test (terrain_colour_test.ps1 -Label, owner,
+  verified):** the bare Rift area reads LCOASTOCEANFLOOR01 everywhere: table entry 0 (byte 1), our re-skin of the
+  vanilla default ground LDefault (00010206), a texture the file names nowhere there (pale sand, only underwater
+  grass: so no grass). The bare squares form one patch whose byte 0 is 3 (LFallForestLeaves01). Refuted as the cause:
+  distinct textures per 2x2 / 4x4 block (the grassy square has more), first-seen rank of the square's five-byte
+  combination (2,477 ordered combinations, 1,873 sets). Supported hypothesis (docs/re/ground-cover-density.md Q4):
+  overlay entries are appended after the planet palette and the bytes rebased (u8); the renderer stops at 256
+  entries, so some of our entries land past the limit and fall back to the default. S2SGrass.dll (iLogLevel=2) now
+  logs the merged planet palette size before the overlay ("merged planet palette before this overlay").
 * **Positions in game**: the merge shift changes between sessions (2026-11-24: (-2200, +1500) m, earlier
   (-37.6, +47.0)); ground_at.py needs `player.getpos` right after `coc` of the same session (--spawn-at).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the

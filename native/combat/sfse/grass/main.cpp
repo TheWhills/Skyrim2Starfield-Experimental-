@@ -17,6 +17,23 @@ constexpr REL::ID kBuildEntries{ 58316 };    // FUN_1409a9570
 constexpr std::ptrdiff_t kCallOffset = 0x1D6;  // 0x1407955e6: e8 -> FUN_1409a9570
 constexpr std::uint8_t kGroundCoverType = 0xA8;   // TESForm +0x2E of a GCVR (FUN_1409a84d0's check)
 constexpr std::ptrdiff_t kTerrainWorld = 0xC0;   // FUN_1409a9570's first argument: the overlay terrain, world at +0xC0
+// Diagnostics (2026-11-24, owner's Rift squares draw the default ground): the planet manager (DAT_145fd9c30, 937609)
+// holds the planet palette at +0x138; FUN_140794490 (51862) returns its merged entry array {u32 count, pad, entries*},
+// which FUN_1409a84d0 copies. Overlay entries are appended after it and the BTD bytes rebased; the renderer
+// (FUN_1409a7d60) stops at 256 entries.
+constexpr REL::ID kPlanetManager{ 937609 };
+constexpr REL::ID kMergedPalette{ 51862 };
+constexpr std::ptrdiff_t kPlanetPalette = 0x138;
+
+std::uint32_t MergedPaletteCount() {
+    const auto mgr = *reinterpret_cast<std::uint8_t* const*>(kPlanetManager.address());
+    if (!mgr) return 0xFFFFFFFF;
+    auto* pal = *reinterpret_cast<void* const*>(mgr + kPlanetPalette);
+    if (!pal) return 0xFFFFFFFE;
+    using Get_t = std::uint32_t*(void*);
+    const auto* arr = reinterpret_cast<Get_t*>(kMergedPalette.address())(pal);
+    return arr ? arr[0] : 0xFFFFFFFD;
+}
 
 s2s::grass::Settings g_settings;
 std::map<std::uint32_t, std::uint32_t> g_map;    // run-time LTEX FormID -> GCVR FormID
@@ -41,6 +58,8 @@ void BuildEntries(void* a_terrain, std::uint32_t* a_out, void* a_3, void* a_4, s
     if (g_settings.log_level >= 1 && (r.patched || g_settings.log_level >= 2 || n <= 20))
         REX::INFO("overlay palette (world {:08X}): {} entries, {} given our ground cover, {} kept their own",
                   world, r.entries, r.patched, r.kept);
+    if (g_settings.log_level >= 2 && count)
+        REX::INFO("  merged planet palette before this overlay: {} entries (renderer limit 256)", MergedPaletteCount());
     if (g_settings.log_level >= 2 && data) {
         for (std::uint32_t i = 0; i < count; ++i) {
             std::uint32_t ltex, gcvr;
