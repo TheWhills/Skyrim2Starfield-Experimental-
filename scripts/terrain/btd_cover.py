@@ -14,6 +14,11 @@ set     : rewrites bytes 0..4 and the LTEX table of each staged BTD so that, per
           length (2026-11-23: with a small byte 6 no grass grew at all; supported hypothesis: ground cover reads
           table[byte6 - b], which equalled table[n - b] when byte 6 was the last entry). Heights and alphas
           untouched; the result is checked by reading it back both ways. Originals go to <staging>\\btd_before_cover.
+pad     : (diagnostic, 2026-11-24) no duplicates: inserts --count unique vanilla LTEX (Starfield.esm, not in the table)
+          before the table's last entry (byte 6's LDefault) and sets byte 6 to the new length; bytes 0..4 keep their
+          values, so a front reading (table[b - 1]) is unchanged and every end reading (table[n - b]) moves by count.
+          The encoded table (set) made the renderer draw end-reading textures on a hill (owner): this tells whether
+          duplicate entries or the end reading itself caused it.
 restore : copies the originals back.
 Reinstall afterwards (tools\\owner\\terrain_cover.ps1 does both). Do not run btd_byte6.py on the encoded files.
 
@@ -93,6 +98,26 @@ def cover_encode(t: btd.Btd, covered=None, none_fid=None):
     return new, {"pairs": k, "table": 2 * k, "lost": lost}
 
 
+def pad_table(t: btd.Btd, extra):
+    """t with the LTEX entries in extra inserted before its last entry (which byte 6 names) and byte 6 = the new
+    length; bytes 0..4 untouched. Raises ValueError if byte 6 does not name the last entry or extra repeats one."""
+    T = list(t.ltex)
+    b6 = {int(v) for v in np.unique(t.quad_map[:, :, 6]) if v}
+    if b6 != {len(T)}:
+        raise ValueError(f"byte 6 must name the table's last entry ({len(T)}), it holds {sorted(b6)}")
+    if set(extra) & set(T) or len(set(extra)) != len(extra):
+        raise ValueError("the padding repeats a table entry")
+    used = int(t.quad_map[:, :, :5].max())
+    if used >= len(T):
+        raise ValueError("bytes 0..4 name the last entry")
+    table = T[:-1] + list(extra) + T[-1:]
+    q = t.quad_map.copy()
+    q[:, :, 6] = np.where(q[:, :, 6] > 0, len(table), 0).astype(np.uint8)
+    if len(table) > MAX_CODES:
+        raise ValueError("table would pass 255 entries")
+    return btd.Btd(t.version, t.hmin, t.hmax, table, t.heights_raw, t.weights, q)
+
+
 def check(old: btd.Btd, new: btd.Btd, covered=None):
     """Rendering unchanged (head reading of bytes 0..4 and 6) and ground cover's reading of byte j = what the renderer
     draws at slot 4 - j; returns the number of quadrant slots that disagree."""
@@ -115,7 +140,9 @@ def check(old: btd.Btd, new: btd.Btd, covered=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("set", "restore"))
+    ap.add_argument("cmd", choices=("set", "pad", "restore"))
+    ap.add_argument("--count", type=int, default=40, help="pad: unique vanilla LTEX to insert")
+    ap.add_argument("--sf-esm", default="", help="pad: Starfield.esm")
     ap.add_argument("--staging", required=True)
     ap.add_argument("--grass", default="", help="the native-grass mod folder: when more than 255 codes are needed, "
                                                 "only its covered slots (grass_native.json) are told apart")
@@ -143,6 +170,26 @@ def main(argv=None):
             shutil.copy2(p, keep)
         with open(keep, "rb") as fh:                    # always from the original: set twice = set once
             t = btd.read(fh.read())
+        if a.cmd == "pad":
+            if not a.sf_esm:
+                sys.exit("pad needs --sf-esm")
+            from fo4sf import sfplugin
+            pool = sorted(fid for _t, _h, _s, fid in sfplugin.records(a.sf_esm, [b"LTEX"]) if fid not in set(t.ltex))
+            try:
+                new = pad_table(t, pool[:a.count])
+            except ValueError as e:
+                sys.exit(f"{os.path.relpath(p, a.staging)}: {e}")
+            data = btd.write(new)
+            back = btd.read(data)
+            ok = all(head(t.ltex, int(o)) == head(back.ltex, int(n)) for o, n in
+                     zip(t.quad_map[:, :, :5].ravel(), back.quad_map[:, :, :5].ravel()) if o)
+            if not ok or not np.array_equal(back.weights, t.weights):
+                sys.exit(f"{os.path.relpath(p, a.staging)}: check failed; file left as it was")
+            with open(p, "wb") as fh:
+                fh.write(data)
+            print(f"{os.path.relpath(p, a.staging)}: {a.count} unique vanilla LTEX inserted, table {len(t.ltex)} -> "
+                  f"{len(new.ltex)} (no duplicates), byte 6 = {len(new.ltex)}; front readings unchanged (checked)")
+            continue
         covered = None
         try:
             new, st = cover_encode(t)

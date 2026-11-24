@@ -627,6 +627,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   (about 6). Supported hypothesis: ground cover reads table[byte6 - b], which equalled table[n - b] while byte 6 was
   the table's last entry (56 of 56). btd_cover now makes byte 6 = 2k, the table's length, satisfying both readings
   (needs k <= 127 codes). `vanilla_btd_survey.py --table-sizes` lists vanilla table lengths.
+  **Byte 6 = table length (owner, 2026-11-24 09:13-09:30, verified):** flowers grow again, on the hill north-west of
+  the spawn, but that hill now RENDERS pale sand: ground_at at Starfield (-1956.81, 794.71): bytes [2, 29, 32, 33, 8],
+  alphas [0, 6, 7, 0, 0], table 150; front reading LFieldGrass02 (what it looked like before), both end readings
+  LCoastOceanFloor01 (the sand filler of the encoded table's tail half): **with the encoded table the renderer read
+  the table from its end here**, while with the original table it read it from the front (2026-11-23, two spots).
+  Ground cover: mirrored + end reading gives LFieldGrass02 at strength 6/7 next to the spot, where flowers grow
+  (third spot fitting). Supported hypothesis: the duplicate entries of the encoded table changed how the renderer
+  resolves bytes. Diagnostic: `terrain_cover.ps1 -Pad 40` inserts 40 unique vanilla LTEX before the mask entry (no
+  duplicates, byte 6 = new length, front readings unchanged, end readings move by 40).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

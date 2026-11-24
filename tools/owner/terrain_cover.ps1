@@ -3,11 +3,13 @@
 # closed. -Restore puts the previous terrain files back and reinstalls.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_cover.ps1
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_cover.ps1 -Restore
+#   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_cover.ps1 -Pad 40   (diagnostic: unique padding)
 param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$Grass = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Grass Native",
-    [switch]$Restore
+    [switch]$Restore,
+    [int]$Pad = 0
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -20,6 +22,9 @@ foreach ($p in @("$Staging\overlays_params.json", "$SF\Data\Starfield.esm")) {
 if ($Restore) {
     Step "1. the terrain files from before the re-encoding"
     python -I scripts\terrain\btd_cover.py restore --staging $Staging
+} elseif ($Pad -gt 0) {
+    Step "1. diagnostic: $Pad unique vanilla textures inserted before the mask entry"
+    python -I scripts\terrain\btd_cover.py pad --staging $Staging --sf-esm "$SF\Data\Starfield.esm" --count $Pad
 } else {
     Step "1. re-encode for ground cover"
     python -I scripts\terrain\btd_cover.py set --staging $Staging --grass $Grass

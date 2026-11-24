@@ -56,6 +56,23 @@ class CoverEncodeTest(unittest.TestCase):
         self.assertEqual([C.tail(new.ltex, int(v)) for v in b[:5]], [0xE, 0xE, 0xC, 0xE, 0xE])
         self.assertLess(st["pairs"], C.cover_encode(t)[1]["pairs"])
 
+    def test_pad(self):
+        q = np.zeros((2, 2, 8), np.uint8)
+        q[0, 0, :5] = [1, 2, 3, 0, 0]
+        q[0, 0, 6] = 4
+        h = np.zeros((128, 128), np.uint16)
+        t = btd.Btd(5, 0.0, 1.0, [0xA, 0xB, 0xC, 0xF0], h, h.copy(), q)
+        new = C.pad_table(t, [0x100, 0x101])
+        self.assertEqual(new.ltex, [0xA, 0xB, 0xC, 0x100, 0x101, 0xF0])
+        self.assertEqual(new.quad_map[0, 0].tolist(), [1, 2, 3, 0, 0, 0, 6, 0])
+        self.assertEqual(C.head(new.ltex, 6), 0xF0)
+        self.assertEqual([C.tail(new.ltex, b) for b in (1, 2, 3)], [0xF0, 0x101, 0x100])
+        with self.assertRaises(ValueError):
+            C.pad_table(t, [0xA])                       # a duplicate
+        q[0, 0, 6] = 2
+        with self.assertRaises(ValueError):
+            C.pad_table(btd.Btd(5, 0.0, 1.0, [0xA, 0xB, 0xC, 0xF0], h, h.copy(), q), [0x100])
+
     def test_too_many_pairs(self):
         q = np.zeros((40, 40, 8), np.uint8)
         rng = np.random.default_rng(1)
