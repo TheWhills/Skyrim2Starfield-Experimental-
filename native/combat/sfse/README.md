@@ -196,3 +196,9 @@ moves the game's left model from WeaponLeft to L_Wrist at the grip every tick (l
 on a redraw, or when the left weapon is off: s2s follow_step, tested); the dual stance comes on with a native left
 weapon (`bLeftCopyDual`); `bLeftEquipSameCopy` shows the clone for a same-weapon pair, a second after the equip.
 
+Owner's run 2026-11-24 (grip-follow build): the dual stance switched on and off with the left weapon (verified), but
+the axe only showed for a moment: the dual stance's re-equip of the right weapon (no slot; the cutlass was EitherHand
+by then) pushed the axe out of LeftHand (GetEquippedWeapon(1) = none right after "stance re-equip: equip ... done").
+The follower's moves worked meanwhile ("moved ... ok", then "the game took the left model off" as it went). Fix: while
+a native left weapon is on, the stance re-equip unequips / equips the right weapon in the RightHand slot.
+

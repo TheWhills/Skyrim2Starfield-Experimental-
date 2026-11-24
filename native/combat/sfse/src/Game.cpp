@@ -775,6 +775,10 @@ int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result)
 
 namespace {
 std::atomic<std::uint32_t> g_weapon_id{0};   // FormID of the weapon UnequipWeapon took off (0: none)
+// While the native left-hand equip test has a weapon in LeftHand, the right weapon's re-equips go through the RightHand
+// slot: owner's run 2026-11-24, the dual stance's re-equip (no slot) of the then EitherHand cutlass pushed the axe out
+// of LeftHand (GetEquippedWeapon(1) = none right after "stance re-equip: equip ... done").
+std::atomic_bool g_right_hand_only{false};
 
 // Native equip / unequip through ActorEquipManager (mapped on 1.16: Singleton, EquipObject, UnequipObject,
 // BGSObjectInstance ctor), base form without instance data, as the console's equipitem / unequipitem do (owner,
@@ -785,8 +789,9 @@ bool EquipNative(std::uint32_t form_id, bool equip) {
     auto* form = form_id ? RE::TESForm::LookupByID(form_id) : nullptr;
     if (!player || !mgr || !form) return false;
     RE::BGSObjectInstance item(form, nullptr);
-    return equip ? mgr->EquipObject(player, item, nullptr, false, false, true, true, false)
-                 : mgr->UnequipObject(player, item, nullptr, false, false, true, true, nullptr);
+    auto* slot = g_right_hand_only.load() ? RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotRightHand) : nullptr;
+    return equip ? mgr->EquipObject(player, item, slot, false, false, true, true, false)
+                 : mgr->UnequipObject(player, item, slot, false, false, true, true, nullptr);
 }
 }  // namespace
 
@@ -883,7 +888,8 @@ bool UnequipWeapon(std::function<void(const std::string&)> report) {
             g_weapon_id = id;
             SFSE::GetTaskInterface()->AddTask([id, report]() {
                 const bool ok = EquipNative(id, false);
-                if (report) report(std::format("unequip {:08X}: {}", id, ok ? "done" : "refused"));
+                if (report) report(std::format("unequip {:08X}{}: {}", id, g_right_hand_only.load() ? " (RightHand)" : "",
+                                               ok ? "done" : "refused"));
             });
         });
 }
@@ -895,7 +901,8 @@ bool EquipWeapon(std::function<void(const std::string&)> report) {
         return false;
     }
     const bool ok = EquipNative(id, true);         // already on the main thread (Plugin::Run's task)
-    if (report) report(std::format("equip {:08X}: {}", id, ok ? "done" : "refused"));
+    if (report) report(std::format("equip {:08X}{}: {}", id, g_right_hand_only.load() ? " (RightHand)" : "",
+                                   ok ? "done" : "refused"));
     return ok;
 }
 
@@ -1026,6 +1033,7 @@ std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either
     // Starfield 1.16 (CommonLibSF): EquipObject(actor, instance, slot, queue, force, sounds, applyNow, locked)
     RE::BGSObjectInstance item(weap_l, nullptr);
     st.equipped = mgr->EquipObject(player, item, left, false, false, true, true, false);
+    g_right_hand_only = st.equipped && either_hand;          // the stance re-equips keep to RightHand from now on
     out += std::format("{:08X} into LeftHand: {} (its slot now {})", left_id, st.equipped ? "yes" : "NO",
                        SlotName(static_cast<RE::BGSEquipType*>(weap_l)->equipSlot));
     return out;
@@ -1045,6 +1053,7 @@ std::string LeftUnequip() {
         const bool ok = mgr->UnequipObject(player, item, left, false, false, true, true, nullptr);
         out += std::format("unequip {:08X} from LeftHand: {}; ", st.left, ok ? "yes" : "NO (may still be off)");
     }
+    g_right_hand_only = false;
     for (auto& [w, slot] : st.changed) {
         static_cast<RE::BGSEquipType*>(w)->equipSlot = slot;
         out += std::format("{:08X} slot back to {}; ", w->GetFormID(), SlotName(slot));
