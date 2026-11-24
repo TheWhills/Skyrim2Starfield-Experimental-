@@ -72,6 +72,12 @@ std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either
 std::string LeftUnequip();
 bool RightWeaponId(std::function<void(std::uint32_t)> result);
 void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log);
+// The game's own left-hand model (a LeftHand-slot weapon, hung under WeaponLeft) moved onto L_Wrist at the left grip
+// (s2s left_grip(), then turn / degrees), every tick while `active`; let go of when the game releases it or when not
+// active. Owner's run 2026-11-24: under WeaponLeft the axe swung outward in idles (only the dual clips pose WeaponLeft).
+// Main thread. log: "" unless something changed; holding: a moved model is still on the wrist (call again).
+struct LeftFollowResult { std::string log; bool holding = false; };
+LeftFollowResult LeftWeaponFollow(bool active, int turn, const float degrees[3]);
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
 // ObjectReference.GetItemCount on the player, result on the VM thread. EquipForm: the native equip / unequip of a base

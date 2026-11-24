@@ -925,8 +925,9 @@ std::string SlotName(const RE::BGSEquipSlot* s) {
 // WeaponLeft and Weapon, found in one walk per player 3D (owner's run: two walks per report froze the game ~1 s)
 struct HandNodes {
     RE::NiAVObject* root = nullptr;
-    RE::NiAVObject* left = nullptr;
-    RE::NiAVObject* right = nullptr;
+    RE::NiAVObject* left = nullptr;     // WeaponLeft
+    RE::NiAVObject* right = nullptr;    // Weapon (the bone)
+    RE::NiAVObject* wrist = nullptr;    // L_Wrist
 } g_hand_nodes;
 
 std::string Subtree(RE::NiAVObject* node) {
@@ -939,20 +940,23 @@ std::string Subtree(RE::NiAVObject* node) {
     return out;
 }
 
-std::string HandNodesReport() {
+// WeaponLeft, Weapon and L_Wrist of the player's 3D, looked up once per 3D and checked before use. "" = ok.
+std::string FindHandNodes() {
     auto* root = Player3D();
     if (!root) return "no player 3D";
     if (g_children.offset < 0) {
         if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return "no child list found";
     }
     auto& h = g_hand_nodes;
-    if (!(h.root == root && StillNamed(h.left, "WeaponLeft") && StillNamed(h.right, "Weapon"))) {
-        h = {root, nullptr, nullptr};
+    if (!(h.root == root && StillNamed(h.left, "WeaponLeft") && StillNamed(h.right, "Weapon") &&
+          StillNamed(h.wrist, "L_Wrist"))) {
+        h = {root, nullptr, nullptr, nullptr};
         int budget = 4000;
         Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
             const char* n = o->name.c_str();
             if (!n) return;
             if (!h.left && std::string_view(n) == "WeaponLeft") h.left = o;
+            if (!h.wrist && std::string_view(n) == "L_Wrist") h.wrist = o;
             if (!h.right && std::string_view(n) == "Weapon") {
                 // the bone, not a weapon model's root (also "Weapon") hanging under WeaponLeft
                 auto* p = ParentOf(o);
@@ -961,9 +965,31 @@ std::string HandNodesReport() {
             }
         });
     }
+    return {};
+}
+
+std::string HandNodesReport() {
+    if (auto err = FindHandNodes(); !err.empty()) return err;
+    const auto& h = g_hand_nodes;
     return std::format("under WeaponLeft:{}; under Weapon:{}", h.left ? Subtree(h.left) : " (not found)",
                        h.right ? Subtree(h.right) : " (not found)");
 }
+
+bool HasChild(RE::NiAVObject* parent, RE::NiAVObject* child) {
+    RE::NiAVObject** data = nullptr;
+    std::uint32_t size = 0;
+    if (!parent || !ReadChildren(parent, g_children, data, size)) return false;
+    for (std::uint32_t i = 0; i < size; ++i)
+        if (data[i] == child) return true;
+    return false;
+}
+
+// The game's left-hand model, moved from WeaponLeft to L_Wrist by LeftWeaponFollow (not owned by us: no reference
+// kept; only touched while it is still one of L_Wrist's children)
+struct LeftFollow {
+    RE::NiAVObject* node = nullptr;
+    long refs_at_move = 0;              // its reference count right after the move (the game's + L_Wrist's)
+} g_left_follow;
 }  // namespace
 
 std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either_hand) {
@@ -1071,6 +1097,67 @@ void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string
                                          : std::format("copies of {:08X} carried: (no answer)", form_id));
             });
     log("3D " + HandNodesReport());
+}
+
+LeftFollowResult LeftWeaponFollow(bool active, int turn, const float degrees[3]) {
+    LeftFollowResult r;
+    auto& f = g_left_follow;
+    if (auto err = FindHandNodes(); !err.empty()) {
+        r.holding = f.node != nullptr;
+        return r;
+    }
+    const auto& h = g_hand_nodes;
+    if (!h.left || !h.wrist) return r;
+    const auto attach = REL::ID(kIdAttachChild).address(), detach = REL::ID(kIdDetachChild).address();
+    if (VSlot(h.left, kSlotAttachChild) != attach || VSlot(h.left, kSlotDetachChild) != detach ||
+        VSlot(h.wrist, kSlotAttachChild) != attach || VSlot(h.wrist, kSlotDetachChild) != detach) {
+        r.log = "WeaponLeft / L_Wrist slots 84 / 87 are not NiNode's: not moved";
+        return r;
+    }
+    // a model the game (newly) hung under WeaponLeft
+    RE::NiAVObject* model = nullptr;
+    {
+        RE::NiAVObject** data = nullptr;
+        std::uint32_t size = 0;
+        if (ReadChildren(h.left, g_children, data, size))
+            for (std::uint32_t i = 0; i < size && !model; ++i)
+                if (data[i] && Readable(data[i], 0x150) && ParentOf(data[i]) == h.left) model = data[i];
+    }
+    // the node we moved: still on the wrist? Let go of it when the game released its own reference (unequipped,
+    // sheathed), when the left weapon is off, or when the game hung a new model under WeaponLeft (a redraw)
+    if (f.node) {
+        const bool on_wrist = HasChild(h.wrist, f.node);
+        const long refs = on_wrist ? static_cast<long>(f.node->refCount) : 0;
+        const auto step = combat::follow_step(on_wrist, active, refs, f.refs_at_move, model && model != f.node);
+        if (step == combat::FollowStep::Forget) {
+            r.log = "the game took the left model off L_Wrist itself";
+            f = {};
+        } else {
+            if (step == combat::FollowStep::LetGo) {
+                r.log = std::format("left model let go (references {} -> {}{}{})", f.refs_at_move, refs,
+                                    active ? "" : ", left weapon off", model ? ", a new one under WeaponLeft" : "");
+                reinterpret_cast<void (*)(void*, void*)>(detach)(h.wrist, f.node);
+                f = {};
+            }
+        }
+    }
+    r.holding = f.node != nullptr;
+    if (!active || !model || f.node) return r;
+    // onto the wrist at the left grip (as the copy, which stays in the hand in every clip; under WeaponLeft it swung
+    // outward in idles, owner's run 2026-11-24)
+    model->IncRefCount();                                   // alive between the detach and the attach
+    reinterpret_cast<void (*)(void*, void*)>(detach)(h.left, model);
+    reinterpret_cast<void (*)(void*, void*, bool)>(attach)(h.wrist, model, true);
+    WriteXform(model, 0x40, combat::oriented(combat::left_grip(), turn, degrees));
+    model->DecRefCount();
+    const bool on_wrist = ParentOf(model) == h.wrist;
+    f.node = on_wrist ? model : nullptr;
+    f.refs_at_move = model->refCount;
+    const char* n = model->name.c_str();
+    r.log += std::format("{}left model '{}' moved from WeaponLeft to L_Wrist at the grip: {} (references {})",
+                         r.log.empty() ? "" : "; ", n ? n : "", on_wrist ? "ok" : "FAILED", f.refs_at_move);
+    r.holding = f.node != nullptr;
+    return r;
 }
 
 float ActorValue(std::string_view editor_id) {

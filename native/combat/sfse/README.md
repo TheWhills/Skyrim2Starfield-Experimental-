@@ -188,3 +188,11 @@ freeze was the report's two 3D walks. Second build: EitherHand mode is the defau
 EitherHand in memory, the right one re-equipped into RightHand, then the left one into LeftHand); the unequip restores
 the slots and re-equips the right weapon; one cached 3D walk; fists are refused as the "right weapon".
 
+Owner's runs 2026-11-24 (EitherHand mode), **verified**: a *different* weapon in LeftHand (Rescue Axe 0004F760 next to
+the cutlass) shows in the left hand, and the game sheathes, draws and removes it with the second press. The *same*
+weapon in both hands (two cutlasses, two axes) is equipped twice (GetEquippedWeapon 0 and 1) but gets no left model.
+Under WeaponLeft the axe swung outward in idles (only the dual clips pose WeaponLeft). Next build: `bLeftEquipGrip`
+moves the game's left model from WeaponLeft to L_Wrist at the grip every tick (let go of when the game releases it,
+on a redraw, or when the left weapon is off: s2s follow_step, tested); the dual stance comes on with a native left
+weapon (`bLeftCopyDual`); `bLeftEquipSameCopy` shows the clone for a same-weapon pair, a second after the equip.
+

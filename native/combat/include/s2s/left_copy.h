@@ -76,6 +76,13 @@ inline constexpr std::uint32_t kSlotRightHand = 0x00013F42, kSlotLeftHand = 0x00
 // A FormID from the INI: "0x0001234F", "0001234F", "1234f" (hex); "" or 0 or anything else -> nullopt.
 std::optional<std::uint32_t> parse_form_id(std::string_view text);
 
+// The game's left-hand model that the plugin moved from WeaponLeft onto L_Wrist (bLeftEquipGrip): what to do with it
+// each tick. Forget: it is no longer on the wrist (the game took it off itself). LetGo: detach it from the wrist: the
+// left weapon is off, the game released its own reference (fewer references than right after the move: unequipped or
+// sheathed), or the game hung a new model under WeaponLeft (a redraw). Keep otherwise.
+enum class FollowStep { Keep, Forget, LetGo };
+FollowStep follow_step(bool on_wrist, bool active, long refs_now, long refs_at_move, bool new_model_under_weaponleft);
+
 // When the copy is made and dropped. The game side reports back whether it worked (on_result); until then nothing
 // else is asked for.
 class LeftCopy {

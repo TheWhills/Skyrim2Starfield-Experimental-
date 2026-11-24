@@ -113,6 +113,8 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     if (auto it = plugin.find("sleftequipweapon"); it != plugin.end())
         settings_.left_equip_weapon = combat::parse_form_id(it->second).value_or(0);
     settings_.left_equip_either_hand = to_int(plugin, "bleftequipeitherhand", 1) != 0;
+    settings_.left_equip_grip = to_int(plugin, "bleftequipgrip", 1) != 0;
+    settings_.left_equip_same_copy = to_int(plugin, "bleftequipsamecopy", 1) != 0;
     if (auto it = plugin.find("sleftcopyrotation"); it != plugin.end() && !it->second.empty() &&
         !combat::parse_degrees(it->second, settings_.left_copy_rotation))
         REX::WARN("[Plugin] sLeftCopyRotation = {}: not three numbers (x y z degrees)", it->second);
@@ -252,6 +254,20 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
                     }
                     const auto r = game::LeftEquip(id, right_id, either);
                     REX::INFO("left equip: {}", r);
+                    // the same weapon in both hands gets no left model from the game (owner's runs 2026-11-24: two
+                    // cutlasses, two axes): the clone shows it
+                    if (id == right_id && settings_.left_equip_same_copy) {
+                        bool make = false;
+                        {
+                            std::scoped_lock l(lock_);
+                            make = !left_copy_.attached() && !left_copy_.busy();
+                        }
+                        if (make) {
+                            left_same_copy_ = true;
+                            left_same_copy_at_ = game::Now() + 1.0;   // after the right weapon's re-equip
+                            REX::INFO("left equip: same weapon in both hands: the clone will show the left one");
+                        }
+                    }
                     game::Notify("Left equip: see S2SCombat.log");
                     left_equipped_ = true;
                     left_report_id_ = id;
@@ -263,6 +279,8 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
             SFSE::GetTaskInterface()->AddTask([this]() {
                 REX::INFO("left equip: {}", game::LeftUnequip());
                 left_equipped_ = false;
+                left_same_copy_at_ = -1.0;
+                if (left_same_copy_.exchange(false)) DoLeftCopy(combat::LeftCopy::Action::Drop);
                 left_report_at_ = game::Now() + 1.5;
             });
         }
@@ -548,6 +566,17 @@ void Plugin::Tick() {
         std::scoped_lock l(lock_);
         copy_on = left_copy_.attached();
     }
+    copy_on = copy_on || (settings_.left_copy_dual && left_equipped_.load());   // a native left weapon too
+    // the game's own left model onto L_Wrist at the grip (bLeftEquipGrip), and let go of again
+    if (settings_.left_equip_grip && (left_equipped_.load() || left_follow_holding_)) {
+        const auto r = game::LeftWeaponFollow(left_equipped_.load(), left_copy_turn_now_, settings_.left_copy_rotation);
+        left_follow_holding_ = r.holding;
+        if (!r.log.empty()) REX::INFO("left equip: {}", r.log);
+    }
+    if (const double due = left_same_copy_at_.load(); due >= 0.0 && now >= due) {
+        left_same_copy_at_ = -1.0;
+        if (left_equipped_.load()) DoLeftCopy(combat::LeftCopy::Action::Make);
+    }
     if (const double due = left_report_at_.load(); due >= 0.0 && now >= due) {
         left_report_at_ = -1.0;
         game::LeftEquipReport(left_report_id_.load(), [](const std::string& s) { REX::INFO("left equip: {}", s); });
@@ -574,7 +603,7 @@ void Plugin::Tick() {
                 more = controller_.on_dual_worn(worn == 1, now);
             }
             if (!more.empty()) REX::INFO("dual wield: left blade {}{} -> stance {}", worn ? "worn" : "off",
-                                         copy_on ? " (left-hand copy)"
+                                         copy_on ? " (left-hand weapon)"
                                                  : weapon_dual_.load() == 1 ? " (the weapon's keyword)" : "",
                                          worn ? controller_.config().dual_stance_keyword : "before");
             if (worn && settings_.dual_debug && dumps_ < 3) {   // the player's 3D (a ~1 s hitch: debug only)

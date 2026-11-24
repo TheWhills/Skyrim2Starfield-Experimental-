@@ -139,6 +139,12 @@ std::optional<std::uint32_t> parse_form_id(std::string_view text) {
     return v;
 }
 
+FollowStep follow_step(bool on_wrist, bool active, long refs_now, long refs_at_move, bool new_model_under_weaponleft) {
+    if (!on_wrist) return FollowStep::Forget;
+    if (!active || refs_now < refs_at_move || new_model_under_weaponleft) return FollowStep::LetGo;
+    return FollowStep::Keep;
+}
+
 Xform left_grip() {
     Xform g;
     g.r = {{{-0.179094f, 0.980503f, 0.080866f}, {-0.231144f, 0.037960f, -0.972179f}, {-0.956294f, -0.192803f, 0.219839f}}};

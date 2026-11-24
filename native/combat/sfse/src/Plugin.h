@@ -53,6 +53,8 @@ struct Settings {
     std::uint32_t left_equip_key = 0;
     std::uint32_t left_equip_weapon = 0;
     bool left_equip_either_hand = true;
+    bool left_equip_grip = true;                   // the game's left model moved to L_Wrist at the grip
+    bool left_equip_same_copy = true;              // same weapon in both hands: the clone shows the left one
 };
 
 class Plugin {
@@ -130,6 +132,9 @@ private:
     std::atomic_bool left_equipped_{false};       // the native left-hand equip test put a weapon on (main thread)
     std::atomic<double> left_report_at_{-1.0};    // when to log what is equipped (1.5 s after the equip / unequip)
     std::atomic<std::uint32_t> left_report_id_{0};
+    bool left_follow_holding_ = false;            // LeftWeaponFollow still holds a moved model (main thread)
+    std::atomic_bool left_same_copy_{false};      // the clone was made for a same-weapon pair (main thread)
+    std::atomic<double> left_same_copy_at_{-1.0}; // when to make it (a second after the equip: the right re-equip)
     double copy_report_at_ = 0.0;                 // LeftCopyReport every 2 s while a copy is on (first 40)
     int copy_reports_ = 0;                 // a left-hand copy was on at the last Tick (bLeftCopyDual)
     std::atomic_int poll_gen_{0}, worn_gen_{0};

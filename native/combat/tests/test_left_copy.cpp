@@ -152,6 +152,17 @@ static void form_ids() {
     CHECK(kSlotLeftHand == 0x13F43u && kSlotEitherHand == 0x13F44u);   // Starfield.esm EQUP
 }
 
+static void follow_steps() {
+    using F = FollowStep;
+    CHECK(follow_step(true, true, 2, 2, false) == F::Keep);        // on the wrist, the game still holds it
+    CHECK(follow_step(true, true, 3, 2, false) == F::Keep);        // more holders is fine
+    CHECK(follow_step(true, true, 1, 2, false) == F::LetGo);       // the game released it (unequip / sheathe)
+    CHECK(follow_step(true, false, 2, 2, false) == F::LetGo);      // the left weapon is off
+    CHECK(follow_step(true, true, 2, 2, true) == F::LetGo);        // a new model under WeaponLeft (redraw)
+    CHECK(follow_step(false, true, 2, 2, true) == F::Forget);      // the game took it off the wrist itself
+    CHECK(follow_step(false, false, 0, 2, false) == F::Forget);    // never touched again once it left the wrist
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -167,6 +178,7 @@ int main() {
     grip_is_a_rotation();
     copy_names();
     form_ids();
+    follow_steps();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);
