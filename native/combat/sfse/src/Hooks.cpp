@@ -28,6 +28,31 @@ struct Perf {
     }
 };
 Perf g_perf_frame, g_perf_event;
+// The time from one frame to the next (the game's whole frame, not only ours): owner's run 2026-11-24, menus felt less
+// smooth with the native left weapon on. Labelled with that state, to compare on / off.
+struct FrameGaps {
+    std::chrono::steady_clock::time_point last{};
+    std::uint64_t n = 0, total_us = 0, max_us = 0, slow = 0;   // slow: over 25 ms
+    void add(std::chrono::steady_clock::time_point t) {
+        if (last.time_since_epoch().count() != 0) {
+            const auto us = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t - last).count());
+            if (us < 1'000'000) {                               // a loading screen or alt-tab: not a frame
+                ++n;
+                total_us += us;
+                max_us = std::max(max_us, us);
+                if (us > 25'000) ++slow;
+            }
+        }
+        last = t;
+    }
+    std::string take() {
+        const auto s = std::format("{} frames, avg {:.1f} ms, max {:.1f} ms, over 25 ms {}", n,
+                                   n ? total_us / 1000.0 / static_cast<double>(n) : 0.0, max_us / 1000.0, slow);
+        n = total_us = max_us = slow = 0;
+        return s;
+    }
+};
+FrameGaps g_frame_gaps;
 std::chrono::steady_clock::time_point g_perf_start, g_perf_last;
 
 // ------------------------------------------------------------------------------------------------ input
@@ -87,11 +112,14 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
     // attacks or i-frames that never end, move Tick to a per-frame hook (e.g. the player's update).
     plugin.Tick();
     g_perf_frame.add(t0);
-    const auto limit = std::chrono::seconds(plugin.settings().perf_seconds);
-    if (t0 - g_perf_start < limit + std::chrono::seconds(1) && t0 - g_perf_last >= std::chrono::seconds(10)) {
+    g_frame_gaps.add(t0);
+    const int secs = plugin.settings().perf_seconds;
+    const auto limit = std::chrono::seconds(secs);
+    if ((secs < 0 || t0 - g_perf_start < limit + std::chrono::seconds(1)) && t0 - g_perf_last >= std::chrono::seconds(10)) {
         g_perf_last = t0;
-        REX::INFO("timing (the plugin's own work): per frame {}; per animation event {}", g_perf_frame.take(),
-                  g_perf_event.take());
+        REX::INFO("timing (the plugin's own work): per frame {}; per animation event {}; game frames {} (left weapon {}, "
+                  "menu {})", g_perf_frame.take(), g_perf_event.take(), g_frame_gaps.take(),
+                  plugin.left_weapon_on() ? "on" : "off", plugin.menu_open() ? "open" : "closed");
     }
     g_input_original(a_this, a_head);
 }

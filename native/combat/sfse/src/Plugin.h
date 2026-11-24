@@ -18,6 +18,7 @@ struct Settings {
     int log_hits = 30;              // first N hits on the player written to the log (attacker, weapon, attack event)
     int log_commands = 60;          // first N actions carried out (event sent, keyword set, lock) with their result
     int perf_seconds = 60;          // for this long after loading, the plugin's own time per frame / event every 10 s
+                                    // (and the frame times); -1 = all session
     bool probe_layout = false;      // find BSAnimationGraphEvent's layout again (after a game update moved it)
     // Timed-block feedback: an impact effect (ImpactDataSet EditorID; "" = the best spark set found by the list),
     // played from this node of the player toward the attacker, and a camera shake (strength, seconds; 0 = none).
@@ -64,6 +65,9 @@ public:
 
     void LoadSettings(const std::string& ini_path);
     const Settings& settings() const { return settings_; }
+    // for the timing report (Hooks.cpp): the native left weapon on, a menu open
+    bool left_weapon_on() const { return left_equipped_.load(); }
+    bool menu_open() const { return menus_.blocked(); }
 
     // Game callbacks (Hooks.cpp). Input and tick come on the main thread; animation events may not.
     // true: hide this key event from the game (Controller::last_key_consumed)
