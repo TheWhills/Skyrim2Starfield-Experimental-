@@ -597,6 +597,261 @@ Max Density; what a vanilla grass model needs. Two tools:
   uninstalled by then; `terrain_density.ps1 -Remove` restores it). The maps now go into the grass mod instead:
   `skyrim_grass_native.py --density-maps 255` writes them into S2SGrass - Main.ba2 (General, like vanilla
   DensityMaps.ba2; hair_pack.pack general_textures), compressed (uniform maps shrink to almost nothing).
+  **Uniform density maps (owner, 17:51 / 17:53, verified in game): no change.** The flat forest floor stays bare;
+  the flowers (mask 0) grow only at the river bank and by the mill logs. So maps at textures\terrain\sky_tamriel_*
+  (flat or in a sky_tamriel folder) are not read for our world, or are not the limit (refuted as the fix).
+  Pattern over every test (control, Skyrim grass, flowers, mask test, density maps): ground cover grows on raised
+  ground (banks, ridges, hill crests, rock edges) and never on the low flats beside the river. Supported hypothesis:
+  a height / water clamp: the cell's water plane (381.43 m for the Riverwood cells, one flat level per cell) lies
+  close to or above the flats in the engine's view, and the GRAS water clamps (kept from the vanilla template)
+  forbid grass there. Check: `player.getpos z` on a bare flat and at a flower spot against 381.43.
+  **Refuted (owner, 17:58):** flowers by the mill log at z 183.68, the bare flat forest floor at z 186.76: the bare
+  ground is 3 m HIGHER. Not a height / water clamp. The flowers there stand on dark dirt-looking ground, the bare flat
+  shows LFieldGrass02 (the only covered slot): supported hypothesis that ground cover reads the BTD texture layers
+  with another rule than rendering (index head/tail, alpha bit order), so its "LFieldGrass02" lies elsewhere.
+  ground_at.py already prints the texture each reading gives at a spot; at the flat (Skyrim 17448, -48815): head/3i
+  LFieldGrass02 (rendered), head/3(4-i) LRiverBottom01NoGrass, tail/3i LPineForest01, tail/3(4-i) LRocks01NoRocks.
+  Next: the same at a flower spot (getpos x / y there and right after coc).
+  **Flower spot (owner, 19:21, ground_at at Starfield (-1948.36, 854.94), spawn (-1936.69, 825.26)):** bytes
+  [50, 43, 52, 42, 34], alphas [0, 0, 0, 7, 0]; the renderer's reading gives LRiverBottom01NoGrass (dark ground on
+  screen), "index tail, alpha bits 3(4-i)" gives **LFieldGrass02**, the only covered slot. At the bare flat that
+  reading gives LRocks01NoRocks. Supported hypothesis (2 of 2 spots): ground cover pairs the texture of byte 4 - i
+  with the alpha of slot i (the same as byte i with alpha slot 4 - i) and indexes the LTEX table from its end
+  (table[n - b]); byte 6 head-first (its entry switched the mask). Explains every "edges only" result.
+  Test: `tools\owner\terrain_cover.ps1` (btd_cover.py): each byte value c gets a head entry (what the renderer draws,
+  unchanged) and a tail entry (the texture drawn at the mirrored slot), table 2k entries; checked both ways;
+  originals in btd_before_cover, `-Restore`. Do not run btd_byte6.py on encoded files.
+  Owner's run (19:30-19:31): identity pairs would need 1165 codes; with only the covered slot (LFieldGrass02) told
+  apart 75 codes, table 56 -> 150 entries (duplicates), check passed, installed. In game (19:40): no crash (a
+  Steam issue), **no grass at all**, also not where the flowers grew before. That encoding gave byte 6 a small code
+  (about 6). Supported hypothesis: ground cover reads table[byte6 - b], which equalled table[n - b] while byte 6 was
+  the table's last entry (56 of 56). btd_cover now makes byte 6 = 2k, the table's length, satisfying both readings
+  (needs k <= 127 codes). `vanilla_btd_survey.py --table-sizes` lists vanilla table lengths.
+  **Byte 6 = table length (owner, 2026-11-24 09:13-09:30, verified):** flowers grow again, on the hill north-west of
+  the spawn, but that hill now RENDERS pale sand: ground_at at Starfield (-1956.81, 794.71): bytes [2, 29, 32, 33, 8],
+  alphas [0, 6, 7, 0, 0], table 150; front reading LFieldGrass02 (what it looked like before), both end readings
+  LCoastOceanFloor01 (the sand filler of the encoded table's tail half): **with the encoded table the renderer read
+  the table from its end here**, while with the original table it read it from the front (2026-11-23, two spots).
+  Ground cover: mirrored + end reading gives LFieldGrass02 at strength 6/7 next to the spot, where flowers grow
+  (third spot fitting). Supported hypothesis: the duplicate entries of the encoded table changed how the renderer
+  resolves bytes. Diagnostic: `terrain_cover.ps1 -Pad 40` inserts 40 unique vanilla LTEX before the mask entry (no
+  duplicates, byte 6 = new length, front readings unchanged, end readings move by 40).
+  **Pad 40 (owner, 10:00-10:12, verified):** the ground renders normally again (no sand): the duplicate entries of
+  the encoded table broke rendering; the renderer reads table[b - 1]. The flowers stayed at the mill log although
+  every end reading moved by 40: **refuted: ground cover reading the table from its end** (the matches were chance;
+  the log flowers are a metre from a quadrant edge whose neighbour holds LFieldGrass02).
+  **Byte 6 = LDefault003FlatIn (10:19-10:24, verified):** wheat (mask 1) grows, at the same spots (log bank, hill crest
+  clumps); flats bare. So **mask 0 = Base, 1 = FlatIn, 2 = FlatOut** (byte 6 selects), and the mask changes which
+  grass grows, not where: the terrain-shape idea is refuted. Constant over every test, including cover on every
+  texture: grass where textures meet, never inside one texture at alpha 7/7. Diagnostic: btd_cover.py uniform
+  (terrain_cover.ps1 -UniformRow 58 -UniformCol 76): the 3 x 3 quadrants around the forest spot get LFieldGrass02
+  in all five layers at alpha 7, so every reading gives it at full strength.
+  Note: btd_before_cover holds a terrain with byte 6 = Base: do not run `terrain_cover.ps1 -Restore` any more.
+  **Uniform patch, alpha 7 (owner, 10:28-10:31, verified):** the square renders plain LFieldGrass02 with hard edges,
+  and NO wheat grows in it, also at the mill log where wheat grew before: **ground cover gives a texture at alpha 7
+  nothing**; it grows only where alphas are partial (blends, edges). Supported hypothesis: ground cover reads the
+  3-bit alphas differently from the renderer (7 as zero, or an inverted / other scale). Next: the same square at
+  alpha 3 (`-Alpha 3`).
+  **Alpha 3 (owner, 10:38, verified):** the square shows grey lumps (the five layers sum below full strength, the
+  re-skinned vanilla rock shows through) and still no wheat. Conclusion over all tests (mask, texture, table
+  reading, alpha): **our BTD decides only which grass a spot may grow; where it grows comes from a per-spot density
+  outside the terrain file** (supported hypothesis: the procedural planet tiles' density under the overlay). Owner
+  chose (2026-11-24) to find the density source in Starfield.exe: scripts/re/exe_xrefs.py lists the code that
+  references density-map strings (RIP-relative references, functions from .pdata, callees' strings).
+  **exe_xrefs run (owner, 10:43, verified strings):** density maps are a ProcGen resource database
+  (BSProcGen::DensityMapDB, used by BGSPlanet::BaseProcGenDB in the ProcGen resource scatter tables); one function
+  (0x140bf45f0, 3.8 KB) both checks "Size of density map %s does not match block %s" and implements
+  GetBiomeMaskValueConditionFunction "mask(%u,%u,%u), cellIndex(%i,%i)": per-cell biome mask values are read from the
+  procedural blocks' density maps. Setting bDensityMapDBHandlesStorageEnabled:ProcGenRuntimeService. The mask names
+  FlatInner / FlatOuter / Talus sit together at 0x144d60328.. (a name table, reached through pointers, not
+  RIP-relative: the tool found no code refs). Supported hypothesis: ground-cover density on any world comes from the
+  ProcGen density maps of the planet's procedural blocks; our overlay has none of its own, so the planet's show
+  through. Next: decompile 0x140bf45f0 and its callers (Ghidra headless).
+  **Starfield.exe decompiled (Claude, 2026-11-24, Ghidra headless; details and addresses:
+  docs/re/ground-cover-density.md). The hypothesis above is refuted:** 0x140bf45f0 is only the GetBiomeMaskValue
+  condition. Grass never reads density maps (keyed by procedural block anyway); it reads OUR BTD's bytes and alphas
+  (verified). Only palette entries with a GCVR grow anything, and an overlay LTEX gets a GCVR only if it is an
+  `LDefault...` mask placeholder, which the overlay's biome then swaps for its slot's {LTEX, GCVR} (verified). Byte 6
+  is a sixth layer read only when bytes 0..4 are all set, and it gets the leftover weight prod(1 - a_i): zero wherever
+  any layer is at 7/7. That is the "edges only" pattern of every test above (verified against the code;
+  `scripts/re/ground_cover_weights.py` computes it for a spot). Recipe: paint the LDefault placeholders as ordinary
+  layers with Skyrim's alphas where Skyrim is grassy, biome slot = {converted Skyrim texture, its GCVR}, low GCVR
+  threshold (data only, max 7 grass textures per overlay); or an SFSE hook on FUN_1409a9570 that gives each Skyrim
+  LTEX its own GCVR (exact, no limit). Density maps dropped.
+  **Route A test** (`tools\owner\grass_slot_test.ps1`, btd_cover.py slot): in 20 x 20 quadrants around the bare forest
+  flat (58, 76) every layer naming LFieldGrass02 (entry 14) names LDefault006Base (00010861, appended as entry 57)
+  instead, same alphas, byte 6 = 0 there (offline dry run on a copy: 35 layer bytes in 35 quadrants, check passed);
+  the grass mod gives the ocean biome one entry {mask 0, LFieldGrass02 slot, its cover}, threshold 0.1. Expected:
+  same look, grass across the field at the texture's strength.
+  **First run (owner, 2026-11-24, verified in game): no grass anywhere, and the LFieldGrass02 places in the square
+  draw a pale wavy "snow" ground.** The built biome showed why: NirnOceanNoCoating has its own LNAM per mask 0..5 (mask
+  0 = LSandPacked05_Gray, no cover) and ours was APPENDED as a second mask-0 entry; the placeholder drew the first
+  one's ground (pale grey sand, as on the 2026-11-24 encoded-table hill). So the placeholder -> biome slot swap works
+  for rendering (verified), and the slot takes the biome's FIRST entry of that mask, at least for its ground
+  (supported hypothesis; whether it also took that entry's empty cover, or our grass model failed, is open: the mask
+  test's appended mask-0 cover did grow at edges). Next: `grass_slot_test.ps1 -GrassOnly` rewrites the biome's own
+  first mask-0 entry instead (skyrim_grass_native.py --slot-first); if the ground is field grass again but still
+  bare, `-GrassOnly -Control` (vanilla moss cover) separates our grass model from the route.
+  **Second run (owner, --slot-first, verified in game): the same pale ground, no grass.** So the placeholder's look
+  does not come from the biome's first mask-0 LNAM texture (my "first entry" reading above is refuted for the look).
+  Candidates: the mask-0 ANAM texture (LSandRough02_Gray, also pale sand), or no swap at all (LDefault006Base drawing
+  itself). Third run: `-GrassOnly -Control` with --slot-alt (the first mask-0 ANAM names our texture too) and the
+  vanilla moss cover: field-grass look = the ANAM is the slot's ground; moss = the cover reaches the layer (then our
+  converted grass model is what failed); still pale and bare = the swap does not happen for layers 0..4.
+  **Third run (owner, -GrassOnly -Control with --slot-alt, VERIFIED IN GAME 2026-11-24): ROUTE A WORKS.** The field
+  draws field grass again (no pale sand) and the vanilla cover (GC_MossMoundsGrass01: bladed grass, dried grass, pink
+  flowers, moss mounds) grows dense ACROSS the LFieldGrass02 ground, not only at its edges. So for an overlay:
+  LDefault placeholder painted as an ordinary layer -> the anchor biome's slot of that mask; the slot's **ground**
+  comes from the biome's mask ANAM texture (run 2 -> 3: only the ANAM changed and the pale sand went), its **cover**
+  from the mask's first LNAM GCVR; grass follows the layer's own blend weight (as read from Starfield.exe).
+  Open: (1) our converted Skyrim grass through the same route (run 2 grew nothing, but without the ANAM change):
+  `grass_slot_test.ps1 -GrassOnly` (no -Control) now; (2) a few pale-sand spots remain (owner's 2nd screenshot of the
+  run): if outside the square or not LFieldGrass02 ground, the byte-6 FlatIn remainder layer draws the ocean biome's
+  mask-3 ground there.
+  **Fourth run (owner, -GrassOnly = our converted Skyrim grass, verified in game): field-grass ground (no pale sand),
+  NO grass.** Same route as the third run, so our grass records / model fail, not the route. Our GRAS copy the
+  GrassHelleboreField02 template: above-water clamp 0.5 (the moss mounds that grew: FLT_MAX for both clamps), and the
+  placement code (FUN_140621fc0) tests each point's height against the cell's water height plus the clamps; our
+  Riverwood cells carry a 381.43 m water plane. Supported hypothesis: the water clamp keeps our grass off (it would
+  also explain why Skyrim grass builds grew nothing since 2026-11-22). Fifth run: `-GrassOnly` again, the script now
+  adds --no-water-clamp (both clamps FLT_MAX). Still bare = the converted model (next: --keep-template-model).
+  **Fifth run (owner, built plugin checked: both clamps FLT_MAX): still bare.** The water clamp is refuted. Left: our
+  converted model (FieldGrass01 on the free vanilla path grasshellebore01.nif, GrassFieldLive01 material) or another
+  field of our GRAS (coverage 100, Skyrim density 64 / 20). Sixth run: `-GrassOnly -TemplateModel` (our records, the
+  vanilla GrassHelleboreField02 model): flowers across the field = our converted model is the failure.
+  **Sixth run (owner, -TemplateModel, verified in game): a dense carpet of hellebore flowers across the whole field.**
+  So route A AND our GRAS records work (Skyrim density 64, coverage 100: denser than Skyrim, tune later); the converted
+  FieldGrass01 model (1 shape, 6 tris, on the free path grasshellebore01.nif, game material GrassFieldLive01) is what
+  shows nothing. Converted Skyrim models did show on 2026-11-23 (green tufts with GrassCityShort01, straw with
+  GrassFieldLive01), so supported hypothesis: a game material brings its own texture layout and FieldGrass01's UVs
+  land on transparent parts of it. Seventh run: `-GrassOnly -Material Bladed\GrassCityShort01`. The real fix is the
+  open item "Skyrim's textures on grass" (the grass system refuses our .mat; why = next Starfield.exe question).
+  **Seventh run (owner, GrassCityShort01 on the field grass model, verified in game): still bare.** Not the material.
+  Offline comparison (grass_model_compare.py + sfmesh, verified): the NIF blocks match the vanilla hellebore's; our
+  FieldGrass01 .mesh is 0.9 m tall, 6 tris, UVs about 0..1, but carries Skyrim's vertex colours with **alpha 0 on
+  14 of 18 vertices** (0x72..0x8C at the blade tips: Skyrim's wind weight), while the vanilla grass .mesh has no
+  vertex colours at all (and a uv2). Supported hypothesis: the grass shader reads that alpha as opacity. The grass
+  build now drops grass vertex colours (`--keep-vertex-colours` for the old way). Eighth run: `-GrassOnly`.
+  **Eighth run (owner, no vertex colours, built mesh checked: 0 colours; verified in game): still bare.** Summary of
+  runs 4-8: placement, records, water clamps, material choice and vertex colours are ruled out; only the converted
+  FieldGrass01 model with a borrowed game material stays invisible. FieldGrass01 is 3 Skyrim cards (6 tris with back
+  faces) meant for Skyrim's own grass texture; supported hypothesis: a game grass material's texture layout leaves
+  those cards mostly transparent (bigger Skyrim models, e.g. forest grass, showed on 2026-11-23). Showing Skyrim's
+  grass as Skyrim draws it needs Skyrim's textures on grass: the open "why does the grass system refuse our .mat"
+  question (Starfield.exe). Working fallback: vanilla Starfield grass models per Skyrim grass family with our records.
+  **Correction (Claude, 2026-11-24, Starfield.exe; docs/re/ground-cover-density.md "Grass model paths"):** the grass
+  system only finds models DIRECTLY in landscape\grass\ (or Rocks\): at start-up it copies the file index entries of
+  exactly that folder to meshes\landscape\cellgrass\ and loads every grass from there. FieldGrass01 sat on the nested
+  free path grass\grasshellebore\grasshellebore01.nif, so runs 4-8 never loaded it at all: they tested neither the
+  model, the material nor the vertex colours. 6 of the 12 free paths are nested; --vanilla-paths now hands out only the
+  6 visible ones. The 2026-11-23 finding "our own .mat is refused" was confounded the same way (the commonest families
+  got nested paths) and is unresolved again. Ninth run: `-GrassOnly` (FieldGrass01 on grasscityshort01_shape01.nif,
+  a visible path). Then `-GrassOnly -FlatPaths` (a new file directly in landscape\grass\): if that grows, the
+  12-path limit is gone, and our own .mat can be retried.
+  **Ninth run (owner, FieldGrass01 on the visible path grasscityshort01_shape01.nif, verified in game): Skyrim's
+  field grass GROWS across the field** (with the vanilla cover's clover/moss where it grew before). The nested path was
+  the whole block. Look: blades mangled, lying sideways, wrong heights: Skyrim's cards wearing the borrowed
+  GrassFieldLive01 texture (another layout). Tenth run: `-GrassOnly -OwnMaterial` (our converted material with
+  Skyrim's own textures, on the same visible path): Skyrim's look = our .mat works for grass (the 2026-11-23 refusal
+  was the path); bare = materials are a real second block (next Starfield.exe question).
+  **Tenth run (owner, -OwnMaterial, verified in game): Skyrim's field grass with SKYRIM'S OWN TEXTURE grows across
+  the field** (upright green Skyrim blades). So our own .mat works for grass; the 2026-11-23 "refused" was the path.
+  Left: some cards draw as solid pale / dark triangles ("fins": FieldGrass01 is 3 big cards, a fin is one drawn
+  without its cut-out). Our material is the converter's plain one (parent PlasticPlainSmooth01, opacity map,
+  alpha test 0.392); vanilla grass (GrassFieldLive01) uses the VegetationTranslucent1Layer shader model (alpha test,
+  translucency, wind, terrain tint), also with a separate opacity map. Supported hypothesis: a grass pass (shadow /
+  depth) expects the vegetation shader. The grass build now rebuilds our grass materials on GrassFieldLive01 with
+  Skyrim's textures (`--grass-shader vegetation`, default; the atlas AO / transmissive maps dropped; `plain` = old).
+  Eleventh run: `-GrassOnly -OwnMaterial` again.
+  **Eleventh run (owner, vegetation-shader material, verified in game): Skyrim's field grass across the meadow down to
+  Riverwood; fins still there**, now showing Skyrim's blade texture smeared across the whole card (blurry, blocky):
+  the alpha-test mip problem. Box-filtered mips of the opacity map average the gaps between thin blades above the
+  cut-out threshold, so a card drawn at a lower mip (grass uses a mip bias) goes solid. The shader was not the cause
+  (kept: it is the game's grass shader). Now the grass build writes opacity maps with coverage-preserving mips
+  (fo4sf.textures.coverage_mips: every level rescaled so the share of texels passing the alpha test stays level 0's;
+  each level BC4 by texconv, joined; checked with the real texconv: 9 levels, exact BC4 size). Twelfth run:
+  `-GrassOnly -OwnMaterial`.
+  **Twelfth run (owner, coverage mips, verified in game): fins remain** (smaller, pale arrowheads). Our opacity map is
+  clean (83 % exactly 0, 2 % between 1 and the threshold) and Skyrim's FieldGrass01 really is 3 cards (9 verts, UVs
+  -0.08..1.17), so a missing cut-out on our model would show whole cards, not arrowheads. The vanilla model at our
+  path (grasscityshort01_shape01.nif) is Starfield's short city grass: 50 tris, 0.32 m tall pointed blade clusters,
+  which matches the fins. Supported hypothesis: some instances resolve the cellgrass copy (made at start-up with each
+  file's location) to the vanilla file. Also found: FieldGrass02 is Skyrim's FieldGrassFlowers02.nif, which
+  --vanilla-paths made share FieldGrass01's model. Thirteenth run: `-GrassOnly -OwnMaterial -FlatPaths` (each Skyrim
+  grass its own model at a NEW path directly in landscape\grass\, s2s_landscape_grass_<name>.nif): grass and no fins =
+  fins were vanilla instances and new paths work (no 6-path limit); no grass = new files miss the start-up copy.
+  **Thirteenth run (owner, -FlatPaths, verified in game): Skyrim's grass grows from NEW files directly in
+  landscape\grass\** (both s2s_landscape_grass_*.nif), FieldGrass02 now with its own FieldGrassFlowers02 model (Skyrim's
+  yellow-orange flowers). So new flat paths work: **no 6-path limit**, every Skyrim grass can have its own model.
+  The fins remain (mostly at middle distance, near clumps cut cleanly), so the vanilla-file idea is refuted: they are
+  our cards. Textures match vanilla's formats (colour BC1 sRGB without alpha, opacity BC4, both for vanilla
+  GrassFieldLiveAtlas01 and ours), so not a colour-alpha cut-out. Supported hypothesis: some grass rendering (likely
+  distance dependent) applies the cut-out weakly or not at all; vanilla grass is real blade geometry (e.g. 50 tris in
+  0.32 m clusters) and barely shows it, Skyrim's grass is 3 big cards (FieldGrass01: 3 triangles) shaped only by the
+  cut-out. Next: does a fin turn into blades when walked up to (distance switch) or stay a fin (instance)?
+  **Owner: a fin stays a fin up close** (not a distance switch). Skyrim's FieldGrass / FieldGrassFlowers cut-out
+  threshold is 4 of 255 (NiAlphaProperty); ours 0.375. Vanilla card-style grass (hellebore: 38 tris) shows no fins;
+  its mesh has a uv2 (u 1.0, v falling with height: a wind / bend weight), the city grass has none and is fine, so
+  uv2 is not required. Fourteenth run: `-GrassOnly -OwnMaterial -FlatPaths` with **blade geometry** (default now,
+  fo4sf.grasscards, `--grass-geometry cards` = old): every card cut into column strips along its cut-out at 0.375
+  (FieldGrass01: 3 cards -> 54 strips per card at a 32 grid, about 650 tris per clump with back faces; strips cover
+  ~60 % of a card against 22 % blades, 97 % of the blades). Fins turning into blocky clump shapes = the cut-out is
+  skipped on some instances (then a finer cut or the cause in Starfield.exe); fins gone = fixed.
+  **Fourteenth run (owner, blade geometry, verified in game): the fins became small blocky pieces** (single strips drawn
+  as full rectangles, pale), the rest is Skyrim's field grass and flowers. Verified: Starfield skips the cut-out on
+  some grass instances (not a distance switch, not our texture formats, not the path); the strips only shrink what
+  shows. Cost: FieldGrass01 648 tris, FieldGrassFlowers02 708 (vanilla grass ~50). Open: which instances skip the
+  cut-out (Starfield.exe: grass instancing / material resolve), a finer or smarter cut, density back to Skyrim's.
+  **Owner (2026-11-24): the blade-strip grass does not look right at all: blades disconnected, shape off** (a blade
+  thinner than the grid is cut into pieces). Blades are no longer the default (`--grass-geometry blades` keeps the
+  test); cards again. New lead: the game's grass shader model VegetationTranslucent1Layer sets
+  FlipBackFaceNormalsInViewSpace = true (it draws both sides), while the converter also adds a mirrored copy of every
+  double-sided Skyrim triangle: each card was drawn twice in the same plane. Fifteenth run:
+  `-GrassOnly -OwnMaterial -FlatPaths -NoBackFaces` (cards without the copies): fins gone = the duplicates; cards
+  missing from behind = the shader is not two-sided for us; fins unchanged = elsewhere (Starfield.exe next).
+  **Fifteenth run (owner, no back-face copies, verified in game): the pieces remain**, pale and dense, floating at the
+  TOPS of clumps and card edges ("disconnected"); clumps complete from every side (the shader is two-sided: the copies
+  are not needed). **Cause found (verified offline):** Skyrim's FieldGrass01 shader (BSLightingShaderProperty) has
+  Texture Clamp Mode 0 = CLAMP_S_CLAMP_T and the cards' UVs run past the texture (u -0.08..1.17, v -0.17 at the tip);
+  Starfield materials wrap by default, so a card's tip showed the dense base of the clump from the other edge of the
+  texture (and the sides wrapped likewise). Starfield materials can clamp: BSMaterial::TextureAddressModeComponent
+  'Clamp' on the UV stream object (12,997 vanilla uses; the grass template has none). The grass build now sets it on
+  every converted grass material. Sixteenth run: `-GrassOnly -OwnMaterial -FlatPaths -NoBackFaces`.
+  **Sixteenth run (owner, clamp, verified in game): "that fixed it"** - Skyrim's field grass and flowers with
+  Skyrim's textures, no floating pieces, on Skyrim's original 3-triangle cards. Left: small dark spots along the
+  blades. Our colour texture is clean (blade mean ~112/113/59, gaps olive ~74/81/49, not black; no dark blade texels
+  at level 0); the spots came with the vegetation shader, whose terrain tint (TerrainBlendStrength 0.7) mixes in the
+  ground texture under the grass by world position - our field-grass ground is full of dark specks and white flowers.
+  Supported hypothesis; terrain tint is now off for converted Skyrim grass (`--terrain-tint` keeps it; Skyrim's
+  grass had no such tint). Seventeenth run: same command.
+* **All of Tamriel (2026-11-24, to test in game)**: `tools\owner\grass_tamriel.ps1`. The 7 grassiest Skyrim land
+  textures of the staged terrain (layer strength over 73 x 73 cells; underwater beds left out) each take one biome
+  slot (fo4sf.grassslots.DEFAULT_SLOT_MAP): LFieldGrass02 Base, LPineForest02 Flow, LRocks01 FlatOuter, LGrassSnow01
+  FlatInner, LFieldGrass01 Talus, LTundra01 Solid, LFallForestGrass01NoFern Path. `btd_cover.py slots` paints their
+  layers as the slot placeholders world-wide with the same alphas (layer bytes on the owner's terrain: 245 / 927 /
+  2,068 / 1,318 / 779 / 539 / 424; table 56 -> 62) and clears byte 6; `skyrim_grass_native.py --slot-map default`
+  puts {texture, its Skyrim grass} in each mask's first LNAM / ANAM of Nirn's ocean biome. Every other grassy texture
+  keeps its look and grows nothing (7 slots per world without the SFSE hook, route B). `-Restore` undoes the terrain.
+  **Owner's run (verified in game, 2026-11-24)**: grass grows across the map; tundra / rock grass close to Skyrim's
+  (darker, greyer: scene lighting, maybe Skyrim's terrain-colour tint, unresolved). Bare where the texture has no slot:
+  the fall forest beside Riverwood (most likely LFallForestGrass01, not in the 7; supported hypothesis). The 7 cover
+  45% of Skyrim's grassy ground (whole Tamriel, LAND weights): 77% of the part above water; the largest bare ones
+  LReachGrass01 3.4%, LFallForestGrass01 2.9%, LFrozenMarshGrass01 2.3%, LTundraRocks01 2.0%, LPineForest03 1.0%.
+  Open: the Riverwood mill's flowery ground grows nothing (ground_at at the spot needed).
+* **Every texture (route B, 2026-11-24, to test in game)**: `tools\owner\grass_hook.ps1`. The S2SGrass SFSE plugin
+  fills the ground cover of every converted grassy texture in the overlay palette (docs/re/ground-cover-density.md,
+  route B), from `SFSE\Plugins\S2SGrass.ini` written by `skyrim_grass_native.py --palette-hook`. The terrain goes back
+  to the converted textures (no slot placeholders), no biome override; Skyrim's underwater grasses are left out.
+  **Owner's run (verified in game, 2026-11-24)**: S2SGrass.log "hook installed", "17 of 17 ground textures have a
+  ground cover", SKY_Tamriel palette "61 entries, 17 given our ground cover"; grass on the pine forest and tundra.
+* **Terrain fix (2026-11-24, verified offline)**: the byte-6 grass test (terrain_byte6.ps1, 2026-11-22/23) was never
+  undone: byte 6 = LDefault003FlatIn in all 21,316 land quadrants (each has all five layers), so the FlatIn placeholder
+  took the base layer's share and drew Nirn's vanilla FlatInner ground. The 1 km slot test's backup kept that state
+  and both slot restores put it back. Measured by the dominant texture at every 4th Skyrim LAND vertex against the BTD
+  sample there: where Skyrim paints LRocks01NoRocks our terrain drew it 3 % of the time (90 % the placeholder), now
+  92 %; LRocks01 20 % -> 83 %; LSnow01 90 % -> 98 %; Skyrim's default dirt 81 % -> 96 %. Fixed with
+  `btd_byte6.py restore` (byte 6 = 0, as the converter writes it) on the staged files and the slot test's backup;
+  `grass_hook.ps1` now always runs it. Probably also the pale "snow" ground of the first slot test.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

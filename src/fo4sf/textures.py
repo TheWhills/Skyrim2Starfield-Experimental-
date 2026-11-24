@@ -183,6 +183,81 @@ def write_r8(path, plane):
     write_dds_dx10(path, w, h, DXGI_R8_UNORM, np.ascontiguousarray(plane, dtype=np.uint8).tobytes(), 1)
 
 
+def coverage(plane, ref: int) -> float:
+    """Share of texels an alpha test at ref (0..255) keeps."""
+    return float((np.asarray(plane) >= ref).mean()) if np.asarray(plane).size else 0.0
+
+
+def coverage_mips(plane, ref: int):
+    """A mip chain (level 0 = plane, down to 1 x 1) for an alpha-tested opacity map, each level box-filtered from
+    the one above and then scaled so the share of texels passing the alpha test stays the base level's.
+    2026-11-24 (owner, Skyrim grass in game): with ordinary box-filtered mips the gaps between thin blades average
+    above the cut-out threshold and whole grass cards draw solid ("fins"); foliage keeps its coverage this way."""
+    base = np.asarray(plane, np.float32)
+    target = coverage(base, ref)
+    levels = [np.asarray(plane, np.uint8)]
+    cur = base
+    while cur.shape[0] > 1 or cur.shape[1] > 1:
+        h, w = cur.shape
+        nh, nw = max(1, h // 2), max(1, w // 2)
+        c = cur[:nh * 2 if h > 1 else 1, :nw * 2 if w > 1 else 1]
+        if h > 1:
+            c = (c[0::2] + c[1::2]) / 2.0
+        if w > 1:
+            c = (c[:, 0::2] + c[:, 1::2]) / 2.0
+        cur = c
+        scale = 1.0
+        if coverage(cur, ref) != target:
+            lo, hi = 0.0, 16.0
+            for _ in range(24):                 # the scale where coverage(cur * s) reaches the target
+                s = (lo + hi) / 2.0
+                if coverage(np.clip(cur * s, 0, 255), ref) < target:
+                    lo = s
+                else:
+                    hi = s
+            cov_lo = coverage(np.clip(cur * lo, 0, 255), ref)
+            cov_hi = coverage(np.clip(cur * hi, 0, 255), ref)
+            scale = lo if abs(cov_lo - target) < abs(cov_hi - target) else hi
+        levels.append(np.clip(np.round(cur * scale), 0, 255).astype(np.uint8))
+    return levels
+
+
+DDSD_MIPMAPCOUNT = 0x20000
+DDSCAPS_COMPLEX_MIPMAP = 0x400008
+DX10_HEADER_BYTES = 4 + 124 + 20
+
+
+def assemble_mips(level_files):
+    """One DDS with a mip chain from single-level DDS files of the same format (bytes, level 0 first): level 0's
+    header with the mip count set, then every level's data in order (the DDS layout of a 2D texture)."""
+    if not level_files:
+        raise DdsError("no levels")
+    head = bytearray(level_files[0][:DX10_HEADER_BYTES])
+    if head[:4] != DDS_MAGIC or head[84:88] != b"DX10":
+        raise DdsError("level 0 is not a DX10 DDS")
+    flags, = struct.unpack_from("<I", head, 8)
+    struct.pack_into("<I", head, 8, flags | DDSD_MIPMAPCOUNT)
+    struct.pack_into("<I", head, 28, len(level_files))
+    caps, = struct.unpack_from("<I", head, 108)
+    struct.pack_into("<I", head, 108, caps | DDSCAPS_COMPLEX_MIPMAP)
+    return bytes(head) + b"".join(f[DX10_HEADER_BYTES:] for f in level_files)
+
+
+def write_bc4_coverage_mips(texconv_exe, plane, ref: int, out_path, tmp_dir):
+    """An alpha-tested opacity map as BC4 with coverage-preserving mips (coverage_mips): each level compressed on
+    its own by texconv, then joined (assemble_mips)."""
+    import os
+    blobs = []
+    for i, lv in enumerate(coverage_mips(plane, ref)):
+        src = os.path.join(tmp_dir, f"cov_mip{i}.dds")
+        write_r8(src, lv)
+        texconv(texconv_exe, src, tmp_dir, "BC4_UNORM", extra=("-m", "1"))
+        with open(src, "rb") as fh:
+            blobs.append(fh.read())
+    with open(out_path, "wb") as fh:
+        fh.write(assemble_mips(blobs))
+
+
 def write_rg8_snorm(path, r_unorm, g_unorm):
     """Map unorm 0..255 (0.5 = zero) to signed bytes and write an R8G8_SNORM DDS."""
     h, w = r_unorm.shape

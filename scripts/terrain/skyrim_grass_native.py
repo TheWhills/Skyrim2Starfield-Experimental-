@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
 sys.path.insert(0, HERE)
 
-from fo4sf import bsa, sfgrass, sfplugin, skyrimconvert, skyrimgrass, skyrimnif  # noqa: E402
+from fo4sf import bsa, grasshook, sfgrass, sfplugin, skyrimconvert, skyrimgrass, skyrimnif  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 
 PLUGIN = "S2SGrass.esm"
@@ -240,6 +240,24 @@ def norm_model(p: str) -> str:
     return p if p.startswith("meshes\\") else "meshes\\" + p
 
 
+GRASS_DIR = "meshes\\landscape\\grass\\"
+CELL_GRASS_SUBDIRS = ("rocks",)       # sCellGrassSubdirectories:Grass default "Rocks," (Starfield.exe 0x1459046d0)
+
+
+def grass_visible(path: str, subdirs=CELL_GRASS_SUBDIRS) -> bool:
+    """Whether the grass system can find a model at this path (docs/re/ground-cover-density.md, 2026-11-24): the
+    grass manager copies the file index entries of meshes\\landscape\\grass\\ (exactly that folder, not recursive) and
+    of each sCellGrassSubdirectories folder to meshes\\landscape\\cellgrass\\ once at start-up (FUN_140621660 ->
+    FUN_1427e19d0), and loads every grass model as meshes\\landscape\\cellgrass\\<path after landscape\\grass\\>
+    (FUN_140625d40). So only direct children of landscape\\grass\\ (or of a listed subfolder) are ever found."""
+    k = norm_model(path)
+    if not k.startswith(GRASS_DIR):
+        return False
+    rest = k[len(GRASS_DIR):]
+    parts = rest.split("\\")
+    return len(parts) == 1 or (len(parts) == 2 and parts[0] in subdirs)
+
+
 def unused_grass_paths(sf_data: str, plugins=None):
     """Grass NIF paths shipped in the game's mesh archives (meshes\\landscape\\grass\\) that no record of the
     game's own plugins names, sorted. 2026-11-23: the grass system loads a model only at a path the game already
@@ -264,7 +282,9 @@ def unused_grass_paths(sf_data: str, plugins=None):
             for sig, d in subs:
                 if sig == b"MODL":
                     used.add(norm_model(bytes(d).rstrip(b"\0").decode("latin-1", "replace")))
-    return sorted(shipped - used), len(shipped), len(used & shipped)
+    # 2026-11-24: only paths the grass system can see (grass_visible); the 6 nested free paths
+    # (grass\grasshellebore\...) were handed out first before, so the commonest Skyrim grasses never loaded
+    return sorted(p for p in shipped - used if grass_visible(p)), len(shipped), len(used & shipped)
 
 
 def template_nif(sf_data: str, model: str) -> bytes:
@@ -326,7 +346,9 @@ def model_info(all_shapes, kept) -> dict:
 
 def info_text(i: dict) -> str:
     return (f"{i['shapes']} shape(s)" + (f" (+{i['dropped']} dropped)" if i.get("dropped") else "")
-            + f", {i['tris']} tris, {i['height']:.0f} units tall")
+            + f", {i['tris']} tris, {i['height']:.0f} units tall"
+            + (f", {sum(b['cards'] for b in i['blades'])} card(s) cut into "
+               f"{sum(b['strips'] for b in i['blades'])} blade strips" if i.get("blades") else ""))
 
 
 def parse_model_from(items):
@@ -390,9 +412,132 @@ def ltex_kind_overrides(terrain_ltex, sf_ltex, slots, donor_edid):
     return out, changed
 
 
-def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None) -> str:
+VEGETATION_TEMPLATE = "Materials/Landscape/Grass/Bladed/GrassFieldLive01.mat"   # VegetationTranslucent1Layer
+BLADE_REF = 96                       # the template's AlphaTestThreshold 0.375 x 255
+SLOT_NAMES = {0: "Albedo", 1: "Normal", 2: "Opacity", 3: "Roughness"}
+ATLAS_ONLY = {5: "AmbientOcclusion", 8: "Transmissive"}   # the template's atlas maps: wrong layout for Skyrim's UVs
+
+
+def vegetation_mat(ours: dict, template: dict, name: str, terrain_tint: bool = False) -> dict:
+    """Our converted grass material rebuilt on the game's grass material (2026-11-24): the owner's tenth slot-test run
+    drew Skyrim's field grass with our own material (PlasticPlainSmooth01 parent, alpha-tested opacity map), but some
+    cards showed as solid pale / dark triangles; vanilla grass uses the VegetationTranslucent1Layer shader model
+    (wind, translucency, terrain tint). Keeps our albedo / normal / opacity / roughness files, drops the template's
+    atlas-only AO and transmissive maps (their constant replacements stay)."""
+    from fo4sf import convert_material
+    files = {}
+    for o in ours.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") in SLOT_NAMES:
+                files[SLOT_NAMES[c["Index"]]] = c["Data"]["FileName"]
+    if "Albedo" not in files:
+        raise ValueError(f"{name}: our material names no albedo texture")
+    mat = convert_material.build_from_template(template, name, files)
+    for o in mat["Objects"]:
+        o["Components"] = [c for c in o.get("Components", [])
+                           if not (c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") in ATLAS_ONLY)]
+    for o in mat["Objects"]:            # 2026-11-24: dark spots along the blades (owner); the ground under the grass
+        for c in o.get("Components", []):   # is mixed in at 0.7 by world position, its specks drawn on the blades
+            if c.get("Type") == "BSMaterial::TerrainTintSettingsComponent":
+                c.setdefault("Data", {})["Enabled"] = "true" if terrain_tint else "false"
+    tex = mat.get("Summary", {}).get("Layer1", {}).get("Textures", {})
+    for slot in ATLAS_ONLY.values():
+        if slot in tex:
+            tex[slot]["File"] = ""
+            tex[slot]["UseReplacement"] = True
+    return mat
+
+
+def material_file(staging: str, game_path: str) -> str:
+    """The staged file of a material game path (Materials\\..., Data\\Materials\\..., any case), or ''."""
+    rel = game_path.replace("\\", "/")
+    if rel.lower().startswith("data/"):
+        rel = rel[5:]
+    for cand in (rel, rel.lower()):
+        p = os.path.join(staging, *cand.split("/"))
+        if os.path.isfile(p):
+            return p
+    return ""
+
+
+def opacity_of(staging: str, game_path: str):
+    """The level-0 opacity plane (uint8) of a staged converted material, or None (no cut-out / not found)."""
+    from fo4sf import grasscards
+    p = material_file(staging, game_path)
+    if not p:
+        return None
+    with open(p, encoding="utf-8-sig") as fh:
+        mat = json.load(fh)
+    for o in mat.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") == 2:
+                q = material_file(staging, c["Data"]["FileName"])
+                if q:
+                    with open(q, "rb") as fh:
+                        return grasscards.opacity_plane(fh.read())
+    return None
+
+
+def with_clamp(mat: dict) -> dict:
+    """The material with its UV stream(s) set to clamp texture addressing (BSMaterial::TextureAddressModeComponent
+    'Clamp', as 12,997 vanilla material objects have it). 2026-11-24 (owner: pale, disconnected pieces of grass on
+    top of clumps): Skyrim's grass cards draw with Texture Clamp Mode CLAMP_S_CLAMP_T (FieldGrass01's
+    BSLightingShaderProperty) and their UVs run past the texture (u -0.08..1.17, v -0.17 at the tip); Starfield wraps by
+    default, so a card's tip showed the dense base of the clump from the texture's other edge."""
+    stream_ids = {c["Data"]["ID"] for o in mat.get("Objects", []) for c in o.get("Components", [])
+                  if c.get("Type") == "BSMaterial::UVStreamID" and c.get("Data", {}).get("ID")}
+    for o in mat.get("Objects", []):
+        if o.get("ID") in stream_ids:
+            comps = [c for c in o.get("Components", []) if c.get("Type") != "BSMaterial::TextureAddressModeComponent"]
+            comps.append({"Data": {"Value": "Clamp"}, "Index": 0, "Type": "BSMaterial::TextureAddressModeComponent"})
+            o["Components"] = comps
+    return mat
+
+
+def clamp_material(staging: str, game_path: str) -> bool:
+    """Rewrite a staged converted material with clamp addressing (with_clamp); False if not found."""
+    from fo4sf import convert_material
+    p = material_file(staging, game_path)
+    if not p:
+        return False
+    with open(p, encoding="utf-8-sig") as fh:
+        mat = json.load(fh)
+    with open(p, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(convert_material.dump_mat(with_clamp(mat)))
+    return True
+
+
+def rebuild_as_vegetation(staging: str, game_path: str, template: dict, terrain_tint: bool = False) -> bool:
+    """Rewrite a staged converted material in place as a vegetation (grass shader) material; False if not found."""
+    from fo4sf import convert_material
+    p = material_file(staging, game_path)
+    if not p:
+        return False
+    with open(p, encoding="utf-8-sig") as fh:
+        ours = json.load(fh)
+    if any(o.get("Parent", "").lower().endswith("vegetationtranslucent1layer.mat") for o in ours.get("Objects", [])):
+        return True                    # already rebuilt (materials are shared between models)
+    mat = vegetation_mat(ours, template, os.path.splitext(os.path.basename(p))[0], terrain_tint)
+    with open(p, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(convert_material.dump_mat(mat))
+    return True
+
+
+def without_vertex_colours(sh):
+    """The shape with no vertex colours. 2026-11-24: Skyrim grass keeps its wind sway in the vertex-colour alpha (0 on
+    most vertices of FieldGrass01, 0x72..0x8C at the blade tips); vanilla Starfield grass meshes have no vertex colours,
+    and our converted field grass stayed invisible on a field where our records grew the vanilla model densely
+    (supported hypothesis: the grass shader reads that alpha as opacity)."""
+    import dataclasses
+    return dataclasses.replace(sh, colors=[])
+
+
+def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
+                  keep_colours: bool = False, flat: bool = False, veg_template: dict = None,
+                  blades: bool = False, back_faces: bool = True, terrain_tint: bool = False) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
-    sided); returns its path under meshes\\. info: a dict to fill with model_info."""
+    sided, no vertex colours unless keep_colours); returns its path under meshes\\. info: a dict to fill with
+    model_info."""
     raw = conv.src.mesh(name)
     if raw is None:
         raise FileNotFoundError("not in the Skyrim archives")
@@ -403,8 +548,18 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
         m = conv._shape_material(src, sh, flat_normal_ok=True, albedo_tint=tint)
         if m is None:
             continue
-        if skyrimnif.double_sided(src, sh.shader_ref):
+        if blades:                       # 2026-11-24: cards cut into blade strips along their cut-out
+            alpha = opacity_of(staging, m)
+            if alpha is not None:
+                from fo4sf import grasscards
+                # strips at the material's own cut (vegetation template 0.375 = 96), not Skyrim's (FieldGrass: 4)
+                sh, st = grasscards.blade_shape(sh, alpha, max(int(sh.alpha_ref or 0), BLADE_REF))
+                if info is not None:
+                    info.setdefault("blades", []).append(st)
+        if skyrimnif.double_sided(src, sh.shader_ref) and back_faces:
             sh = skyrimconvert.with_back_faces(sh) or sh
+        if not keep_colours:
+            sh = without_vertex_colours(sh)
         shapes.append(sh)
         mats.append(m)
     if info is not None:
@@ -414,10 +569,17 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
     stem = re.sub(r"[^a-z0-9_]+", "_", os.path.splitext(name.lower().replace("\\", "/").split("meshes/", 1)[-1])[0])
     # 2026-11-23: under Landscape/Grass like every vanilla grass model (Starfield.exe names meshes/landscape/grass/)
     out_name = f"landscape/grass/{PREFIX}/{stem}"
+    if flat:                         # 2026-11-24: directly in landscape\grass\, where the grass system looks
+        out_name = f"landscape/grass/{PREFIX}_{stem.replace('/', '_')}"
     files = skyrimconvert.convert_static_sse(src, shapes, out_name, mats, None, {})
     if material:
         files = {rel: (with_material(d, material) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
                  if not rel.lower().endswith(".mat")}
+    else:                            # our own material
+        for m in sorted({x for x in mats if x}):
+            if veg_template is not None:     # rebuilt on the game's grass shader model
+                rebuild_as_vegetation(staging, m, veg_template, terrain_tint)
+            clamp_material(staging, m)       # Skyrim's grass textures clamp, Starfield wraps by default
     if geometry is not None:
         files = {rel: (with_geometry(d, geometry) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
                  if not rel.lower().endswith(".mesh")}
@@ -516,6 +678,53 @@ def main(argv=None):
     ap.add_argument("--only-ltex", default="", metavar="EDIDS",
                     help="test (2026-11-23): ground cover only on the slots of these Skyrim textures "
                          "(comma-separated, e.g. LFieldGrass02)")
+    ap.add_argument("--slot-first", action="store_true",
+                    help="test (2026-11-24, docs/re/ground-cover-density.md route A): instead of appending entries, "
+                         "rewrite the biome's own FIRST entry of each --biome-masks mask to {the one --only-ltex "
+                         "slot, its cover}. An appended second mask-0 entry did not take the Base slot in game")
+    ap.add_argument("--flat-paths", action="store_true",
+                    help="put each converted grass model at a NEW path directly in landscape\\grass\\ "
+                         "(s2s_<name>.nif) instead of over a free vanilla path: the grass system only sees direct "
+                         "children of that folder (2026-11-24, Starfield.exe); whether it sees new files depends on "
+                         "them being in the file index when the grass manager starts (test)")
+    ap.add_argument("--grass-geometry", choices=("cards", "blades"), default="cards",
+                    help="'cards' (default): Skyrim's grass cards as they are. 'blades' (test, 2026-11-24): every "
+                         "card cut into strips along its cut-out (fo4sf.grasscards); owner: blades come out "
+                         "disconnected and the shape off, so not the default")
+    ap.add_argument("--terrain-tint", action="store_true",
+                    help="keep the grass shader's terrain tint (the ground's colour mixed into the blades at 0.7 by "
+                         "world position). Off by default since 2026-11-24: it drew the ground's specks as dark spots "
+                         "on Skyrim's blades, and Skyrim's grass has no such tint")
+    ap.add_argument("--no-back-faces", action="store_true",
+                    help="test (2026-11-24): no mirrored copy of double-sided Skyrim grass triangles; the game's "
+                         "grass material draws both sides already, so each card was two coplanar triangles")
+    ap.add_argument("--grass-shader", choices=("vegetation", "plain"), default="vegetation",
+                    help="our own grass materials: 'vegetation' (default, 2026-11-24) rebuilds them on the game's "
+                         "grass material GrassFieldLive01 (VegetationTranslucent1Layer: wind, translucency, terrain "
+                         "tint) with Skyrim's textures; 'plain' keeps the converter's standard material (some cards "
+                         "drew as solid triangles in game)")
+    ap.add_argument("--keep-vertex-colours", action="store_true",
+                    help="keep Skyrim's grass vertex colours (before 2026-11-24 the default); now dropped like vanilla "
+                         "grass meshes have none: their alpha (Skyrim's wind weight, 0 on most vertices) may hide the "
+                         "blades")
+    ap.add_argument("--no-water-clamp", action="store_true",
+                    help="test (2026-11-24): our grasses get no water clamps (both FLT_MAX, as the vanilla moss mounds "
+                         "that grew across the slot-test field); the hellebore template's above-water clamp 0.5 is "
+                         "the one difference left between that control and our grass")
+    ap.add_argument("--slot-map", default="", metavar="EDID=MASK,...",
+                    help="route A for several textures (2026-11-24, fo4sf.grassslots): each listed Skyrim texture "
+                         "gets its cover and is written into the biome's own first LNAM and ANAM of its mask (0..6); "
+                         "'default' = DEFAULT_SLOT_MAP (7 land textures). Pair with btd_cover.py slots (same map)")
+    ap.add_argument("--palette-hook", action="store_true",
+                    help="route B (2026-11-24, needs the S2SGrass SFSE plugin): every grassy converted texture gets "
+                         "its own cover, listed in SFSE/Plugins/S2SGrass.ini (fo4sf.grasshook); no biome override. "
+                         "Use with the terrain as converted (btd_cover.py slots-restore)")
+    ap.add_argument("--keep-underwater", action="store_true",
+                    help="with --palette-hook: keep Skyrim's underwater grasses (kelp, coral); dropped by default since "
+                         "the overlay has no water (they would grow on dry lake and river beds)")
+    ap.add_argument("--slot-alt", action="store_true",
+                    help="with --slot-first: also the biome's first ANAM of each mask names that slot's texture "
+                         "(2026-11-24: rewriting the LNAM alone left the placeholder drawing pale sand)")
     ap.add_argument("--ltex-kind-from", default="", metavar="EDITORID",
                     help="test (2026-11-23): give every covered slot's LTEX the material type (MNAM) and QNAM of this "
                          "vanilla LTEX (e.g. LDirtCracked02), overriding the terrain's re-skin in S2SGrass.esm; the "
@@ -529,6 +738,16 @@ def main(argv=None):
                          "Materials\\Landscape\\Grass (e.g. forestgrass,fieldgrass=Bladed\\GrassCityShort01); "
                          "repeatable")
     a = ap.parse_args(argv)
+    from fo4sf import grassslots
+    slot_map = {}
+    if a.slot_map:
+        try:
+            slot_map = grassslots.parse_slot_map(grassslots.DEFAULT_SLOT_MAP if a.slot_map == "default"
+                                                 else a.slot_map)
+        except ValueError as e:
+            sys.exit(str(e))
+        if not a.only_ltex:
+            a.only_ltex = ",".join(slot_map)
     try:
         fam_mats = parse_family_materials(a.family_material)
         model_from = parse_model_from(a.model_from)
@@ -578,6 +797,14 @@ def main(argv=None):
         plan["slots"] = {k: v for k, v in plan["slots"].items() if sky_of.get(k) in keep}
         print(f"--only-ltex: ground cover on {len(plan['slots'])} slot(s): "
               + ", ".join(f"{k:08X} ({sky_of[k]})" for k in sorted(plan["slots"])))
+    if a.palette_hook and slot_map:
+        sys.exit("--palette-hook and --slot-map are two routes: pick one")
+    if a.palette_hook and not a.keep_underwater:
+        def underwater(g):
+            r = gras_sky.get(g, {})
+            return r.get("water_rule") in UNDERWATER_RULES or "water" in r.get("edid", "").lower()
+        plan["slots"], wet = grasshook.drop_underwater(plan["slots"], underwater)
+        print(f"--palette-hook: underwater grasses left out; {len(wet)} texture(s) with only those grow nothing")
     report = {"slots": {f"{k:08X}": [gras_sky[g]["edid"] for g in v if g in gras_sky] for k, v in plan["slots"].items()},
               "skipped_textures": plan["skipped"], "grasses": {}, "failed": {}}
     if not plan["slots"] and not a.control:
@@ -624,6 +851,8 @@ def main(argv=None):
         if not gc:
             sys.exit(f"control: the world's land biome ({wb}) lists no ground cover")
         covers = [(int(o["form_id"]), gc) for o in overrides]
+        if a.only_ltex:                              # 2026-11-24: the slot test's control on the one texture
+            covers = [c for c in covers if c[0] in plan["slots"]]
         names = {r[3]: sfplugin.edid(r[2]) for r in sf if r[0] == b"GCVR"}
         report["control"] = {"gcvr": f"{gc:08X}", "edid": names.get(gc, "?"), "textures": len(covers)}
     else:
@@ -655,7 +884,8 @@ def main(argv=None):
         if a.vanilla_paths:
             free, n_shipped, n_used = unused_grass_paths(os.path.join(a.starfield, "Data"))
             report["vanilla_path_pool"] = {"shipped": n_shipped, "used_by_records": n_used, "free": len(free)}
-            print(f"vanilla grass models: {n_shipped} shipped, {n_used} named by the game's records, {len(free)} free")
+            print(f"vanilla grass models: {n_shipped} shipped, {n_used} named by the game's records, {len(free)} free "
+                  f"where the grass system looks (directly in landscape\\grass\\ or Rocks\\)")
         if a.copy_template_nif or a.replace_vanilla:
             tmodel = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
             copied = template_nif(os.path.join(a.starfield, "Data"), tmodel)
@@ -665,7 +895,16 @@ def main(argv=None):
         shutil.rmtree(staging, ignore_errors=True)
         conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), staging, a.texconv, cr, None,
                                              prefix=PREFIX)
+        conv.coverage_mips = True            # 2026-11-24: grass cut-outs keep their coverage in every mip (no "fins")
         tdnam = dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"]
+        veg_template = None
+        if a.grass_shader == "vegetation" and not a.vanilla_material:
+            from fo4sf import convert_material
+            try:
+                veg_template = convert_material.read_template_path(cr, VEGETATION_TEMPLATE)
+            except StopIteration:
+                print(f"note: {VEGETATION_TEMPLATE} not in {os.path.basename(cr)}: plain grass materials")
+            report["grass_shader"] = "vegetation" if veg_template else "plain"
         variants = [template_nif(os.path.join(a.starfield, "Data"), v[1]) for v in PATH_VARIANTS] \
             if a.path_variants else None
         order = lambda g: gras_sky.get(g, {}).get("edid", "")              # noqa: E731
@@ -733,8 +972,13 @@ def main(argv=None):
                     mat = (family_material(r["edid"], fam_mats) if a.vanilla_material == "auto"
                            else a.vanilla_material)
                     minfo = {}
-                    model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo)
+                    model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo,
+                                          keep_colours=a.keep_vertex_colours, flat=a.flat_paths,
+                                          veg_template=veg_template, blades=a.grass_geometry == "blades",
+                                          back_faces=not a.no_back_faces, terrain_tint=a.terrain_tint)
                     report.setdefault("model_info", {})[r["edid"]] = minfo
+                    if a.flat_paths:
+                        print(f"  {r['edid']} -> meshes\\{model}  {info_text(minfo)}")
                     if mat:
                         report.setdefault("materials", {})[r["edid"]] = mat
                     if free is not None:             # --vanilla-paths: move it over an unused vanilla grass path
@@ -754,9 +998,11 @@ def main(argv=None):
             fid = sfplugin.new_form_id(len(recs), nm)
             # MODT: Mutagen's "TextureFileHashes"; the template's describes the template's model, not ours (2026-11-23:
             # the vanilla NIF at our path grew nothing, at its own path with the same MODT it grows)
+            dnam = with_coverage(sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale), a.coverage)
+            if a.no_water_clamp:
+                dnam = sfgrass.without_water_clamps(dnam)
             subs = sfplugin.edit(gt[2], {b"EDID": sfplugin.zs("S2S_" + r["edid"]), b"MODL": sfplugin.zs(model),
-                                         b"DNAM": with_coverage(sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale),
-                                                                a.coverage)},
+                                         b"DNAM": dnam},
                                  drop=[b"MODT"] if (a.drop_modt and not a.keep_template_model) else [])
             recs.append((b"GRAS", gt[1], subs, fid))
             gras_fid[g] = fid
@@ -794,7 +1040,38 @@ def main(argv=None):
               f"their re-skin copied from {os.path.basename(terr_p)}")
         if not changed:
             print(f"  (no slot changed: terrain plugin {terr_p or '?'} not found or no re-skin there)")
-    if a.mask_test and target is not None:
+    if a.palette_hook:                    # route B: the S2SGrass plugin gives each texture its cover; biome untouched
+        target = None
+    if slot_map and target is not None:   # route A, every slot (fo4sf.grassslots): the biome's own entries
+        sky_name = {int(o["form_id"]): o["skyrim"].lower() for o in overrides}
+        subs = target[2]
+        placed_slots = {}
+        for slot_fid, gc in covers:
+            m = slot_map.get(sky_name.get(slot_fid, ""))
+            if m is None:
+                continue
+            subs = sfgrass.biome_with_slot(subs, m, slot_fid, gc, alt=True)
+            placed_slots[str(m)] = {"skyrim": sky_name[slot_fid], "ltex": f"{slot_fid:08X}", "gcvr": f"{gc:08X}"}
+            print(f"  mask {m} ({grassslots.SLOT_NAMES[m]}): {sky_name[slot_fid]} {slot_fid:08X}, cover {gc:08X}")
+        recs.append((b"BIOM", target[1], subs, target[3]))
+        report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "slots": placed_slots,
+                           "entries_added": 0}
+        missing = sorted(set(slot_map) - {v["skyrim"] for v in placed_slots.values()})
+        if missing:
+            print(f"  no cover for: {', '.join(missing)} (no grass, or a vanilla Starfield texture)")
+    elif a.slot_first and target is not None:
+        slots = sorted({s for s, _c in covers})
+        if len(slots) != 1:
+            sys.exit(f"--slot-first needs exactly one covered texture (--only-ltex), got {len(slots)}")
+        subs = target[2]
+        for m in masks:
+            subs = sfgrass.biome_with_slot(subs, m, slots[0], covers[0][1], alt=a.slot_alt)
+        recs.append((b"BIOM", target[1], subs, target[3]))
+        report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "masks": masks,
+                           "entries_added": 0, "slot_first": {"ltex": f"{slots[0]:08X}", "gcvr": f"{covers[0][1]:08X}"}}
+        print(f"--slot-first: the biome's own first entry of mask(s) {', '.join(map(str, masks))} = "
+              f"{{{slots[0]:08X}, {covers[0][1]:08X}}}" + (" (and its first ANAM's texture)" if a.slot_alt else ""))
+    elif a.mask_test and target is not None:
         picks = mask_test_grasses([(r[3], r[2]) for r in sf if r[0] == b"GRAS"], masks)
         entries = []
         print("mask test (biome mask -> vanilla grass grown there on the covered slots):")
@@ -826,6 +1103,16 @@ def main(argv=None):
     report["masters"] = masters
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, sfplugin.header_info(sf_esm), author="Skyrim2Starfield grass", masters=masters))
+    ini_path = os.path.join(out, *grasshook.INI_DIR, grasshook.INI_NAME)
+    if a.palette_hook:
+        os.makedirs(os.path.dirname(ini_path), exist_ok=True)
+        sky_of = {int(o["form_id"]): o["skyrim"] for o in overrides}
+        with open(ini_path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(grasshook.hook_ini(covers, masters, PLUGIN, sky_of))
+        report["palette_hook"] = {"ini": os.path.relpath(ini_path, out), "covers": len(covers)}
+        print(f"S2SGrass.ini: {len(covers)} ground textures with their own cover (needs S2SGrass.dll)")
+    elif os.path.exists(ini_path):
+        os.remove(ini_path)                       # a route A build: no stale hook list
     if a.density_maps is not None and conv is not None:
         import density_maps
         for stem, btd_path, rels in density_maps.targets(a.terrain):

@@ -239,6 +239,17 @@ about 3 s after the loading screen (the plugin took it off and ran the sequence 
 restores the normal weapon. The game saves which weapon is in which hand (GetEquippedWeapon(1) = the axe right after
 the load) and rebuilds the hands while loading; only our record changes (memory only) were missing. Now the last pair
 is kept in `S2SCombat_LeftHand.txt` beside the INI (SFSE 1.16 offers plugins no save hook; MO2 puts the file in
-Overwrite), its records are set when a loading screen *opens*, and 1 s after the load s2s after_load (tested)
-decides: keep (the game built both hands), redo (the old restore), or undo the records (the save has no left weapon).
+Overwrite), its records are set when a loading screen *opens*, and 0.3 s after the load s2s after_load (tested)
+decides: keep (the game built both hands), redo (unequip / re-equip both, soon enough to finish before the player
+draws), or undo the records (the save has no left weapon). Owner's runs 2026-11-24: the game builds no weapon model
+after a load with a left weapon in the save (sheathed or drawn; AttachWeapon vE8 is only called by equips, attach log
+bLogWeaponAttach), so a saved left weapon is always redone.
 
+## S2SGrass (ground cover on every converted Skyrim texture, 2026-11-24)
+Not part of the combat plugins; it lives here to share the CommonLibSF build. `grass/main.cpp` + the tested core
+`../include/s2s/grass_covers.h` (`xmake build test_grass_covers`, `xmake run test_grass_covers`; also in CMake).
+Build: `xmake build S2SGrass`. Installed by `tools\owner\grass_hook.ps1` into the grass mod's `SFSE\Plugins` next to
+`S2SGrass.ini` (written by `scripts/terrain/skyrim_grass_native.py --palette-hook`). What it hooks and why:
+docs/re/ground-cover-density.md, route B. Log: `S2SGrass.log` ("overlay palette (world ...): N entries, M given our
+ground cover"; "hook installed"; "K of L ground textures have a ground cover"). Inactive (logged) on another game
+version: it checks the call bytes before patching.

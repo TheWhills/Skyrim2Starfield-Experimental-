@@ -538,8 +538,12 @@ class Converter:
                 if vanilla_maps and hair_id is not None:   # the ranges of Starfield's own hair maps (hair_probe)
                     ao, hair_id = vanilla_strand_maps(hair_id)
                 if decal or alpha.min() < 250 or look == "solid":   # only if the texture really has a cutout
-                    textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
-                    textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
+                    if getattr(self, "coverage_mips", False) and not decal:   # grass (2026-11-24): keep coverage
+                        textures.write_bc4_coverage_mips(self.texconv, alpha, int(alpha_ref or 128),
+                                                         os.path.join(tmp, "o_in.dds"), tmp)
+                    else:
+                        textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
+                        textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
                     opacity = "o_in.dds"
                 if hair_id is not None:
                     textures.write_r8(os.path.join(tmp, "id_in.dds"), hair_id)

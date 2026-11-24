@@ -2855,3 +2855,37 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   to WeaponLeft), the stance re-equip kept to RightHand, and the game's left model moved to L_Wrist at the grip with its
   root renamed (a root named "Weapon" took the right weapon's attach). Two of the same weapon get no left model from the
   game: the clone covers that case (untested). Decision: the native equip is the route; the clone is the fallback.
+
+
+## 2026-11-24 — Ground cover on SKY_Tamriel: drop density maps; grass through LDefault slots or an SFSE palette hook (Claude, proposed)
+- Decision: stop the density-map route (`skyrim_grass_native.py --density-maps`). Make Skyrim's grass follow Skyrim's
+  ground in one of two ways: (A, data only) paint Starfield's `LDefault...` mask placeholders as ordinary BTD layers
+  with Skyrim's alphas where Skyrim is grassy, set the overlay biome's slot for that mask to {converted Skyrim texture,
+  its GCVR}, low GCVR threshold; or (B) an SFSE hook after FUN_1409a9570 that writes our GCVR into the overlay palette
+  entry of each Skyrim LTEX. Proposed order: test A on one slot around Riverwood (cheap, no code), then B if 7 grass
+  textures per world are too few.
+- Why: Starfield.exe (docs/re/ground-cover-density.md) grows grass from the overlay's own BTD blend weights, but only
+  for palette entries with a GCVR, and an overlay LTEX gets one only through a placeholder slot of the anchor biome
+  (verified). Byte 6 is only a "leftover" sixth layer, which is why grass grew at edges alone. Density maps are read
+  by the GetBiomeMaskValue condition, not by grass.
+- Alternatives: keep byte 6 = one mask and tune alphas (the leftover weight cannot follow Skyrim's textures);
+  naming our LTEX records `LDefault...` (would replace the vanilla slot defaults); baked grass patches (the current
+  fallback; no Starfield fading).
+
+## 2026-11-24 (evening): route A for the whole Tamriel, the 7 grassiest Skyrim textures (Claude)
+- Decision: after the one-slot test worked in game, every one of the 7 biome slots carries one Skyrim texture and
+  its grass, chosen by layer strength on the staged terrain (fo4sf.grassslots.DEFAULT_SLOT_MAP); their layers are
+  repainted as the slot placeholders world-wide (`btd_cover.py slots`) and byte 6 is cleared everywhere.
+- Why: route A needs no code and is proven; these 7 textures cover most grassy ground. Byte 6 with a real slot
+  texture behind its placeholder would draw that texture as a leftover layer (the pale ground of the first test).
+- Alternatives: route B (SFSE hook, every texture its own cover; later if 7 are too few); several Skyrim textures
+  sharing a slot (they would render as one texture).
+
+## 2026-11-24 (night): route B, the S2SGrass SFSE plugin (Claude)
+- Decision: an SFSE plugin (native/combat/sfse/grass, target S2SGrass in the combat xmake project) hooks the single
+  call of FUN_1409a9570 and gives every listed converted texture its own ground cover in the overlay palette; the
+  list is an INI written by the grass build. Replaces route A's 7 slots; the terrain keeps its converted textures.
+- Why: the owner's route A run left Skyrim textures outside the 7 bare (23% of the grassy ground above water); the
+  palette entry's GCVR is a plain FormID the game looks up later (verified), so filling it is a small, checkable hook.
+- Alternatives: more textures sharing the 7 slots (they render as one texture); hooking FUN_1409a84d0 (would see the
+  whole merged palette, needs the overlay filter); keeping route A as the fallback without SFSE (it stays available).

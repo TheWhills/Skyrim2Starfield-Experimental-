@@ -33,6 +33,19 @@ def parse_gras_dnam(d: bytes) -> Dict:
             "dirtiness_max": dmax}
 
 
+NO_CLAMP = 3.4028234663852886e+38     # FLT_MAX: the vanilla moss mounds' water clamps (no clamp)
+
+
+def without_water_clamps(dnam: bytes) -> bytes:
+    """A GRAS DNAM with both water clamps (above / below, floats at 20 and 24) set to FLT_MAX = no clamp.
+    2026-11-24: the vanilla moss cover (clamps FLT_MAX) grew across the slot-test field, our Skyrim grass (template
+    GrassHelleboreField02: above-water clamp 0.5) grew nothing on the same setup; the placement code
+    (FUN_140621fc0) compares each point's height with the cell's water height plus these clamps."""
+    b = bytearray(dnam)
+    struct.pack_into("<2f", b, 20, NO_CLAMP, NO_CLAMP)
+    return bytes(b)
+
+
 def gras_dnam_from_skyrim(template_dnam: bytes, sky: Dict, density_scale: float = 1.0) -> bytes:
     """The template GRAS's DNAM with Skyrim's density, slopes, height / colour range and flags written in; the
     Starfield-only fields (contrast, cluster scale, wind, water clamps, coverage, dirtiness) stay the template's."""
@@ -104,6 +117,33 @@ def biome_with_entries(subs, entries: Iterable[Tuple[int, int, int]]):
     add = [(b"LNAM", struct.pack("<3I", m, lt, gc)) for (m, lt), gc in want.items()]
     at = last if last is not None else next((i + 1 for i, (s, _d) in enumerate(out) if s == b"TNAM"), len(out))
     out[at:at] = add
+    return out
+
+
+def biome_with_slot(subs, mask: int, ltex: int, gcvr: int, alt: bool = False):
+    """A BIOM's subrecords with the FIRST LNAM of `mask` set to {ltex, gcvr} (inserted after the last LNAM if the
+    biome has none for that mask); with alt also the first ANAM of `mask` gets ltex (its cover kept).
+    2026-11-24 (owner, in game): a second mask-0 entry appended after NirnOceanNoCoating's own did not take the Base
+    slot: the placeholder drew a pale sand ground and no grass grew. Rewriting the first LNAM kept the same pale ground
+    (and no grass with our converted Skyrim grass): the ground may come from the ANAM (LSandRough02_Gray), hence alt."""
+    subs = [(s, bytes(d)) for s, d in subs]
+    out, last, done, done_alt = [], None, False, False
+    for s, d in subs:
+        if s == b"ANAM" and alt and len(d) >= 12 and not done_alt and struct.unpack_from("<I", d)[0] == mask:
+            d = struct.pack("<2I", mask, ltex) + d[8:]
+            done_alt = True
+        if s == b"LNAM" and len(d) >= 12:
+            m = struct.unpack_from("<I", d)[0]
+            if m == mask and not done:
+                d = struct.pack("<3I", mask, ltex, gcvr) + d[12:]
+                done = True
+            out.append((s, d))
+            last = len(out)
+            continue
+        out.append((s, d))
+    if not done:
+        at = last if last is not None else next((i + 1 for i, (s, _d) in enumerate(out) if s == b"TNAM"), len(out))
+        out[at:at] = [(b"LNAM", struct.pack("<3I", mask, ltex, gcvr))]
     return out
 
 

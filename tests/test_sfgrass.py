@@ -338,6 +338,143 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x30, "gcvr": 0})   # its own entry kept
         self.assertIn("load S2SGrass.esm after them", log)
 
+    def test_biome_with_slot(self):
+        subs = [(b"EDID", b"B\0"), (b"TNAM", b"x"), (b"LNAM", struct.pack("<3I", 0, 0x30, 0)),
+                (b"ANAM", struct.pack("<3I", 0, 0x32, 0)), (b"LNAM", struct.pack("<3I", 0, 0x33, 0)),
+                (b"LNAM", struct.pack("<3I", 1, 0x34, 5))]
+        out = sfgrass.biome_with_slot(subs, 0, 0x99, 0x77)
+        terr = [(e["kind"], e["mask"], e["ltex"], e["gcvr"]) for e in sfgrass.biome_terrain(out)]
+        self.assertEqual(terr, [("LNAM", 0, 0x99, 0x77), ("ANAM", 0, 0x32, 0), ("LNAM", 0, 0x33, 0),
+                                ("LNAM", 1, 0x34, 5)])                    # only the first mask-0 LNAM changes
+        alt = [(e["kind"], e["mask"], e["ltex"], e["gcvr"])
+               for e in sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 0, 0x99, 0x77, alt=True))]
+        self.assertEqual(alt[1], ("ANAM", 0, 0x99, 0))                  # the ANAM's texture too, its cover kept
+        added = sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 4, 0x99, 0x77))
+        self.assertEqual(added[-1], {"kind": "LNAM", "mask": 4, "ltex": 0x99, "gcvr": 0x77})
+
+    def test_vegetation_mat(self):
+        import skyrim_grass_native as N
+        atlas = "Data\\Textures\\Grass\\Atlas_"
+        tex = lambda i, f: {"Data": {"FileName": f}, "Index": i, "Type": "BSMaterial::MRTextureFile"}  # noqa: E731
+        template = {"Objects": [
+            {"Parent": "Data\\MATERIALS\\Layered\\ShaderModels\\VegetationTranslucent1Layer.mat",
+             "Components": [{"Data": {"Name": "GrassFieldLive01"}, "Index": 0, "Type": "BSComponentDB::CTName"},
+                            {"Data": {"ID": "res:00000001:0005BB6C:A5E8C819"}, "Index": 0,
+                             "Type": "BSMaterial::LayerID"}]},
+            {"ID": "res:00000002:0005BB6C:A5E8C819", "Parent": "res:6C18301C:0005E297:A06346EA",
+             "Components": [tex(0, atlas + "color.dds"), tex(1, atlas + "normal.dds"), tex(2, atlas + "opacity.dds"),
+                            tex(3, atlas + "rough.dds"), tex(5, atlas + "ao.dds"), tex(8, atlas + "transmissive.dds")]}],
+            "Summary": {"Layer1": {"Textures": {k: {"File": atlas + f, "UseReplacement": False} for k, f in (
+                ("Albedo", "color.dds"), ("Normal", "normal.dds"), ("Opacity", "opacity.dds"),
+                ("Roughness", "rough.dds"), ("AmbientOcclusion", "ao.dds"), ("Transmissive", "transmissive.dds"))}}}}
+        ours = {"Objects": [{"Components": [tex(0, "Data\\Textures\\s2s\\g_color.dds"),
+                                            tex(1, "Data\\Textures\\s2s\\g_normal.dds"),
+                                            tex(2, "Data\\Textures\\s2s\\g_opacity.dds"),
+                                            tex(3, "Data\\Textures\\s2s\\g_rough.dds")]}]}
+        mat = N.vegetation_mat(ours, template, "fieldgrass01_x")
+        files = {c["Index"]: c["Data"]["FileName"] for o in mat["Objects"] for c in o["Components"]
+                 if c.get("Type") == "BSMaterial::MRTextureFile"}
+        self.assertEqual(files, {0: "Data\\Textures\\s2s\\g_color.dds", 1: "Data\\Textures\\s2s\\g_normal.dds",
+                                 2: "Data\\Textures\\s2s\\g_opacity.dds", 3: "Data\\Textures\\s2s\\g_rough.dds"})
+        self.assertTrue(mat["Objects"][0]["Parent"].endswith("VegetationTranslucent1Layer.mat"))   # the grass shader
+        self.assertNotEqual(mat["Objects"][1]["ID"], "res:00000002:0005BB6C:A5E8C819")             # own object IDs
+        self.assertTrue(mat["Summary"]["Layer1"]["Textures"]["AmbientOcclusion"]["UseReplacement"])
+        with self.assertRaises(ValueError):
+            N.vegetation_mat({"Objects": []}, template, "x")
+        with tempfile.TemporaryDirectory() as st:
+            os.makedirs(os.path.join(st, "materials", "s2s"))
+            with open(os.path.join(st, "materials", "s2s", "g.mat"), "w", encoding="utf-8") as fh:
+                json.dump(ours, fh)
+            self.assertTrue(N.rebuild_as_vegetation(st, "Data\\Materials\\S2S\\g.mat", template))
+            self.assertTrue(N.rebuild_as_vegetation(st, "Materials\\s2s\\g.mat", template))     # twice: kept
+            with open(os.path.join(st, "materials", "s2s", "g.mat"), encoding="utf-8") as fh:
+                self.assertTrue(json.load(fh)["Objects"][0]["Parent"].endswith("VegetationTranslucent1Layer.mat"))
+            self.assertFalse(N.rebuild_as_vegetation(st, "Materials\\missing.mat", template))
+
+    def test_vegetation_terrain_tint(self):
+        import skyrim_grass_native as N
+        tint = {"Data": {"Enabled": "true", "TerrainBlendStrength": "0.7"}, "Index": 0,
+                "Type": "BSMaterial::TerrainTintSettingsComponent"}
+        template = {"Objects": [{"Parent": "x\\VegetationTranslucent1Layer.mat", "Components": [tint]}],
+                    "Summary": {"Layer1": {"Textures": {"Albedo": {"File": "a.dds"}}}}}
+        ours = {"Objects": [{"Components": [{"Data": {"FileName": "o.dds"}, "Index": 0,
+                                             "Type": "BSMaterial::MRTextureFile"}]}]}
+        enabled = lambda m: [c["Data"]["Enabled"] for o in m["Objects"] for c in o["Components"]  # noqa: E731
+                             if c["Type"] == "BSMaterial::TerrainTintSettingsComponent"]
+        self.assertEqual(enabled(N.vegetation_mat(ours, template, "g")), ["false"])
+        self.assertEqual(enabled(N.vegetation_mat(ours, template, "g", terrain_tint=True)), ["true"])
+
+    def test_with_clamp(self):
+        import skyrim_grass_native as N
+        mat = {"Objects": [
+            {"Components": [{"Data": {"ID": "res:A"}, "Index": 0, "Type": "BSMaterial::UVStreamID"}], "ID": "res:L"},
+            {"Components": [{"Data": {"Name": "S_UVStreamA"}, "Index": 0, "Type": "BSComponentDB::CTName"},
+                            {"Data": {"Value": "Wrap"}, "Index": 0,
+                             "Type": "BSMaterial::TextureAddressModeComponent"}], "ID": "res:A"},
+            {"Components": [], "ID": "res:T"}]}
+        out = N.with_clamp(mat)
+        modes = [c["Data"]["Value"] for c in out["Objects"][1]["Components"]
+                 if c["Type"] == "BSMaterial::TextureAddressModeComponent"]
+        self.assertEqual(modes, ["Clamp"])                                    # replaced, not added twice
+        self.assertEqual(out["Objects"][2]["Components"], [])                 # only the UV stream object
+
+    def test_grass_visible(self):
+        import skyrim_grass_native as N
+        self.assertTrue(N.grass_visible("Landscape\\Grass\\GrassSage02.nif"))
+        self.assertTrue(N.grass_visible("meshes\\landscape\\grass\\s2s_fieldgrass01.nif"))
+        self.assertTrue(N.grass_visible("meshes\\landscape\\grass\\Rocks\\RockMoss01.nif"))
+        self.assertFalse(N.grass_visible("meshes\\landscape\\grass\\grass\\grasshellebore\\grasshellebore01.nif"))
+        self.assertFalse(N.grass_visible("landscape\\grass\\s2s\\fieldgrass01.nif"))
+        self.assertFalse(N.grass_visible("meshes\\landscape\\plants\\fern01.nif"))
+
+    def test_without_vertex_colours(self):
+        import dataclasses
+        import skyrim_grass_native as N
+
+        @dataclasses.dataclass
+        class Sh:
+            positions: list
+            colors: list
+        out = N.without_vertex_colours(Sh([(0, 0, 0)], [(255, 255, 255, 0)]))
+        self.assertEqual(out.colors, [])
+        self.assertEqual(out.positions, [(0, 0, 0)])
+
+    def test_no_water_clamp(self):
+        dnam = bytes(range(40))
+        out = sfgrass.without_water_clamps(dnam)
+        self.assertEqual(out[:20], dnam[:20])
+        self.assertEqual(out[28:], dnam[28:])
+        self.assertEqual(struct.unpack_from("<2f", out, 20), (sfgrass.NO_CLAMP, sfgrass.NO_CLAMP))
+        _raw, by, _log = self._run(["--only-ltex", "LFernGround", "--no-water-clamp"])
+        d = sfgrass.parse_gras_dnam(dict((s, bytes(v)) for s, v in by["S2S_Fern"][2])[b"DNAM"])
+        self.assertEqual((d["above_water_clamp"], d["below_water_clamp"]), (sfgrass.NO_CLAMP, sfgrass.NO_CLAMP))
+
+    def test_slot_map(self):
+        _raw, by, log = self._run(["--slot-map", "LFernGround=3"])
+        cover = by["S2S_Cover_00000031"]
+        terr = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])
+        self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x30, "gcvr": 0})          # other masks kept
+        self.assertIn({"kind": "LNAM", "mask": 3, "ltex": 0x31, "gcvr": cover[3]}, terr)          # its own slot
+        self.assertIn("mask 3 (FlatInner): lfernground", log)
+        import skyrim_grass_native as N
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stdout(io.StringIO()):
+                N.main(["--skyrim", "x", "--skyrim-data", "x", "--starfield", "x", "--terrain", "x",
+                        "--texconv", "x", "--out", "x", "--slot-map", "A=9"])
+
+    def test_slot_first(self):
+        _raw, by, log = self._run(["--only-ltex", "LFernGround", "--slot-first"])
+        cover = by["S2S_Cover_00000031"]
+        terr = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])
+        self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x31, "gcvr": cover[3]})   # replaced
+        self.assertEqual(terr[1], {"kind": "LNAM", "mask": 4, "ltex": 0x31, "gcvr": cover[3]})   # none: added
+        self.assertEqual(len(terr), 2)
+        self.assertIn("--slot-first", log)
+        _raw, by, _log = self._run(["--control", "--only-ltex", "LFernGround", "--slot-first"])
+        first = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])[0]
+        self.assertEqual((first["mask"], first["ltex"]), (0, 0x31))
+        self.assertNotEqual(first["gcvr"], 0)
+
     def test_control_with_procgen(self):
         raw, _by, log = self._run(["--control", "--allow-procgen"])
         import skyrim_grass_native as N
@@ -452,7 +589,8 @@ class PlanetBiomeTests(unittest.TestCase):
                 fh.write(sfplugin.build([(b"GRAS", h, [(b"EDID", b"G\0"), (b"MODL", b"Landscape\\Grass\\used01.nif\0")],
                                           0x10)], {"hedr_version": 0.96, "form_version": 555}, masters=()))
             free, shipped, used = N.unused_grass_paths(d)
-        self.assertEqual(free, ["meshes\\landscape\\grass\\grass\\spare01.nif", "meshes\\landscape\\grass\\spare02.nif"])
+        # 2026-11-24: grass\Spare01 is nested, which the grass system never sees: only the direct child is free
+        self.assertEqual(free, ["meshes\\landscape\\grass\\spare02.nif"])
         self.assertEqual((shipped, used), (3, 1))
 
     def test_vanilla_paths_build(self):

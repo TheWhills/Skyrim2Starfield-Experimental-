@@ -308,6 +308,31 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
+8m. (2026-11-24) Skyrim's grass on EVERY grassy texture (S2SGrass SFSE plugin, after 8l worked). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\grass_hook.ps1
+   (builds S2SGrass.dll with xmake; terrain back to the converted textures; reinstall; grass mod with every texture's
+   cover, S2SGrass.ini and S2SGrass.dll in its SFSE\Plugins). Start through SFSE. In game: the fall forest beside
+   Riverwood, the Reach, marshes: grass where Skyrim has it? Send Documents\My Games\Starfield\SFSE\Logs\S2SGrass.log
+   (lines "overlay palette ... given our ground cover"). -GrassOnly rebuilds only the grass mod.
+   Second run (after the terrain fix: rock ground had drawn Nirn's vanilla ground): the same command, without -GrassOnly
+   (it reinstalls the terrain).
+8l. (2026-11-24) Skyrim's grass on all of Tamriel, 7 grass textures (after 8k worked). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\grass_tamriel.ps1
+   (terrain: the 7 textures as slot placeholders everywhere; reinstall; grass mod with all 7 covers, own material,
+   flat paths, clamp, no terrain tint). In game (S2S Grass Native on, coc SKY_TamrielRiverwoodSpawn): grass on fields,
+   the pine forest floor, rocky ground, snowy grass, tundra, fall forest? -GrassOnly rebuilds only the grass mod;
+   -Restore puts the terrain back. The 1 km test of 8k is included (it starts from the terrain before 8k).
+8k. (2026-11-24) Grass test, one LDefault slot (docs/re/ground-cover-density.md route A). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1
+   (terrain: LFieldGrass02 painted as LDefault006Base in 1 km around Riverwood's bare forest flat, quadrant 58, 76;
+   reinstall; grass mod rebuilt with only that texture's grass in the biome's Base slot, threshold 0.1). In game
+   (S2S Grass Native on, coc SKY_TamrielRiverwoodSpawn): does grass grow ACROSS that flat now, and does the ground
+   still look the same? -Restore puts the terrain back.
+   Second run (after the first gave pale "snow" ground and no grass; terrain stays): add -GrassOnly. If the ground is
+   field grass again but bare: -GrassOnly -Control (a vanilla moss cover instead of the Skyrim grass).
+   Third run (second gave the same pale ground, no grass): -GrassOnly -Control (now also rewrites the mask's ANAM).
+   Third run worked (vanilla grass across the field). Fourth: -GrassOnly (no -Control): our Skyrim grass, same route.
+   Fourth gave bare field-grass ground. Fifth: -GrassOnly again (now without the template's water clamps).
 8j. (2026-11-22) Grass test, terrain byte 6 (Starfield closed): powershell -ExecutionPolicy Bypass -File
    tools\owner\terrain_byte6.ps1 -Mask FlatOut ; -Restore undoes it. With S2S Grass Native (--control) on.
 8i. (2026-11-22) Skyrim's grass as Starfield grass (wind, fade), through Nirn's own biome under Riverwood:
