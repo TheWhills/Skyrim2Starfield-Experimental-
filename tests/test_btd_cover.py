@@ -33,6 +33,8 @@ class CoverEncodeTest(unittest.TestCase):
         self.assertEqual([C.head(N, int(v)) for v in b[:5]], [0xA, 0xB, 0xC, 0xD, 0xE])    # rendering unchanged
         self.assertEqual([C.tail(N, int(v)) for v in b[:5]], [0xE, 0xD, 0xC, 0xB, 0xA])    # cover: slot 4 - j
         self.assertEqual(C.head(N, int(b[6])), 0xF0)
+        self.assertEqual(int(b[6]), len(N))                    # byte 6 = the table's length
+        self.assertEqual([N[int(b[6]) - int(v)] for v in b[:5]], [0xE, 0xD, 0xC, 0xB, 0xA])   # table[b6 - b]
         self.assertEqual(st["lost"], 2)              # quadrant (0, 1): bytes 3 / 4 empty, bytes 0 / 1 used
         self.assertEqual(st["table"], 2 * st["pairs"])
         self.assertEqual(new.quad_map[1, 1].tolist(), [0] * 8)
@@ -57,7 +59,7 @@ class CoverEncodeTest(unittest.TestCase):
     def test_too_many_pairs(self):
         q = np.zeros((40, 40, 8), np.uint8)
         rng = np.random.default_rng(1)
-        q[:, :, :5] = rng.integers(1, 30, size=(40, 40, 5))
+        q[:, :, :5] = rng.integers(1, 30, size=(40, 40, 5))   # far more than 127 pairs
         h = np.zeros((2560, 2560), np.uint16)
         t = btd.Btd(5, 0.0, 1.0, list(range(100, 130)), h, h.copy(), q)
         with self.assertRaises(ValueError):

@@ -10,7 +10,9 @@ byte 6 (the biome mask) is read head-first (switching its entry switched the mas
 set     : rewrites bytes 0..4 and the LTEX table of each staged BTD so that, per quadrant, byte j's head entry is the
           texture drawn now (rendering unchanged) and its tail entry is the texture drawn at slot 4 - j (what ground
           cover pairs with that alpha). Every used (head, tail) pair gets one byte value c (1..k); the table becomes
-          2k entries: heads at 0..k-1, tails at 2k-c. Byte 6 keeps its LDefault texture. Heights and alphas
+          2k entries: heads at 0..k-1, tails at 2k-c. Byte 6 keeps its LDefault texture and becomes 2k, the table's
+          length (2026-11-23: with a small byte 6 no grass grew at all; supported hypothesis: ground cover reads
+          table[byte6 - b], which equalled table[n - b] when byte 6 was the last entry). Heights and alphas
           untouched; the result is checked by reading it back both ways. Originals go to <staging>\\btd_before_cover.
 restore : copies the originals back.
 Reinstall afterwards (tools\\owner\\terrain_cover.ps1 does both). Do not run btd_byte6.py on the encoded files.
@@ -32,7 +34,7 @@ sys.path.insert(0, HERE)
 from fo4sf import btd  # noqa: E402
 
 BACKUP = "btd_before_cover"
-MAX_CODES = 255
+MAX_CODES = 255                # byte values; with byte 6 = 2k, k <= 127
 
 
 def head(table, b):
@@ -50,7 +52,13 @@ def cover_encode(t: btd.Btd, covered=None, none_fid=None):
     T = list(t.ltex)
     q = t.quad_map
     ny, nx = q.shape[:2]
+    b6s = {head(T, int(v)) for v in np.unique(q[:, :, 6]) if v}
+    if len(b6s) > 1:
+        raise ValueError(f"byte 6 names {len(b6s)} different textures; one is needed (it becomes the table's length)")
     codes = {}
+    if b6s:                                   # code 1: byte 6's texture; its tail entry is the table's last
+        h6 = next(iter(b6s))
+        codes[(h6, h6)] = 1
     out = q.copy()
     lost = 0
     for y in range(ny):
@@ -70,14 +78,13 @@ def cover_encode(t: btd.Btd, covered=None, none_fid=None):
                 pair = (heads[j], tl)
                 c = codes.setdefault(pair, len(codes) + 1)
                 out[y, x, j] = c if c <= MAX_CODES else 0
-            b6 = int(q[y, x, 6])
-            if b6:
-                h6 = head(T, b6)
-                c = codes.setdefault((h6, h6), len(codes) + 1)
-                out[y, x, 6] = c if c <= MAX_CODES else 0
     k = len(codes)
-    if k > MAX_CODES:
-        raise ValueError(f"{k} (head, tail) pairs needed, a byte holds {MAX_CODES}")
+    if 2 * k > MAX_CODES:
+        raise ValueError(f"{k} (head, tail) pairs needed; byte 6 = the table's length ({2 * k}) must fit a byte "
+                         f"({MAX_CODES})")
+    # byte 6 = 2k = the table's length: head entry 2k - 1 (code 1's tail) is its texture, and a reading that counts
+    # back from byte 6 (table[b6 - b]) gives the same entries as one that counts from the end (table[n - b])
+    out[:, :, 6] = np.where(q[:, :, 6] > 0, 2 * k, 0).astype(np.uint8)
     table = [0] * (2 * k)
     for (h, tl), c in codes.items():
         table[c - 1] = h
