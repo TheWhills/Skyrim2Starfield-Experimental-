@@ -136,6 +136,13 @@ static void grip_is_a_rotation() {
     CHECK(near(g.t[0], 0.068f) && near(g.t[1], -0.011f) && near(g.t[2], -0.038f) && g.s == 1.0f);
 }
 
+static void copy_names() {
+    CHECK(copy_node_name("Weapon") == "S2SL_Weapon");
+    CHECK(copy_node_name("ProjectileNode") == "S2SL_ProjectileNode");
+    CHECK(copy_node_name("S2SL_Weapon") == "S2SL_Weapon");    // renamed twice: kept
+    CHECK(copy_node_name("").empty());
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -149,6 +156,7 @@ int main() {
     names_and_model_pick();
     turns_and_angles();
     grip_is_a_rotation();
+    copy_names();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);

@@ -60,6 +60,9 @@ LeftCopyResult MakeLeftCopy(const LeftCopyOptions& o);
 LeftCopyResult DropLeftCopy();
 // Turns the copy that is on (its local rotation from the one it was cloned with). Main thread.
 LeftCopyResult TurnLeftCopy(int turn, const float degrees[3]);
+// Where the copy is (its world transform) against where its parent's world and our local put it: "" when none is on.
+// Owner's run 2026-11-23: the copy floated away from the hand and the turn key changed nothing visible.
+std::string LeftCopyReport();
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
 // ObjectReference.GetItemCount on the player, result on the VM thread. EquipForm: the native equip / unequip of a base

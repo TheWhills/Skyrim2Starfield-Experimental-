@@ -146,3 +146,13 @@ s2s left_grip() = skyrimweapon.left_grip_metres(), tests/test_left_copy_grip.py)
 clip, as the worn blade. Also fixed: an attack-key release whose press came in a menu (inventory / console clicks) was
 taken as a minutes-long hold and sent MeleeAttackPowerStart into the graph (the same log: 3 sends with menus open).
 
+Owner's run 2026-11-23 (fourth build): the copy hung under L_Wrist at the grip, dual stance on, cached lookup 11 ms,
+no power attack sent from menus. But the right weapon stopped showing, the copy floated away from the hand, and the
+turn key changed nothing visible (the HUD showed "Left copy turn 5"). Supported hypothesis: the copy's root was named
+"Weapon" like the skeleton bone, and the stance re-equip right after each copy found the attach node by name (`Prn`)
+and hung the real cutlass into the copy. Fifth build: every node of the copy is renamed `S2SL_<name>` before the
+attach, and every 2 s while a copy is on the log has a `left copy where:` line (the copy's world against its parent's
+world times our local: shows whether our local drives it). The "power attack when you stop" is the graph's own: an
+AttackStart 0.45 s after AttackStateNextAttack with no click and nothing sent by the plugin (its only events in that
+log were MeleeAttack02, the back dodge).
+

@@ -119,6 +119,11 @@ bool parse_degrees(std::string_view text, float out[3]) {
     return true;
 }
 
+std::string copy_node_name(std::string_view name) {
+    if (name.empty() || name.starts_with(kCopyNamePrefix)) return std::string(name);
+    return std::string(kCopyNamePrefix) + std::string(name);
+}
+
 Xform left_grip() {
     Xform g;
     g.r = {{{-0.179094f, 0.980503f, 0.080866f}, {-0.231144f, 0.037960f, -0.972179f}, {-0.956294f, -0.192803f, 0.219839f}}};

@@ -121,7 +121,9 @@ private:
     combat::LeftCopy left_copy_;                  // the left-hand copy test (under lock_)
     int left_copy_turn_now_ = 0;                  // the turn in use (the turn key changes it; main thread)
     int dual_polled_ = -1;                        // the worn-keyword poll's last answer (-1 none yet)
-    bool copy_dual_prev_ = false;                 // a left-hand copy was on at the last Tick (bLeftCopyDual)
+    bool copy_dual_prev_ = false;
+    double copy_report_at_ = 0.0;                 // LeftCopyReport every 2 s while a copy is on (first 40)
+    int copy_reports_ = 0;                 // a left-hand copy was on at the last Tick (bLeftCopyDual)
     std::atomic_int poll_gen_{0}, worn_gen_{0};
     std::atomic_int left_action_{0};              // a LeftBlade::Action from the animation events, done in Tick
     std::atomic_int drawn_answer_{-1};            // Papyrus IsWeaponDrawn, asked once when the blade is first worn

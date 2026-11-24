@@ -509,6 +509,13 @@ void Plugin::Tick() {
         std::scoped_lock l(lock_);
         copy_on = left_copy_.attached();
     }
+    if (copy_on && now >= copy_report_at_ && copy_reports_ < 40) {
+        copy_report_at_ = now + 2.0;
+        if (const auto r = game::LeftCopyReport(); !r.empty()) {
+            ++copy_reports_;
+            REX::INFO("left copy where: {}", r);
+        }
+    }
     // the poll counts once the after-load restore is done (as before); the copy counts at once, and its going off is
     // applied too (without S2SWeapons.esm the restore never finishes)
     const bool poll_ready = restore_ == 0 && dual_polled_ >= 0;

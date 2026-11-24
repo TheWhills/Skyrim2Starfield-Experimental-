@@ -598,6 +598,20 @@ LeftCopyResult MakeLeftCopy(const LeftCopyOptions& opt) {
     }
     FreeCloningProcess(cp.data());
     if (!copy) return {false, std::format("CreateClone returned nothing for {}", Describe(model))};
+    // rename the copy's nodes before it joins the player's 3D, so no lookup by name ("Weapon", "ProjectileNode") finds
+    // it instead of the game's own
+    int renamed = 0;
+    {
+        int budget = 400;
+        Walk(copy, 0, budget, [&](RE::NiAVObject* o, int) {
+            const char* n = o->name.c_str();
+            if (!n || !*n) return;
+            const auto name = combat::copy_node_name(n);
+            if (name == n) return;
+            o->name = RE::BSFixedString(name.c_str());
+            ++renamed;
+        });
+    }
 
     std::uint32_t left_before = 0, left_after = 0;
     if (ReadChildren(left, g_children, data, size)) left_before = size;
@@ -612,11 +626,12 @@ LeftCopyResult MakeLeftCopy(const LeftCopyOptions& opt) {
     g_left_copy = {copy, left, original};
     const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
     return {hung, std::format("weapon node '{}' subtree:{}; model {} cloned ({} at 0x{:X}, CreateClone +0x{:X}); copy "
-                              "{} attached under {} (children {} -> {}, parent {}){}; turn {}, rotation {} {} {}; local t ({:.2f} {:.2f} {:.2f}) "
+                              "{} attached under {} (children {} -> {}, parent {}){}; {} node(s) renamed {}*; turn {}, rotation {} {} {}; local t ({:.2f} {:.2f} {:.2f}) "
                               "scale {:.2f}; lookup {:.1f} ms{}, copy {:.1f} ms",
                               right_node, subtree, Describe(model), copy == model ? "SAME OBJECT" : "new object",
                               reinterpret_cast<std::uintptr_t>(copy), create - base, Describe(copy), Describe(left),
                               left_before, left_after, hung ? "set" : "NOT SET", at_grip ? " at the left grip" : "",
+                              renamed, combat::kCopyNamePrefix,
                               opt.turn, opt.degrees[0],
                               opt.degrees[1], opt.degrees[2], original.t[0], original.t[1], original.t[2], original.s,
                               t_find * 1000.0, cached ? " (cached)" : "",
@@ -642,6 +657,25 @@ LeftCopyResult DropLeftCopy() {
     }
     copy->DecRefCount();                                       // our reference: the copy goes when the last one does
     return {true, how};
+}
+
+std::string LeftCopyReport() {
+    const auto& c = g_left_copy;
+    if (!c.copy || !Readable(c.copy, 0x150) || !c.parent || !Readable(c.parent, 0x150)) return {};
+    const auto local = ReadXform(c.copy, 0x40), world = ReadXform(c.copy, 0x80), pw = ReadXform(c.parent, 0x80);
+    const auto expect = combat::compose(pw, local);
+    auto dist = [](const std::array<float, 3>& a, const std::array<float, 3>& b) {
+        return std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
+    };
+    float rot = 0;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) rot = std::max(rot, std::fabs(world.r[i][j] - expect.r[i][j]));
+    const char* pn = c.parent->name.c_str();
+    return std::format("world t ({:.3f} {:.3f} {:.3f}), parent '{}' world * our local gives ({:.3f} {:.3f} {:.3f}): {:.3f} "
+                       "apart, rotation off by up to {:.3f}; {:.3f} from the parent's origin; our local t ({:.3f} {:.3f} "
+                       "{:.3f}) scale {:.2f}",
+                       world.t[0], world.t[1], world.t[2], pn ? pn : "", expect.t[0], expect.t[1], expect.t[2],
+                       dist(world.t, expect.t), rot, dist(world.t, pw.t), local.t[0], local.t[1], local.t[2], local.s);
 }
 
 LeftCopyResult TurnLeftCopy(int turn, const float degrees[3]) {

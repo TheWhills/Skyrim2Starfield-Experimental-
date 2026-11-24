@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -58,6 +59,12 @@ bool parse_degrees(std::string_view text, float out[3]);
 Xform left_grip();
 // The copy's local transform: `original` with its rotation turned (translation and scale kept).
 Xform oriented(const Xform& original, int turn_index, const float degrees[3]);
+
+// The copy's node names get this prefix. The game finds attach nodes by name (the 'Prn' lookup, findings.md section 3
+// step 7): owner's run 2026-11-23, a copy root named "Weapon" under L_Wrist and the right weapon stopped showing after
+// the stance re-equip (it most likely went into the copy). "" stays "", an already prefixed name is kept.
+inline constexpr std::string_view kCopyNamePrefix = "S2SL_";
+std::string copy_node_name(std::string_view name);
 
 // When the copy is made and dropped. The game side reports back whether it worked (on_result); until then nothing
 // else is asked for.
