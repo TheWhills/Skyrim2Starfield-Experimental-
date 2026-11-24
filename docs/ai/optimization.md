@@ -153,4 +153,8 @@ moving it would change textures.py again and cost one more full reconvert.
   The follower still took **~5-6 ms per call** and each Player3D lookup **~19 ms** (21 lookups = 400 ms per 10 s).
   Next suspect: Readable() = one VirtualQuery per check, which measures the whole region (large game pools).
   Change: readable regions kept for 2 s per thread; the report counts the checks, VirtualQuery calls and their time.
+- After (owner's run 15:41, left weapon on): follower **~0.4 ms** per frame (346 ms / 787 calls; before ~5-6 ms),
+  plugin 0.2-0.4 ms per frame, game frames **~10 ms**, max 26-30 ms. Verified: 199 VirtualQuery calls took 381 ms
+  (~2 ms each). Left: the root check (twice a second) still ~12 ms each (cache misses). Change: 64 regions for 10 s,
+  root check every 2 s (menus / equips / draws / loads still check at once).
 - After: pending.

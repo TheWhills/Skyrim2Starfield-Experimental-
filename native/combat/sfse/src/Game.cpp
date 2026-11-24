@@ -77,15 +77,16 @@ bool CallOnPlayer(const char* script, const char* function, Args... args) {
 // running game version. A system call per check: fine for rare paths (a key press), not per frame.
 std::atomic<std::uint64_t> g_vq_us{0}, g_vq_calls{0}, g_readable_calls{0};
 
-// Readable regions VirtualQuery found are kept for 2 s per thread. Owner's run 2026-11-24 15:34: the left weapon
+// Readable regions VirtualQuery found are kept for 10 s per thread (64 of them). Owner's run 2026-11-24 15:34: the left weapon
 // follower took ~5 ms per frame and each Player3D ~19 ms with only a few checks each; VirtualQuery measures the whole
-// region (the game's memory pools are large), supported hypothesis that this was the cost (timed in the report).
+// region (the game's memory pools are large). Verified 15:41: 199 VirtualQuery calls took 381 ms (~2 ms each); with
+// 16 regions for 2 s the follower fell to ~0.4 ms per frame, the twice-a-second root check still took ~12 ms.
 bool Readable(const void* a_ptr, std::size_t a_len) {
     if (!a_ptr) return false;
     ++g_readable_calls;
     const auto a = reinterpret_cast<std::uintptr_t>(a_ptr);
     struct Region { std::uintptr_t start = 0, end = 0; double until = 0.0; };
-    thread_local std::array<Region, 16> cache{};
+    thread_local std::array<Region, 64> cache{};
     thread_local std::size_t next = 0;
     const double now = Now();
     for (const auto& r : cache)
@@ -102,7 +103,7 @@ bool Readable(const void* a_ptr, std::size_t a_len) {
                                    REX::W32::PAGE_EXECUTE_READ | REX::W32::PAGE_EXECUTE_READWRITE | 0x80u);
     const auto start = reinterpret_cast<std::uintptr_t>(mbi.baseAddress), end = start + mbi.regionSize;
     if (!ok || a + a_len > end) return false;
-    cache[next] = {start, end, now + 2.0};
+    cache[next] = {start, end, now + 10.0};
     next = (next + 1) % cache.size();
     return true;
 }
@@ -983,8 +984,8 @@ std::string FindHandNodes() {
     const bool missing = !h.left || !h.right || !h.wrist;
     // Player3D takes the read lock on the player's 3D, and the follower calls this every frame (owner's run 2026-11-24
     // 15:10: with the left weapon on the plugin took 2 ms, then 58 ms per frame). The found nodes are used without it;
-    // the root is checked twice a second, after a menu / equip / draw (RecheckHandNodes) and after a load (DropHandNodes).
-    if (h.root && !g_hand_recheck.load() && now - s_root_at < 0.5 && !(missing && now - s_walked_at >= 2.0) &&
+    // the root is checked every 2 s, after a menu / equip / draw (RecheckHandNodes) and after a load (DropHandNodes).
+    if (h.root && !g_hand_recheck.load() && now - s_root_at < 2.0 && !(missing && now - s_walked_at >= 2.0) &&
         same(h.left, "WeaponLeft") && same(h.right, "Weapon") && same(h.wrist, "L_Wrist"))
         return {};
     g_hand_recheck = false;
