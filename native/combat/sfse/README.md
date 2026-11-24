@@ -208,3 +208,8 @@ weapon's model was attached under WeaponLeft too (the attach node follows the we
 slot maps to "Weapon"), and the follower kept moving whichever model sat there. Fix (`bLeftEquipHandSlots`, formerly
 bLeftEquipEitherHand): the right weapon's record RightHand, the left one's LeftHand (s2s hand_slots, tested).
 
+Owner's run 2026-11-24 (hand-slots build): still both in the left hand, the "Weapon" bone empty, though the records were
+RightHand / LeftHand now. Supported hypothesis: the follower had moved the axe's model root, named "Weapon", onto
+L_Wrist; the right weapon's re-equip right after finds its attach node by name and hung the cutlass into the axe (as
+the copy did before it was renamed). Fix: the moved model's root is renamed S2SL_Weapon.
+

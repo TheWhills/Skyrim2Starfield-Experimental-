@@ -1162,13 +1162,24 @@ LeftFollowResult LeftWeaponFollow(bool active, int turn, const float degrees[3])
     reinterpret_cast<void (*)(void*, void*)>(detach)(h.left, model);
     reinterpret_cast<void (*)(void*, void*, bool)>(attach)(h.wrist, model, true);
     WriteXform(model, 0x40, combat::oriented(combat::left_grip(), turn, degrees));
+    // its root is named "Weapon" like the right-hand bone, and the game finds attach nodes by name: under L_Wrist it is
+    // found first, and the right weapon's re-equip hung the cutlass into the axe (owner's run 2026-11-24, both in the
+    // left hand); renamed as the copy is (S2SL_*)
+    std::string renamed;
+    if (const char* n0 = model->name.c_str(); n0 && *n0) {
+        const auto name = combat::copy_node_name(n0);
+        if (name != n0) {
+            renamed = std::format(", root renamed '{}' -> '{}'", n0, name);
+            model->name = RE::BSFixedString(name.c_str());
+        }
+    }
     model->DecRefCount();
     const bool on_wrist = ParentOf(model) == h.wrist;
     f.node = on_wrist ? model : nullptr;
     f.refs_at_move = model->refCount;
     const char* n = model->name.c_str();
-    r.log += std::format("{}left model '{}' moved from WeaponLeft to L_Wrist at the grip: {} (references {})",
-                         r.log.empty() ? "" : "; ", n ? n : "", on_wrist ? "ok" : "FAILED", f.refs_at_move);
+    r.log += std::format("{}left model '{}' moved from WeaponLeft to L_Wrist at the grip: {} (references {}){}",
+                         r.log.empty() ? "" : "; ", n ? n : "", on_wrist ? "ok" : "FAILED", f.refs_at_move, renamed);
     r.holding = f.node != nullptr;
     return r;
 }
