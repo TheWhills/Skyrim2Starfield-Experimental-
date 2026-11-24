@@ -719,6 +719,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   converted model (FieldGrass01 on the free vanilla path grasshellebore01.nif, GrassFieldLive01 material) or another
   field of our GRAS (coverage 100, Skyrim density 64 / 20). Sixth run: `-GrassOnly -TemplateModel` (our records, the
   vanilla GrassHelleboreField02 model): flowers across the field = our converted model is the failure.
+  **Sixth run (owner, -TemplateModel, verified in game): a dense carpet of hellebore flowers across the whole field.**
+  So route A AND our GRAS records work (Skyrim density 64, coverage 100: denser than Skyrim, tune later); the converted
+  FieldGrass01 model (1 shape, 6 tris, on the free path grasshellebore01.nif, game material GrassFieldLive01) is what
+  shows nothing. Converted Skyrim models did show on 2026-11-23 (green tufts with GrassCityShort01, straw with
+  GrassFieldLive01), so supported hypothesis: a game material brings its own texture layout and FieldGrass01's UVs
+  land on transparent parts of it. Seventh run: `-GrassOnly -Material Bladed\GrassCityShort01`. The real fix is the
+  open item "Skyrim's textures on grass" (the grass system refuses our .mat; why = next Starfield.exe question).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

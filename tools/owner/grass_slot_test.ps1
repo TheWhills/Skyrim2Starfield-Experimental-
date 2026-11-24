@@ -13,6 +13,8 @@
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -Control (vanilla moss cover)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -TemplateModel
 #       (our Skyrim grass records with the vanilla hellebore model: tells our converted model from our records)
+#   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -Material Bladed\GrassCityShort01
+#       (the field grass model in another game material; GrassCityShort01 drew green Skyrim tufts on 2026-11-23)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1                     (terrain + grass)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -Restore            (terrain back)
 param(
@@ -28,6 +30,7 @@ param(
     [switch]$GrassOnly,
     [switch]$Control,
     [switch]$TemplateModel,
+    [string]$Material = "",
     [switch]$Restore
 )
 $ErrorActionPreference = "Stop"
@@ -68,6 +71,7 @@ if (-not $GrassOnly) {
 $extra = @()
 if ($Control) { $extra += "--control" }
 if ($TemplateModel) { $extra += "--keep-template-model" }   # our GRAS records, the vanilla hellebore model
+if ($Material) { $extra += "--family-material"; $extra += "fieldgrass=$Material" }   # e.g. Bladed\GrassCityShort01
 Step "3. grass mod: the biome's own Base entry = LFieldGrass02 + $(if ($Control) { 'a vanilla cover (control)' } else { 'its Skyrim grass' })"
 python -I scripts\terrain\skyrim_grass_native.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF `
     --terrain $Staging --texconv $Texconv --out $Grass `
