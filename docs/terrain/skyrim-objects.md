@@ -612,6 +612,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   ground_at.py already prints the texture each reading gives at a spot; at the flat (Skyrim 17448, -48815): head/3i
   LFieldGrass02 (rendered), head/3(4-i) LRiverBottom01NoGrass, tail/3i LPineForest01, tail/3(4-i) LRocks01NoRocks.
   Next: the same at a flower spot (getpos x / y there and right after coc).
+  **Flower spot (owner, 19:21, ground_at at Starfield (-1948.36, 854.94), spawn (-1936.69, 825.26)):** bytes
+  [50, 43, 52, 42, 34], alphas [0, 0, 0, 7, 0]; the renderer's reading gives LRiverBottom01NoGrass (dark ground on
+  screen), "index tail, alpha bits 3(4-i)" gives **LFieldGrass02**, the only covered slot. At the bare flat that
+  reading gives LRocks01NoRocks. Supported hypothesis (2 of 2 spots): ground cover pairs the texture of byte 4 - i
+  with the alpha of slot i (the same as byte i with alpha slot 4 - i) and indexes the LTEX table from its end
+  (table[n - b]); byte 6 head-first (its entry switched the mask). Explains every "edges only" result.
+  Test: `tools\owner\terrain_cover.ps1` (btd_cover.py): each byte value c gets a head entry (what the renderer draws,
+  unchanged) and a tail entry (the texture drawn at the mirrored slot), table 2k entries; checked both ways;
+  originals in btd_before_cover, `-Restore`. Do not run btd_byte6.py on encoded files.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
