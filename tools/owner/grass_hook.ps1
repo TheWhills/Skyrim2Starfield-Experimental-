@@ -8,6 +8,8 @@
 # Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_hook.ps1
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_hook.ps1 -GrassOnly    (terrain already done)
+#   ... -GrassOnly -KindTest   (test, 2026-11-24: every converted texture gets the material kind of the pine-forest
+#   record LDirtCracked02 in S2SGrass.esm; looks unchanged, footsteps may sound like dirt; leave it off to undo)
 # Log after a game start: Documents\My Games\Starfield\SFSE\Logs\S2SGrass.log
 param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
@@ -17,7 +19,8 @@ param(
     [string]$Texconv = "C:\Modding\tools\texconv.exe",
     [double]$DensityScale = 1.0,
     [double]$Threshold = 0.1,
-    [switch]$GrassOnly
+    [switch]$GrassOnly,
+    [switch]$KindTest
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -60,11 +63,13 @@ if (-not $GrassOnly) {
         if ($LASTEXITCODE -ne 0) { Fail "apply_ref_overrides" }
     }
 }
+$kind = @()
+if ($KindTest) { $kind = @("--ltex-kind-from", "LDirtCracked02", "--ltex-kind-all") }
 Step "3. grass mod: every grassy texture its own Skyrim grass"
 python -I scripts\terrain\skyrim_grass_native.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF `
     --terrain $Staging --texconv $Texconv --out $Grass `
     --palette-hook --threshold $Threshold --density-scale $DensityScale `
-    --flat-paths --coverage 100 --no-water-clamp --no-back-faces
+    --flat-paths --coverage 100 --no-water-clamp --no-back-faces @kind
 if ($LASTEXITCODE -ne 0) { Fail "skyrim_grass_native" }
 New-Item -ItemType Directory -Force "$Grass\SFSE\Plugins" | Out-Null
 Copy-Item $dll "$Grass\SFSE\Plugins\S2SGrass.dll" -Force

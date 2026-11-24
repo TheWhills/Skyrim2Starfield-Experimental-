@@ -729,6 +729,10 @@ def main(argv=None):
                     help="test (2026-11-23): give every covered slot's LTEX the material type (MNAM) and QNAM of this "
                          "vanilla LTEX (e.g. LDirtCracked02), overriding the terrain's re-skin in S2SGrass.esm; the "
                          "slots whose grass never shows re-skin vanilla rock records")
+    ap.add_argument("--ltex-kind-all", action="store_true",
+                    help="test (2026-11-24, route B): --ltex-kind-from for EVERY converted texture the terrain plugin "
+                         "re-skins, not only the covered ones (owner's Rift squares stay bare where their first layer, "
+                         "LFallForestLeaves01, re-skins the lava rock LRockLavaSmooth02; it has no cover of its own)")
     ap.add_argument("--model-from", action="append", default=[], metavar="FAMILY=EDITORID",
                     help="test (2026-11-23): the grasses of these families use the converted model of that grass "
                          "(e.g. fieldgrass,forestgrass,ferngrass=SnowGrass01Forest), to tell a model that does not "
@@ -1029,14 +1033,14 @@ def main(argv=None):
                     terrain_ltex[fid] = (h, subs)
         sf_ltex = {fid: (h, subs) for _t, h, subs, fid in sfplugin.records(sf_esm, [b"LTEX"])}
         try:
-            kind_recs, changed = ltex_kind_overrides(terrain_ltex, sf_ltex, [sl for sl, _c in covers],
-                                                     a.ltex_kind_from)
+            targets = sorted(terrain_ltex) if a.ltex_kind_all else [sl for sl, _c in covers]
+            kind_recs, changed = ltex_kind_overrides(terrain_ltex, sf_ltex, targets, a.ltex_kind_from)
         except ValueError as e:
             sys.exit(str(e))
         recs += kind_recs
         report["ltex_kind_from"] = {"donor": a.ltex_kind_from, "slots": [f"{f:08X}" for f in changed],
                                     "from_terrain_plugin": sum(1 for f in changed if f in terrain_ltex)}
-        print(f"LTEX kind: {len(changed)} covered slot(s) take {a.ltex_kind_from}'s material type / QNAM, "
+        print(f"LTEX kind: {len(changed)} {'converted texture(s)' if a.ltex_kind_all else 'covered slot(s)'} take {a.ltex_kind_from}'s material type / QNAM, "
               f"their re-skin copied from {os.path.basename(terr_p)}")
         if not changed:
             print(f"  (no slot changed: terrain plugin {terr_p or '?'} not found or no re-skin there)")

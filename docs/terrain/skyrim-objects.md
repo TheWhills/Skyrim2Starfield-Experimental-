@@ -862,6 +862,18 @@ Max Density; what a vanilla grass model needs. Two tools:
   Every 2nd Skyrim vertex, grassy textures without the underwater three: our grassy weight / Skyrim's 97.0 % -> 100.3 %;
   where Skyrim is at least half grassy, ours has a grassy layer >= 0.1 at 92.1 % -> 93.0 %. Ivarstead spot unchanged
   (LFallForestGrass01NoFern 4/7 over fall forest dirt: should grow, thinner than Skyrim). `--no-lookalikes` = before.
+* **The Rift (owner, 2026-11-24, ground_at with this session's shift)**: textures match Skyrim (200 m around
+  (1268, -1153): mean grassy weight 0.281 vs Skyrim 0.280; fall-forest textures convert pixel-identical; tiling 4.88 m
+  as approved). Yet whole 50 m quadrants grow no grass where the model gives LFallForestGrass01NoFern 0.57-0.86:
+  at (1181, -1003) the straight line in the owner's screenshot is the quadrant edge 3 m north: north quadrant
+  [LRiverMud01, NoFern, LRiverbedEdge01, LFallForestDirt01, LRocks01] dense grass; south quadrant [LFallForestLeaves01,
+  NoFern, NoGrass, Dirt, LRocks01NoRocks] bare; the stump spot (1190, -1083) [Leaves, NoFern, Rocks01, Dirt,
+  FallForestGrass01] bare. Reversed layer order refuted (it predicts no grass north of the edge). Both bare quadrants
+  start with LFallForestLeaves01, which re-skins the vanilla lava rock LRockLavaSmooth02 (MNAM rock, QNAM 1.0).
+  Supported hypothesis: a quadrant's (first) layer kind blocks ground cover. Test: `grass_hook.ps1 -GrassOnly
+  -KindTest` (`--ltex-kind-from LDirtCracked02 --ltex-kind-all`: every converted texture takes the pine-forest
+  record's MNAM / QNAM in S2SGrass.esm, look kept). The 2026-11-23 kind test ran before ground covers reached the
+  palette (nothing could grow then), so it did not decide this.
 * **Positions in game**: the merge shift changes between sessions (2026-11-24: (-2200, +1500) m, earlier
   (-37.6, +47.0)); ground_at.py needs `player.getpos` right after `coc` of the same session (--spawn-at).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
