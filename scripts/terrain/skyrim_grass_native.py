@@ -790,6 +790,7 @@ def main(argv=None):
         shutil.rmtree(staging, ignore_errors=True)
         conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), staging, a.texconv, cr, None,
                                              prefix=PREFIX)
+        conv.coverage_mips = True            # 2026-11-24: grass cut-outs keep their coverage in every mip (no "fins")
         tdnam = dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"]
         veg_template = None
         if a.grass_shader == "vegetation" and not a.vanilla_material:

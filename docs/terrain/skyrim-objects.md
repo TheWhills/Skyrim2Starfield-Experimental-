@@ -763,6 +763,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   depth) expects the vegetation shader. The grass build now rebuilds our grass materials on GrassFieldLive01 with
   Skyrim's textures (`--grass-shader vegetation`, default; the atlas AO / transmissive maps dropped; `plain` = old).
   Eleventh run: `-GrassOnly -OwnMaterial` again.
+  **Eleventh run (owner, vegetation-shader material, verified in game): Skyrim's field grass across the meadow down to
+  Riverwood; fins still there**, now showing Skyrim's blade texture smeared across the whole card (blurry, blocky):
+  the alpha-test mip problem. Box-filtered mips of the opacity map average the gaps between thin blades above the
+  cut-out threshold, so a card drawn at a lower mip (grass uses a mip bias) goes solid. The shader was not the cause
+  (kept: it is the game's grass shader). Now the grass build writes opacity maps with coverage-preserving mips
+  (fo4sf.textures.coverage_mips: every level rescaled so the share of texels passing the alpha test stays level 0's;
+  each level BC4 by texconv, joined; checked with the real texconv: 9 levels, exact BC4 size). Twelfth run:
+  `-GrassOnly -OwnMaterial`.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
