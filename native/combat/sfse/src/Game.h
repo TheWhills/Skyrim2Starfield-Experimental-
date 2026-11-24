@@ -71,6 +71,12 @@ std::string LeftCopyReport();
 std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either_hand);
 std::string LeftUnequip();
 bool RightWeaponId(std::function<void(std::uint32_t)> result);
+// After a load (owner's save / load test 2026-11-24: both weapons equipped, neither model built): LeftWeaponId is
+// Papyrus GetEquippedWeapon(1) (the LeftHand weapon; 0 none) on the VM thread; LeftRestorePrepare (main thread) undoes
+// the plugin's sequence if it is still in memory, else takes the saved left weapon off LeftHand, so the normal
+// sequence can run again and build both models.
+bool LeftWeaponId(std::function<void(std::uint32_t)> result);
+std::string LeftRestorePrepare(std::uint32_t left_id);
 void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log);
 // The game's own left-hand model (a LeftHand-slot weapon, hung under WeaponLeft) moved onto L_Wrist at the left grip
 // (s2s left_grip(), then turn / degrees), every tick while `active`; let go of when the game releases it or when not

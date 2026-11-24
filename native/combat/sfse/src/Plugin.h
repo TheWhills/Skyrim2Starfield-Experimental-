@@ -133,6 +133,8 @@ private:
     std::atomic_bool left_equipped_{false};       // the native left-hand equip test put a weapon on (main thread)
     std::atomic_bool left_wanted_{false};         // the key asked for a native left weapon (dual stance from here)
     std::atomic<double> left_equip_due_{-1.0};    // when to equip it (after the dual stance's re-equip)
+    std::atomic<double> left_restore_at_{-1.0};   // after a load: when to check the LeftHand weapon
+    std::atomic<std::uint32_t> left_restore_id_{0};   // the saved left weapon, equipped again by StartLeftEquip
     std::atomic<double> left_report_at_{-1.0};    // when to log what is equipped (1.5 s after the equip / unequip)
     std::atomic<std::uint32_t> left_report_id_{0};
     bool left_follow_holding_ = false;            // LeftWeaponFollow still holds a moved model (main thread)

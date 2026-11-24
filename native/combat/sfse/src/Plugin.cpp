@@ -311,6 +311,7 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         left_report_at_ = game::Now() + 3.0;
         REX::INFO("left equip: a save loaded; the plugin's left weapon state: {} (reported in 3 s)",
                   left_equipped_.load() ? "on (from before the load)" : "off");
+        left_restore_at_ = game::Now() + 2.0;            // then redo the sequence if the save has a left weapon
     }
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
@@ -423,7 +424,9 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
 void Plugin::StartLeftEquip() {
     const bool either = settings_.left_equip_either_hand;
     // the right-hand weapon (Papyrus) first: the left one is sLeftEquipWeapon, or a second copy of it
-    auto equip = [this, either, chosen = settings_.left_equip_weapon](std::uint32_t right_id) {
+    // after a load the saved left weapon, else sLeftEquipWeapon
+    const std::uint32_t restore = left_restore_id_.exchange(0);
+    auto equip = [this, either, chosen = restore ? restore : settings_.left_equip_weapon](std::uint32_t right_id) {
         SFSE::GetTaskInterface()->AddTask([this, right_id, either, chosen]() {
             const std::uint32_t id = chosen ? chosen : right_id;
             // 000001F4 = UnarmedHuman (owner's run 2026-11-24: after a left equip bumped the sword, the fists
@@ -436,7 +439,8 @@ void Plugin::StartLeftEquip() {
                 REX::INFO("left equip: no weapon in the right hand (set sLeftEquipWeapon or draw one)");
                 return;
             }
-            const auto r = game::LeftEquip(id, right_id, either);
+            // fists in the right hand (000001F4, also a WEAP record): no right weapon, its record left alone
+            const auto r = game::LeftEquip(id, right_id == 0x1F4u ? 0u : right_id, either);
             REX::INFO("left equip: {}", r);
             // the same weapon in both hands gets no left model from the game (owner's runs 2026-11-24: two
             // cutlasses, two axes): the clone shows it
@@ -594,6 +598,24 @@ void Plugin::Tick() {
         const auto r = game::LeftWeaponFollow(left_equipped_.load(), left_copy_turn_now_, settings_.left_copy_rotation);
         left_follow_holding_ = r.holding;
         if (!r.log.empty()) REX::INFO("left equip: {}", r.log);
+    }
+    // after a load: a weapon in LeftHand (saved with it) gets the whole sequence again, so both models are built
+    if (const double due = left_restore_at_.load(); due >= 0.0 && now >= due) {
+        left_restore_at_ = -1.0;
+        game::LeftWeaponId([this](std::uint32_t left_id) {
+            if (!left_id || left_id == 0x1F4u) {
+                REX::INFO("left equip: after the load no weapon in LeftHand ({:08X})", left_id);
+                return;
+            }
+            SFSE::GetTaskInterface()->AddTask([this, left_id]() {
+                REX::INFO("left equip: after the load {:08X} is in LeftHand: equipping it again; {}", left_id,
+                          game::LeftRestorePrepare(left_id));
+                left_equipped_ = false;
+                left_restore_id_ = left_id;
+                left_wanted_ = true;                       // the dual stance (if off), then StartLeftEquip
+                left_equip_due_ = game::Now() + 1.2;
+            });
+        });
     }
     if (const double due = left_equip_due_.load(); due >= 0.0 && now >= due) {
         left_equip_due_ = -1.0;

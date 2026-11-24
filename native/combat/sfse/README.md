@@ -227,3 +227,10 @@ weapon re-equipped, normal stance). The game rebuilds the left model on every re
 log: "the game took the left model off", then moved again within a frame or so). Untested: two of the same weapon
 (bLeftEquipSameCopy), save / load with both on, left-hand damage.
 
+Owner's save / load test 2026-11-24 (load in the same session): the game restored the equipped state
+(GetEquippedWeapon 0 = cutlass, 1 = axe; the axe record still LeftHand in memory) but built neither model (WeaponLeft
+and the Weapon bone empty; sheathe / draw did not help). Fix: 2 s after a load the plugin asks GetEquippedWeapon(1);
+a weapon there is taken off (LeftRestorePrepare: the whole sequence undone if still in memory, else the saved weapon
+off LeftHand) and the normal sequence runs again on it (dual stance, then the RightHand / LeftHand equips).
+Untested: a load after a restart.
+

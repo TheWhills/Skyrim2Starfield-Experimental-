@@ -1072,6 +1072,32 @@ std::string LeftUnequip() {
     return out.empty() ? "nothing equipped by the test" : out;
 }
 
+std::string LeftRestorePrepare(std::uint32_t left_id) {
+    // the plugin still has the sequence from before the load (same session): undo it fully (left off, records back,
+    // the right weapon equipped again); else (a restart) only take the saved left weapon off LeftHand
+    if (g_left_equip.left) return LeftUnequip();
+    auto* player = Player();
+    auto* mgr = RE::ActorEquipManager::GetSingleton();
+    auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(left_id);
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    if (!player || !mgr || !weap || !left) return std::format("{:08X}: nothing to take off", left_id);
+    RE::BGSObjectInstance item(weap, nullptr);
+    const bool ok = mgr->UnequipObject(player, item, left, false, false, false, true, nullptr);
+    return std::format("unequip saved {:08X} from LeftHand: {}", left_id, ok ? "yes" : "NO (may still be off)");
+}
+
+bool LeftWeaponId(std::function<void(std::uint32_t)> result) {
+    return Dispatch("Actor", "GetEquippedWeapon",
+        [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+            out.resize(1);
+            RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(1));     // 1 = the LeftHand weapon
+        },
+        [result](const RE::BSScript::Variable& weapon) {
+            auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+            if (result) result(obj ? static_cast<std::uint32_t>(obj->GetHandle() & 0xFFFFFFFFull) : 0u);
+        });
+}
+
 bool RightWeaponId(std::function<void(std::uint32_t)> result) {
     return Dispatch("Actor", "GetEquippedWeapon",
         [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
