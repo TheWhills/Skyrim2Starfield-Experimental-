@@ -809,6 +809,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   double-sided Skyrim triangle: each card was drawn twice in the same plane. Fifteenth run:
   `-GrassOnly -OwnMaterial -FlatPaths -NoBackFaces` (cards without the copies): fins gone = the duplicates; cards
   missing from behind = the shader is not two-sided for us; fins unchanged = elsewhere (Starfield.exe next).
+  **Fifteenth run (owner, no back-face copies, verified in game): the pieces remain**, pale and dense, floating at the
+  TOPS of clumps and card edges ("disconnected"); clumps complete from every side (the shader is two-sided: the copies
+  are not needed). **Cause found (verified offline):** Skyrim's FieldGrass01 shader (BSLightingShaderProperty) has
+  Texture Clamp Mode 0 = CLAMP_S_CLAMP_T and the cards' UVs run past the texture (u -0.08..1.17, v -0.17 at the tip);
+  Starfield materials wrap by default, so a card's tip showed the dense base of the clump from the other edge of the
+  texture (and the sides wrapped likewise). Starfield materials can clamp: BSMaterial::TextureAddressModeComponent
+  'Clamp' on the UV stream object (12,997 vanilla uses; the grass template has none). The grass build now sets it on
+  every converted grass material. Sixteenth run: `-GrassOnly -OwnMaterial -FlatPaths -NoBackFaces`.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

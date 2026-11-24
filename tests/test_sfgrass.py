@@ -391,6 +391,20 @@ class PlanetBiomeTests(unittest.TestCase):
                 self.assertTrue(json.load(fh)["Objects"][0]["Parent"].endswith("VegetationTranslucent1Layer.mat"))
             self.assertFalse(N.rebuild_as_vegetation(st, "Materials\\missing.mat", template))
 
+    def test_with_clamp(self):
+        import skyrim_grass_native as N
+        mat = {"Objects": [
+            {"Components": [{"Data": {"ID": "res:A"}, "Index": 0, "Type": "BSMaterial::UVStreamID"}], "ID": "res:L"},
+            {"Components": [{"Data": {"Name": "S_UVStreamA"}, "Index": 0, "Type": "BSComponentDB::CTName"},
+                            {"Data": {"Value": "Wrap"}, "Index": 0,
+                             "Type": "BSMaterial::TextureAddressModeComponent"}], "ID": "res:A"},
+            {"Components": [], "ID": "res:T"}]}
+        out = N.with_clamp(mat)
+        modes = [c["Data"]["Value"] for c in out["Objects"][1]["Components"]
+                 if c["Type"] == "BSMaterial::TextureAddressModeComponent"]
+        self.assertEqual(modes, ["Clamp"])                                    # replaced, not added twice
+        self.assertEqual(out["Objects"][2]["Components"], [])                 # only the UV stream object
+
     def test_grass_visible(self):
         import skyrim_grass_native as N
         self.assertTrue(N.grass_visible("Landscape\\Grass\\GrassSage02.nif"))

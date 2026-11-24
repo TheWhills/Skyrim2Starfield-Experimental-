@@ -474,6 +474,35 @@ def opacity_of(staging: str, game_path: str):
     return None
 
 
+def with_clamp(mat: dict) -> dict:
+    """The material with its UV stream(s) set to clamp texture addressing (BSMaterial::TextureAddressModeComponent
+    'Clamp', as 12,997 vanilla material objects have it). 2026-11-24 (owner: pale, disconnected pieces of grass on
+    top of clumps): Skyrim's grass cards draw with Texture Clamp Mode CLAMP_S_CLAMP_T (FieldGrass01's
+    BSLightingShaderProperty) and their UVs run past the texture (u -0.08..1.17, v -0.17 at the tip); Starfield wraps by
+    default, so a card's tip showed the dense base of the clump from the texture's other edge."""
+    stream_ids = {c["Data"]["ID"] for o in mat.get("Objects", []) for c in o.get("Components", [])
+                  if c.get("Type") == "BSMaterial::UVStreamID" and c.get("Data", {}).get("ID")}
+    for o in mat.get("Objects", []):
+        if o.get("ID") in stream_ids:
+            comps = [c for c in o.get("Components", []) if c.get("Type") != "BSMaterial::TextureAddressModeComponent"]
+            comps.append({"Data": {"Value": "Clamp"}, "Index": 0, "Type": "BSMaterial::TextureAddressModeComponent"})
+            o["Components"] = comps
+    return mat
+
+
+def clamp_material(staging: str, game_path: str) -> bool:
+    """Rewrite a staged converted material with clamp addressing (with_clamp); False if not found."""
+    from fo4sf import convert_material
+    p = material_file(staging, game_path)
+    if not p:
+        return False
+    with open(p, encoding="utf-8-sig") as fh:
+        mat = json.load(fh)
+    with open(p, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(convert_material.dump_mat(with_clamp(mat)))
+    return True
+
+
 def rebuild_as_vegetation(staging: str, game_path: str, template: dict) -> bool:
     """Rewrite a staged converted material in place as a vegetation (grass shader) material; False if not found."""
     from fo4sf import convert_material
@@ -542,9 +571,11 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
     if material:
         files = {rel: (with_material(d, material) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
                  if not rel.lower().endswith(".mat")}
-    elif veg_template is not None:   # our own material, rebuilt on the game's grass shader model
+    else:                            # our own material
         for m in sorted({x for x in mats if x}):
-            rebuild_as_vegetation(staging, m, veg_template)
+            if veg_template is not None:     # rebuilt on the game's grass shader model
+                rebuild_as_vegetation(staging, m, veg_template)
+            clamp_material(staging, m)       # Skyrim's grass textures clamp, Starfield wraps by default
     if geometry is not None:
         files = {rel: (with_geometry(d, geometry) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
                  if not rel.lower().endswith(".mesh")}
