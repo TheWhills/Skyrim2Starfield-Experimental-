@@ -621,6 +621,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   Test: `tools\owner\terrain_cover.ps1` (btd_cover.py): each byte value c gets a head entry (what the renderer draws,
   unchanged) and a tail entry (the texture drawn at the mirrored slot), table 2k entries; checked both ways;
   originals in btd_before_cover, `-Restore`. Do not run btd_byte6.py on encoded files.
+  Owner's run (19:30-19:31): identity pairs would need 1165 codes; with only the covered slot (LFieldGrass02) told
+  apart 75 codes, table 56 -> 150 entries (duplicates), check passed, installed. **In game: crash** (verified).
+  Suspects: table length (vanilla's longest unknown) or duplicate LTEX entries. `vanilla_btd_survey.py --table-sizes`
+  lists vanilla table lengths.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

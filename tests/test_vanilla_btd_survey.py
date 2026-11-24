@@ -85,5 +85,25 @@ class SurveyTest(unittest.TestCase):
         self.assertIn("byte 6 read as a table entry (b - 1): LGrassy 100.0% [ground cover in a biome] (never painted)", rep)
 
 
+class TableSizesTest(unittest.TestCase):
+    def test_table_sizes(self):
+        import contextlib
+        import io
+        import tempfile
+        from types import SimpleNamespace as NS
+        from unittest import mock
+        ents = [NS(name="terrain/a.btd", kind="GNRL", unpacked=10), NS(name="terrain/b.btd", kind="GNRL", unpacked=20),
+                NS(name="terrain/tile.btd", kind="GNRL", unpacked=5)]
+        sizes = {"terrain/a.btd": 61, "terrain/b.btd": 40, "terrain/tile.btd": 0}
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, V.TERRAIN_ARCHIVES[0]), "wb").close()
+            with mock.patch.object(V.ba2, "Ba2", lambda p: NS(entries=ents)), \
+                    mock.patch.object(V, "ltex_count", lambda ar, e: sizes[e.name]), \
+                    contextlib.redirect_stdout(io.StringIO()) as log:
+                self.assertEqual(V.main(["--sf-data", d, "--table-sizes"]), 0)
+        self.assertIn("2 vanilla BTDs with an LTEX table: longest 61, median 40", log.getvalue())
+        self.assertIn("  61  terrain/a.btd", log.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

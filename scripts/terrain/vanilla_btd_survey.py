@@ -249,6 +249,9 @@ def main(argv=None):
     ap.add_argument("--json", default="", help="also write the counts here")
     ap.add_argument("--sf-esm", default="", help="Starfield.esm: name the LTEX byte 6 points at (default: "
                                                   "<sf-data>\\Starfield.esm if present)")
+    ap.add_argument("--table-sizes", action="store_true",
+                    help="only print the LTEX table lengths of every vanilla BTD with a table (largest first) and stop "
+                         "(2026-11-23: a 150-entry table crashed the game)")
     ap.add_argument("--match", default="", help="only BTDs whose path matches this regular expression (e.g. "
                                                  "overlaytrait)")
     a = ap.parse_args(argv)
@@ -272,6 +275,12 @@ def main(argv=None):
     if not files:
         sys.exit(f"no vanilla .btd with an LTEX table in the terrain archives of {a.sf_data}")
     files.sort(key=lambda f: -f[3])                          # the largest hand-made worlds first
+    if a.table_sizes:
+        sizes = sorted((f[4] for f in files), reverse=True)
+        print(f"{len(files)} vanilla BTDs with an LTEX table: longest {sizes[0]}, median {sizes[len(sizes) // 2]}")
+        for _ar, _i, name, _size, nlt in sorted(files, key=lambda f: -f[4])[:15]:
+            print(f"  {nlt:4d}  {name}")
+        return 0
     pick = files[:a.max_btds]
     print(f"{len(files)} vanilla BTDs with an LTEX table ({no_table} procedural tiles without one skipped); "
           f"reading the {len(pick)} largest")
