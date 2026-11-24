@@ -698,6 +698,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   itself). Third run: `-GrassOnly -Control` with --slot-alt (the first mask-0 ANAM names our texture too) and the
   vanilla moss cover: field-grass look = the ANAM is the slot's ground; moss = the cover reaches the layer (then our
   converted grass model is what failed); still pale and bare = the swap does not happen for layers 0..4.
+  **Third run (owner, -GrassOnly -Control with --slot-alt, VERIFIED IN GAME 2026-11-24): ROUTE A WORKS.** The field
+  draws field grass again (no pale sand) and the vanilla cover (GC_MossMoundsGrass01: bladed grass, dried grass, pink
+  flowers, moss mounds) grows dense ACROSS the LFieldGrass02 ground, not only at its edges. So for an overlay:
+  LDefault placeholder painted as an ordinary layer -> the anchor biome's slot of that mask; the slot's **ground**
+  comes from the biome's mask ANAM texture (run 2 -> 3: only the ANAM changed and the pale sand went), its **cover**
+  from the mask's first LNAM GCVR; grass follows the layer's own blend weight (as read from Starfield.exe).
+  Open: (1) our converted Skyrim grass through the same route (run 2 grew nothing, but without the ANAM change):
+  `grass_slot_test.ps1 -GrassOnly` (no -Control) now; (2) a few pale-sand spots remain (owner's 2nd screenshot of the
+  run): if outside the square or not LFieldGrass02 ground, the byte-6 FlatIn remainder layer draws the ocean biome's
+  mask-3 ground there.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

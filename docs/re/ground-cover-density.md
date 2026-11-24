@@ -23,6 +23,8 @@ build. Labels: **verified** = read from the decompiled code (and, where noted, m
   4 and 6. When all of 0..4 are set, byte 6's texture is the last layer and gets `prod(1 - a_i)` over the five alphas.
   So it is 0 wherever any layer is at 7/7 and positive only where layers blend. That is exactly the owner's
   "edges only, never inside a texture at 7/7, nothing in a uniform patch at 7 or at 3" pattern. **verified**
+* **Recipe verified in game (2026-11-24, route A, vanilla cover):** the placeholder layers grew the cover across the
+  field; the slot's ground comes from the biome's mask ANAM, its cover from the mask's first LNAM (see Open).
 * **Recipe:** paint the LDefault placeholders as ordinary layers (with Skyrim's alphas) where Skyrim has grassy
   ground, and set the biome's per-mask slot to {converted Skyrim texture, its GCVR}. This is data only, but limited to
   7 grass textures per overlay. The exact route with no limit is a small SFSE hook that gives each Skyrim LTEX its own
@@ -207,6 +209,10 @@ placeholders and replace the vanilla slot defaults (`FUN_140794170` overwrites t
   (skyrim_grass_native.py --slot-first). **Refuted for the look** (second run): with the first mask-0 LNAM naming our
   texture the layers still drew pale sand and grew nothing. Open whether the slot's ground comes from the ANAM, or
   whether the overlay entry is swapped at all for layers 0..4 (next run: --slot-alt with a vanilla cover).
+  **Third run (verified in game):** with the mask-0 ANAM also naming our texture and a vanilla cover in the first
+  mask-0 LNAM, the placeholder layers drew our texture and grew the cover densely across the field. So the overlay
+  swap works for layers 0..4; a biome slot's ground = its mask's ANAM texture, its cover = the first LNAM's GCVR
+  (supported hypothesis for "first": only the first LNAM was ever changed).
 * **unresolved**: the `textures\terrain\` root of density-map keys; what OverlayMasks and bAllowProcGenOnOverlays
   drive (procedural blocks / objects).
 * **supported hypothesis**: GCVR +0x88 = threshold; biome per overlay from the anchor cell.
