@@ -748,6 +748,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   got nested paths) and is unresolved again. Ninth run: `-GrassOnly` (FieldGrass01 on grasscityshort01_shape01.nif,
   a visible path). Then `-GrassOnly -FlatPaths` (a new file directly in landscape\grass\): if that grows, the
   12-path limit is gone, and our own .mat can be retried.
+  **Ninth run (owner, FieldGrass01 on the visible path grasscityshort01_shape01.nif, verified in game): Skyrim's
+  field grass GROWS across the field** (with the vanilla cover's clover/moss where it grew before). The nested path was
+  the whole block. Look: blades mangled, lying sideways, wrong heights: Skyrim's cards wearing the borrowed
+  GrassFieldLive01 texture (another layout). Tenth run: `-GrassOnly -OwnMaterial` (our converted material with
+  Skyrim's own textures, on the same visible path): Skyrim's look = our .mat works for grass (the 2026-11-23 refusal
+  was the path); bare = materials are a real second block (next Starfield.exe question).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

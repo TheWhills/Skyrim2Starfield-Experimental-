@@ -16,7 +16,9 @@
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -Material Bladed\GrassCityShort01
 #       (the field grass model in another game material; GrassCityShort01 drew green Skyrim tufts on 2026-11-23)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -FlatPaths
-#       (the converted model at a NEW path directly in landscape\grass\ instead of over a free vanilla one)
+#   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -OwnMaterial
+#       (our converted Skyrim material with Skyrim's own textures instead of a borrowed game material)
+#       (-FlatPaths: the converted model at a NEW path directly in landscape\grass\ instead of over a free vanilla one)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1                     (terrain + grass)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -Restore            (terrain back)
 param(
@@ -34,6 +36,7 @@ param(
     [switch]$TemplateModel,
     [string]$Material = "",
     [switch]$FlatPaths,
+    [switch]$OwnMaterial,
     [switch]$Restore
 )
 $ErrorActionPreference = "Stop"
@@ -74,6 +77,8 @@ if (-not $GrassOnly) {
 $extra = @()
 if ($Control) { $extra += "--control" }
 if ($TemplateModel) { $extra += "--keep-template-model" }   # our GRAS records, the vanilla hellebore model
+$mat = @("--vanilla-material", "auto")
+if ($OwnMaterial) { $mat = @() }   # our converted Skyrim material (Skyrim's own textures)
 $paths = @("--vanilla-paths")
 if ($FlatPaths) { $paths = @("--flat-paths") }   # new files directly in landscape\grass\ (s2s_<name>.nif)
 if ($Material) { $extra += "--family-material"; $extra += "fieldgrass=$Material" }   # e.g. Bladed\GrassCityShort01
@@ -81,7 +86,7 @@ Step "3. grass mod: the biome's own Base entry = LFieldGrass02 + $(if ($Control)
 python -I scripts\terrain\skyrim_grass_native.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF `
     --terrain $Staging --texconv $Texconv --out $Grass `
     --only-ltex LFieldGrass02 --biome-masks 0 --slot-first --slot-alt --no-water-clamp --threshold $Threshold `
-    @paths --coverage 100 --vanilla-material auto @extra
+    @paths --coverage 100 @mat @extra
 if ($LASTEXITCODE -ne 0) { Fail "skyrim_grass_native" }
 Write-Host "`ndone. S2S Grass Native on in MO2 (after SkyrimTerrainTamriel_Mars.esm), then coc SKY_TamrielRiverwoodSpawn." -ForegroundColor Green
 Write-Host "At the bare forest flat (Skyrim 17448, -48815; quadrant 58, 76): does the ground look like field grass again" -ForegroundColor Green
