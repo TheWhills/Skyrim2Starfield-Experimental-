@@ -238,53 +238,25 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         return true;                                   // the test key does nothing else
     }
     if (down && key == settings_.left_equip_key) {
-        const bool either = settings_.left_equip_either_hand;
-        if (!left_equipped_.load()) {
-            // the right-hand weapon (Papyrus) first: the left one is sLeftEquipWeapon, or a second copy of it
-            auto equip = [this, either, chosen = settings_.left_equip_weapon](std::uint32_t right_id) {
-                SFSE::GetTaskInterface()->AddTask([this, right_id, either, chosen]() {
-                    const std::uint32_t id = chosen ? chosen : right_id;
-                    // 000001F4 = UnarmedHuman (owner's run 2026-11-24: after a left equip bumped the sword, the fists
-                    // were the "right weapon" and went into LeftHand next)
-                    if (!chosen && right_id == 0x1F4u) {
-                        REX::INFO("left equip: the right hand holds fists (000001F4): draw a melee weapon first");
-                        return;
-                    }
-                    if (!id) {
-                        REX::INFO("left equip: no weapon in the right hand (set sLeftEquipWeapon or draw one)");
-                        return;
-                    }
-                    const auto r = game::LeftEquip(id, right_id, either);
-                    REX::INFO("left equip: {}", r);
-                    // the same weapon in both hands gets no left model from the game (owner's runs 2026-11-24: two
-                    // cutlasses, two axes): the clone shows it
-                    if (id == right_id && settings_.left_equip_same_copy) {
-                        bool make = false;
-                        {
-                            std::scoped_lock l(lock_);
-                            make = !left_copy_.attached() && !left_copy_.busy();
-                        }
-                        if (make) {
-                            left_same_copy_ = true;
-                            left_same_copy_at_ = game::Now() + 1.0;   // after the right weapon's re-equip
-                            REX::INFO("left equip: same weapon in both hands: the clone will show the left one");
-                        }
-                    }
-                    game::Notify("Left equip: see S2SCombat.log");
-                    left_equipped_ = true;
-                    left_report_id_ = id;
+        if (!left_wanted_.load()) {
+            // the dual stance first (its re-equip of the right weapon), the left equip after it (owner's runs
+            // 2026-11-24: the stance re-equip after the left equip rebuilt both models, once swapped between the hands)
+            left_wanted_ = true;
+            const bool stance_first = settings_.left_copy_dual && dual_applied_ != 1;
+            left_equip_due_ = game::Now() + (stance_first ? 1.2 : 0.0);
+            REX::INFO("left equip: asked{}", stance_first ? " (dual stance first, the equip in 1.2 s)" : "");
+        } else {
+            left_wanted_ = false;
+            left_equip_due_ = -1.0;
+            if (left_equipped_.load()) {
+                SFSE::GetTaskInterface()->AddTask([this]() {
+                    REX::INFO("left equip: {}", game::LeftUnequip());
+                    left_equipped_ = false;
+                    left_same_copy_at_ = -1.0;
+                    if (left_same_copy_.exchange(false)) DoLeftCopy(combat::LeftCopy::Action::Drop);
                     left_report_at_ = game::Now() + 1.5;
                 });
-            };
-            if (!game::RightWeaponId(equip)) REX::INFO("left equip: GetEquippedWeapon not dispatched");
-        } else {
-            SFSE::GetTaskInterface()->AddTask([this]() {
-                REX::INFO("left equip: {}", game::LeftUnequip());
-                left_equipped_ = false;
-                left_same_copy_at_ = -1.0;
-                if (left_same_copy_.exchange(false)) DoLeftCopy(combat::LeftCopy::Action::Drop);
-                left_report_at_ = game::Now() + 1.5;
-            });
+            }
         }
         return true;
     }
@@ -441,6 +413,47 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
     Run(std::move(cmds));
 }
 
+void Plugin::StartLeftEquip() {
+    const bool either = settings_.left_equip_either_hand;
+    // the right-hand weapon (Papyrus) first: the left one is sLeftEquipWeapon, or a second copy of it
+    auto equip = [this, either, chosen = settings_.left_equip_weapon](std::uint32_t right_id) {
+        SFSE::GetTaskInterface()->AddTask([this, right_id, either, chosen]() {
+            const std::uint32_t id = chosen ? chosen : right_id;
+            // 000001F4 = UnarmedHuman (owner's run 2026-11-24: after a left equip bumped the sword, the fists
+            // were the "right weapon" and went into LeftHand next)
+            if (!chosen && right_id == 0x1F4u) {
+                REX::INFO("left equip: the right hand holds fists (000001F4): draw a melee weapon first");
+                return;
+            }
+            if (!id) {
+                REX::INFO("left equip: no weapon in the right hand (set sLeftEquipWeapon or draw one)");
+                return;
+            }
+            const auto r = game::LeftEquip(id, right_id, either);
+            REX::INFO("left equip: {}", r);
+            // the same weapon in both hands gets no left model from the game (owner's runs 2026-11-24: two
+            // cutlasses, two axes): the clone shows it
+            if (id == right_id && settings_.left_equip_same_copy) {
+                bool make = false;
+                {
+                    std::scoped_lock l(lock_);
+                    make = !left_copy_.attached() && !left_copy_.busy();
+                }
+                if (make) {
+                    left_same_copy_ = true;
+                    left_same_copy_at_ = game::Now() + 1.0;   // after the right weapon's re-equip
+                    REX::INFO("left equip: same weapon in both hands: the clone will show the left one");
+                }
+            }
+            game::Notify("Left equip: see S2SCombat.log");
+            left_equipped_ = true;
+            left_report_id_ = id;
+            left_report_at_ = game::Now() + 1.5;
+        });
+    };
+    if (!game::RightWeaponId(equip)) REX::INFO("left equip: GetEquippedWeapon not dispatched");
+}
+
 void Plugin::DoLeftCopy(combat::LeftCopy::Action a) {
     using A = combat::LeftCopy::Action;
     if (a == A::None) return;
@@ -568,12 +581,16 @@ void Plugin::Tick() {
         std::scoped_lock l(lock_);
         copy_on = left_copy_.attached();
     }
-    copy_on = copy_on || (settings_.left_copy_dual && left_equipped_.load());   // a native left weapon too
+    copy_on = copy_on || (settings_.left_copy_dual && left_wanted_.load());     // a native left weapon too (asked)
     // the game's own left model onto L_Wrist at the grip (bLeftEquipGrip), and let go of again
     if (settings_.left_equip_grip && (left_equipped_.load() || left_follow_holding_)) {
         const auto r = game::LeftWeaponFollow(left_equipped_.load(), left_copy_turn_now_, settings_.left_copy_rotation);
         left_follow_holding_ = r.holding;
         if (!r.log.empty()) REX::INFO("left equip: {}", r.log);
+    }
+    if (const double due = left_equip_due_.load(); due >= 0.0 && now >= due) {
+        left_equip_due_ = -1.0;
+        if (left_wanted_.load() && !left_equipped_.load()) StartLeftEquip();
     }
     if (const double due = left_same_copy_at_.load(); due >= 0.0 && now >= due) {
         left_same_copy_at_ = -1.0;

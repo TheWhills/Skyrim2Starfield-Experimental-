@@ -96,6 +96,7 @@ public:
 private:
     void Run(std::vector<combat::Command> commands);     // carried out on the main thread
     void DoLeftCopy(combat::LeftCopy::Action a);          // queued on the main thread; reports back to left_copy_
+    void StartLeftEquip();                                // the native left equip (Papyrus right weapon, then a task)
     combat::PlayerState State();
 
     std::mutex lock_;
@@ -130,6 +131,8 @@ private:
     int dual_polled_ = -1;                        // the worn-keyword poll's last answer (-1 none yet)
     bool copy_dual_prev_ = false;
     std::atomic_bool left_equipped_{false};       // the native left-hand equip test put a weapon on (main thread)
+    std::atomic_bool left_wanted_{false};         // the key asked for a native left weapon (dual stance from here)
+    std::atomic<double> left_equip_due_{-1.0};    // when to equip it (after the dual stance's re-equip)
     std::atomic<double> left_report_at_{-1.0};    // when to log what is equipped (1.5 s after the equip / unequip)
     std::atomic<std::uint32_t> left_report_id_{0};
     bool left_follow_holding_ = false;            // LeftWeaponFollow still holds a moved model (main thread)

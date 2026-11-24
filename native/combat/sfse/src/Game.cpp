@@ -1178,8 +1178,21 @@ LeftFollowResult LeftWeaponFollow(bool active, int turn, const float degrees[3])
     f.node = on_wrist ? model : nullptr;
     f.refs_at_move = model->refCount;
     const char* n = model->name.c_str();
-    r.log += std::format("{}left model '{}' moved from WeaponLeft to L_Wrist at the grip: {} (references {}){}",
-                         r.log.empty() ? "" : "; ", n ? n : "", on_wrist ? "ok" : "FAILED", f.refs_at_move, renamed);
+    // which weapon it is (its first child: "Cutlass", "RescueAxe_Fixed"): owner's run 2026-11-24 had them swapped
+    std::string inner;
+    {
+        RE::NiAVObject** kids = nullptr;
+        std::uint32_t nk = 0;
+        if (ReadChildren(model, g_children, kids, nk))
+            for (std::uint32_t i = 0; i < nk && inner.empty(); ++i)
+                if (kids[i] && Readable(kids[i], 0x40)) {
+                    const char* kn = kids[i]->name.c_str();
+                    inner = kn ? kn : "";
+                }
+    }
+    r.log += std::format("{}left model '{}' ({}) moved from WeaponLeft to L_Wrist at the grip: {} (references {}){}",
+                         r.log.empty() ? "" : "; ", n ? n : "", inner, on_wrist ? "ok" : "FAILED", f.refs_at_move,
+                         renamed);
     r.holding = f.node != nullptr;
     return r;
 }

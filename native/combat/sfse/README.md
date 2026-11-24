@@ -213,3 +213,10 @@ RightHand / LeftHand now. Supported hypothesis: the follower had moved the axe's
 L_Wrist; the right weapon's re-equip right after finds its attach node by name and hung the cutlass into the axe (as
 the copy did before it was renamed). Fix: the moved model's root is renamed S2SL_Weapon.
 
+Owner's run 2026-11-24 (root-rename build), **verified**: a weapon in each hand, the left one held at the grip on
+L_Wrist (grip correct, owner), the right-hand bone no longer taken over. But the hands were swapped (cutlass left,
+axe right). The one run without the swap (the first axe run) had no right-weapon re-equip after the left equip; every
+later run had the dual stance's re-equip right after it, which rebuilt both models (the follower's "taken off / moved"
+churn). Next build: the key asks for the dual stance first and does the left equip 1.2 s later (no re-equip after the
+left equip); the move log names the model (its first child).
+
