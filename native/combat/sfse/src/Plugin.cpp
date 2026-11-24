@@ -305,6 +305,13 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         DoLeftCopy(a);
     }
     follow_invalid_ = true;                            // equips happen in menus; loads rebuild the 3D
+    // after a load, what the game restored in each hand (owner's save / load test of the native left weapon, 2026-11-24)
+    if (name == "LoadingMenu" && !opening && settings_.left_equip_key) {
+        left_report_id_ = settings_.left_equip_weapon;
+        left_report_at_ = game::Now() + 3.0;
+        REX::INFO("left equip: a save loaded; the plugin's left weapon state: {} (reported in 3 s)",
+                  left_equipped_.load() ? "on (from before the load)" : "off");
+    }
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
         left_blade_.reset();

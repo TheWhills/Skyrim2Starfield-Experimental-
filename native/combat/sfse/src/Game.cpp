@@ -1099,6 +1099,8 @@ void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string
                         : std::format("GetEquippedWeapon({}) = none", i));
             });
     if (auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(form_id))
+        log(std::format("{:08X} record's slot: {}", form_id, SlotName(static_cast<RE::BGSEquipType*>(weap)->equipSlot)));
+    if (auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(form_id))
         Dispatch("ObjectReference", "GetItemCount",
             [weap](RE::BSScrapArray<RE::BSScript::Variable>& out) {
                 out.resize(1);
