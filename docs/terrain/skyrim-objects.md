@@ -797,6 +797,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   (FieldGrass01: 3 cards -> 54 strips per card at a 32 grid, about 650 tris per clump with back faces; strips cover
   ~60 % of a card against 22 % blades, 97 % of the blades). Fins turning into blocky clump shapes = the cut-out is
   skipped on some instances (then a finer cut or the cause in Starfield.exe); fins gone = fixed.
+  **Fourteenth run (owner, blade geometry, verified in game): the fins became small blocky pieces** (single strips drawn
+  as full rectangles, pale), the rest is Skyrim's field grass and flowers. Verified: Starfield skips the cut-out on
+  some grass instances (not a distance switch, not our texture formats, not the path); the strips only shrink what
+  shows. Cost: FieldGrass01 648 tris, FieldGrassFlowers02 708 (vanilla grass ~50). Open: which instances skip the
+  cut-out (Starfield.exe: grass instancing / material resolve), a finer or smarter cut, density back to Skyrim's.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
