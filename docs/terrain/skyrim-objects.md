@@ -652,6 +652,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   nothing**; it grows only where alphas are partial (blends, edges). Supported hypothesis: ground cover reads the
   3-bit alphas differently from the renderer (7 as zero, or an inverted / other scale). Next: the same square at
   alpha 3 (`-Alpha 3`).
+  **Alpha 3 (owner, 10:38, verified):** the square shows grey lumps (the five layers sum below full strength, the
+  re-skinned vanilla rock shows through) and still no wheat. Conclusion over all tests (mask, texture, table
+  reading, alpha): **our BTD decides only which grass a spot may grow; where it grows comes from a per-spot density
+  outside the terrain file** (supported hypothesis: the procedural planet tiles' density under the overlay). Owner
+  chose (2026-11-24) to find the density source in Starfield.exe: scripts/re/exe_xrefs.py lists the code that
+  references density-map strings (RIP-relative references, functions from .pdata, callees' strings).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
