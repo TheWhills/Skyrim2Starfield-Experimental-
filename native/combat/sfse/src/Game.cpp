@@ -956,8 +956,16 @@ std::string FindHandNodes() {
         if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return "no child list found";
     }
     auto& h = g_hand_nodes;
-    if (!(h.root == root && StillNamed(h.left, "WeaponLeft") && StillNamed(h.right, "Weapon") &&
-          StillNamed(h.wrist, "L_Wrist"))) {
+    // the cached nodes stand while the 3D is the same and each found one still has its name. A node not found is not
+    // searched for every frame: owner's run 2026-11-24, with the left weapon on the plugin took 20-40 ms per frame
+    // (frames 29-47 ms instead of ~10), the walk below running each frame; now at most every 2 s for a missing node.
+    auto same = [](RE::NiAVObject* o, std::string_view n) { return !o || StillNamed(o, n); };
+    const bool kept = h.root == root && same(h.left, "WeaponLeft") && same(h.right, "Weapon") && same(h.wrist, "L_Wrist");
+    const bool missing = !h.left || !h.right || !h.wrist;
+    static double s_walked_at = -1.0;
+    static int s_missing_logged = 0;
+    if (!kept || (missing && Now() - s_walked_at >= 2.0)) {
+        s_walked_at = Now();
         h = {root, nullptr, nullptr, nullptr};
         int budget = 4000;
         Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
@@ -972,6 +980,11 @@ std::string FindHandNodes() {
                 if (!pn || std::string_view(pn) != "WeaponLeft") h.right = o;
             }
         });
+        if ((!h.left || !h.right || !h.wrist) && s_missing_logged < 5) {
+            ++s_missing_logged;
+            REX::INFO("hand nodes: not found in the player's 3D:{}{}{} (searched again at most every 2 s)",
+                      h.left ? "" : " WeaponLeft", h.right ? "" : " Weapon", h.wrist ? "" : " L_Wrist");
+        }
     }
     return {};
 }

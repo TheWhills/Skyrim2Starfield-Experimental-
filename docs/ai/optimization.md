@@ -137,3 +137,11 @@ moving it would change textures.py again and cost one more full reconvert.
 - Owner's terrain_blend.ps1: 8.2 min (one pass) -> 14.7 min (two passes, raster slot plan). The map-wide slot plan
   adds about 32 s per 144 x 144-quadrant tile (synthetic, measured here); owner's run: 15.5 min (from 14.7).
 - terrain_blend.ps1 -Blend smooth: 4.7 min on the owner's machine (noise 15.5 min, same input).
+
+## 2026-11-24: native left weapon, per-frame cost (S2SCombat timing report, iPerfSeconds = -1)
+- Before (owner's run 14:55-15:00, same save, menu closed): left weapon off: plugin 6-8 us per frame, game frames
+  10-13 ms; left weapon on: plugin **20-40 ms** per frame (avg 20132 / 40479 us), game frames **29-47 ms**. Cause
+  (supported hypothesis): FindHandNodes (sfse/src/Game.cpp) walked the player's 3D (up to 4000 nodes, a VirtualQuery
+  each) every frame while a hand node was missing; the follower (bLeftEquipGrip) calls it each frame.
+- Change: the found nodes stand for the same 3D; a missing one is searched for at most every 2 s (logged once).
+- After: pending (owner's next run, same report lines labelled "left weapon on").
