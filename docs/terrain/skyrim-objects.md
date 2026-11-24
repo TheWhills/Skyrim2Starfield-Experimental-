@@ -678,6 +678,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   layers with Skyrim's alphas where Skyrim is grassy, biome slot = {converted Skyrim texture, its GCVR}, low GCVR
   threshold (data only, max 7 grass textures per overlay); or an SFSE hook on FUN_1409a9570 that gives each Skyrim
   LTEX its own GCVR (exact, no limit). Density maps dropped.
+  **Route A test** (`tools\owner\grass_slot_test.ps1`, btd_cover.py slot): in 20 x 20 quadrants around the bare forest
+  flat (58, 76) every layer naming LFieldGrass02 (entry 14) names LDefault006Base (00010861, appended as entry 57)
+  instead, same alphas, byte 6 = 0 there (offline dry run on a copy: 35 layer bytes in 35 quadrants, check passed);
+  the grass mod gives the ocean biome one entry {mask 0, LFieldGrass02 slot, its cover}, threshold 0.1. Expected:
+  same look, grass across the field at the texture's strength. Not yet run in game.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

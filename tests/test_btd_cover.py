@@ -90,6 +90,25 @@ class CoverEncodeTest(unittest.TestCase):
         self.assertEqual(C.alpha_word(3), 0b011011011011011)
         self.assertTrue((C.uniform_patch(t, 1, 1, 2, 0xC, 3).weights[:128, :128] == 0x36DB).all())
 
+    def test_slot_patch(self):
+        q = np.zeros((4, 4, 8), np.uint8)
+        q[:, :, :5] = [1, 3, 2, 3, 5]
+        q[:, :, 6] = 6
+        h = np.zeros((256, 256), np.uint16)
+        w = np.full((256, 256), 0x1234, np.uint16)
+        t = btd.Btd(5, 0.0, 1.0, [0xA, 0xB, 0xC, 0xD, 0xE, 0xF0], h, w, q)
+        new, n_bytes, n_quads = C.slot_patch(t, 1, 1, 2, 0xC, 0x777)
+        self.assertEqual(list(new.ltex), [0xA, 0xB, 0xC, 0xD, 0xE, 0xF0, 0x777])        # appended, others kept
+        self.assertEqual(new.quad_map[0, 0, :7].tolist(), [1, 7, 2, 7, 5, 0, 0])
+        self.assertEqual(new.quad_map[2, 2, :7].tolist(), [1, 3, 2, 3, 5, 0, 6])        # outside the patch
+        self.assertEqual((n_bytes, n_quads), (8, 4))
+        self.assertTrue(np.array_equal(new.weights, w))
+        again, _b, _q = C.slot_patch(t, 1, 1, 2, 0xC, 0xF0)                             # already in the table
+        self.assertEqual(len(again.ltex), 6)
+        self.assertEqual(again.quad_map[1, 1, 1], 6)
+        with self.assertRaises(ValueError):
+            C.slot_patch(t, 1, 1, 2, 0x99, 0x777)
+
     def test_too_many_pairs(self):
         q = np.zeros((40, 40, 8), np.uint8)
         rng = np.random.default_rng(1)

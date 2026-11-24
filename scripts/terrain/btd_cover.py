@@ -24,6 +24,11 @@ uniform : (diagnostic, 2026-11-24) the N x N quadrants around quadrant (--quad R
           texture at full strength. Grass grew only where textures meet, never inside a texture at alpha 7/7, with
           every mask: this tells whether our layer encoding is what keeps ground cover off. Works on the current
           files; originals in <staging>\btd_before_uniform; `uniform-restore` puts them back.
+slot    : (test, 2026-11-24, docs/re/ground-cover-density.md) in the N x N quadrants around --quad, every layer byte
+          naming --ltex (default our LFieldGrass02 slot) names an LDefault placeholder instead (--mask, default Base;
+          appended to the table), alphas kept, byte 6 = 0 there. With the biome's slot for that mask = {--ltex, its
+          cover} (skyrim_grass_native.py --only-ltex LFieldGrass02 --biome-masks 0) the field should look the same
+          and grow grass across it. Originals in <staging>\\btd_before_slot; `slot-restore` puts them back.
 restore : copies the originals back.
 Reinstall afterwards (tools\\owner\\terrain_cover.ps1 does both). Do not run btd_byte6.py on the encoded files.
 
@@ -148,6 +153,38 @@ def uniform_patch(t: btd.Btd, row: int, col: int, size: int, fid: int, alpha: in
     return btd.Btd(t.version, t.hmin, t.hmax, T, t.heights_raw, w, q)
 
 
+SLOT_BACKUP = "btd_before_slot"
+
+
+def slot_patch(t: btd.Btd, row: int, col: int, size: int, src_fid: int, slot_fid: int):
+    """(new Btd, layer bytes changed, quadrants changed). In the size x size quadrants centred on (row, col): every
+    layer byte (0..4) naming src_fid names slot_fid instead (appended to the table if missing: the other indices
+    stay), alphas untouched, byte 6 = 0.
+
+    Why (docs/re/ground-cover-density.md, 2026-11-24): an overlay texture gets ground cover only when it is an
+    LDefault mask placeholder; the biome under the overlay then draws its slot's LTEX there and grows its slot's
+    GCVR with the layer's own blend weight. With the biome's Base slot = {our LFieldGrass02 slot, its cover}, painting
+    LDefault006Base where Skyrim paints LFieldGrass02 should keep the look and grow the grass across the field.
+    Byte 6 (a leftover sixth layer) is cleared in the patch so only that layer grows grass there."""
+    T = list(t.ltex)
+    if src_fid not in T:
+        raise ValueError(f"{src_fid:08X} is not in the LTEX table")
+    if slot_fid not in T:
+        T.append(slot_fid)
+    if len(T) > MAX_CODES:
+        raise ValueError("LTEX table would pass 255 entries")
+    src_b, slot_b = T.index(src_fid) + 1, T.index(slot_fid) + 1
+    q = t.quad_map.copy()
+    r0, c0 = max(row - size // 2, 0), max(col - size // 2, 0)
+    r1, c1 = min(r0 + size, q.shape[0]), min(c0 + size, q.shape[1])
+    region = q[r0:r1, c0:c1]
+    hit = region[:, :, :5] == src_b
+    n_bytes, n_quads = int(hit.sum()), int(hit.any(axis=2).sum())
+    region[:, :, :5][hit] = slot_b
+    region[:, :, 6] = 0
+    return btd.Btd(t.version, t.hmin, t.hmax, T, t.heights_raw, t.weights, q), n_bytes, n_quads
+
+
 def check(old: btd.Btd, new: btd.Btd, covered=None):
     """Rendering unchanged (head reading of bytes 0..4 and 6) and ground cover's reading of byte j = what the renderer
     draws at slot 4 - j; returns the number of quadrant slots that disagree."""
@@ -170,9 +207,11 @@ def check(old: btd.Btd, new: btd.Btd, covered=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("set", "pad", "restore", "uniform", "uniform-restore"))
-    ap.add_argument("--quad", type=int, nargs=2, metavar=("ROW", "COL"), help="uniform: centre quadrant")
-    ap.add_argument("--size", type=int, default=3, help="uniform: quadrants per side (default 3 = 150 m)")
+    ap.add_argument("cmd", choices=("set", "pad", "restore", "uniform", "uniform-restore", "slot", "slot-restore"))
+    ap.add_argument("--quad", type=int, nargs=2, metavar=("ROW", "COL"), help="uniform / slot: centre quadrant")
+    ap.add_argument("--size", type=int, default=3,
+                    help="uniform / slot: quadrants per side (default 3 = 150 m; slot test: 20 = 1 km)")
+    ap.add_argument("--mask", default="Base", help="slot: the LDefault placeholder (part of its EditorID)")
     ap.add_argument("--alpha", type=int, default=7, help="uniform: the 3-bit alpha of every layer (0..7)")
     ap.add_argument("--ltex", default="00030137", help="uniform: LTEX FormID (hex), default SKYG LFieldGrass02")
     ap.add_argument("--count", type=int, default=40, help="pad: unique vanilla LTEX to insert")
@@ -186,6 +225,46 @@ def main(argv=None):
     paths = btd_byte6.staged_btds(a.staging)
     if not paths:
         sys.exit("no staged BTD found (overlays_params.json btd_file)")
+    if a.cmd in ("slot", "slot-restore"):
+        sbak = os.path.join(a.staging, SLOT_BACKUP)
+        slot_edid = slot_fid = None
+        if a.cmd == "slot":
+            if not a.quad or not a.sf_esm:
+                sys.exit("slot needs --quad ROW COL and --sf-esm")
+            slot_edid, slot_fid = btd_byte6.pick(btd_byte6.defaults(a.sf_esm), a.mask)
+        for p in paths:
+            rel = os.path.relpath(p, a.staging)
+            keep = os.path.join(sbak, rel)
+            if a.cmd == "slot-restore":
+                if os.path.exists(keep):
+                    shutil.copy2(keep, p)
+                    print(f"{rel}: put back")
+                continue
+            if not os.path.exists(keep):
+                os.makedirs(os.path.dirname(keep), exist_ok=True)
+                shutil.copy2(p, keep)
+            with open(keep, "rb") as fh:                # always from the backup: slot twice = slot once
+                t = btd.read(fh.read())
+            try:
+                new, n_bytes, n_quads = slot_patch(t, a.quad[0], a.quad[1], a.size, int(a.ltex, 16), slot_fid)
+            except ValueError as e:
+                sys.exit(f"{rel}: {e}")
+            data = btd.write(new)
+            back = btd.read(data)
+            if not (np.array_equal(back.weights, t.weights) and np.array_equal(back.heights_raw, t.heights_raw)
+                    and np.array_equal(back.quad_map, new.quad_map)):
+                sys.exit(f"{rel}: check failed; file left as it was")
+            with open(p, "wb") as fh:
+                fh.write(data)
+            print(f"{rel}: {a.size} x {a.size} quadrants around {tuple(a.quad)}: {int(a.ltex, 16):08X} -> "
+                  f"{slot_edid} ({slot_fid:08X}, entry {new.ltex.index(slot_fid) + 1}) in {n_bytes} layer bytes of "
+                  f"{n_quads} quadrants, byte 6 = 0 there; table {len(t.ltex)} -> {len(new.ltex)}; alphas and heights "
+                  f"unchanged (checked)")
+            if n_bytes == 0:
+                print("  (no quadrant there paints that texture: pick another --quad or a larger --size)")
+        if a.cmd == "slot-restore" and os.path.isdir(sbak):
+            shutil.rmtree(sbak)
+        return 0
     if a.cmd in ("uniform", "uniform-restore"):
         ubak = os.path.join(a.staging, UNIFORM_BACKUP)
         for p in paths:

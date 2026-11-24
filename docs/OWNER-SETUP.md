@@ -308,6 +308,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
+8k. (2026-11-24) Grass test, one LDefault slot (docs/re/ground-cover-density.md route A). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1
+   (terrain: LFieldGrass02 painted as LDefault006Base in 1 km around Riverwood's bare forest flat, quadrant 58, 76;
+   reinstall; grass mod rebuilt with only that texture's grass in the biome's Base slot, threshold 0.1). In game
+   (S2S Grass Native on, coc SKY_TamrielRiverwoodSpawn): does grass grow ACROSS that flat now, and does the ground
+   still look the same? -Restore puts the terrain back.
 8j. (2026-11-22) Grass test, terrain byte 6 (Starfield closed): powershell -ExecutionPolicy Bypass -File
    tools\owner\terrain_byte6.ps1 -Mask FlatOut ; -Restore undoes it. With S2S Grass Native (--control) on.
 8i. (2026-11-22) Skyrim's grass as Starfield grass (wind, fade), through Nirn's own biome under Riverwood:
