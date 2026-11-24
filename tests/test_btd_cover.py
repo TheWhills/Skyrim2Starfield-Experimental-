@@ -73,6 +73,20 @@ class CoverEncodeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             C.pad_table(btd.Btd(5, 0.0, 1.0, [0xA, 0xB, 0xC, 0xF0], h, h.copy(), q), [0x100])
 
+    def test_uniform_patch(self):
+        q = np.zeros((4, 4, 8), np.uint8)
+        q[:, :, :5] = [1, 2, 3, 4, 5]
+        q[:, :, 6] = 6
+        h = np.zeros((128, 128), np.uint16)
+        t = btd.Btd(5, 0.0, 1.0, [0xA, 0xB, 0xC, 0xD, 0xE, 0xF0], h, h.copy(), q)
+        new = C.uniform_patch(t, 1, 1, 2, 0xC)
+        self.assertEqual(new.quad_map[0, 0, :5].tolist(), [3] * 5)
+        self.assertEqual(new.quad_map[1, 1, :7].tolist(), [3] * 5 + [0, 6])
+        self.assertEqual(new.quad_map[2, 2, :5].tolist(), [1, 2, 3, 4, 5])          # outside the patch
+        self.assertTrue((new.weights[:128, :128] == 0x7FFF).all())
+        with self.assertRaises(ValueError):
+            C.uniform_patch(t, 1, 1, 2, 0x99)
+
     def test_too_many_pairs(self):
         q = np.zeros((40, 40, 8), np.uint8)
         rng = np.random.default_rng(1)

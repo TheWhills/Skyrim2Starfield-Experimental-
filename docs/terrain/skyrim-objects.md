@@ -636,6 +636,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   (third spot fitting). Supported hypothesis: the duplicate entries of the encoded table changed how the renderer
   resolves bytes. Diagnostic: `terrain_cover.ps1 -Pad 40` inserts 40 unique vanilla LTEX before the mask entry (no
   duplicates, byte 6 = new length, front readings unchanged, end readings move by 40).
+  **Pad 40 (owner, 10:00-10:12, verified):** the ground renders normally again (no sand): the duplicate entries of
+  the encoded table broke rendering; the renderer reads table[b - 1]. The flowers stayed at the mill log although
+  every end reading moved by 40: **refuted: ground cover reading the table from its end** (the matches were chance;
+  the log flowers are a metre from a quadrant edge whose neighbour holds LFieldGrass02).
+  **Byte 6 = LDefault003FlatIn (10:19-10:24, verified):** wheat (mask 1) grows, at the same spots (log bank, hill crest
+  clumps); flats bare. So **mask 0 = Base, 1 = FlatIn, 2 = FlatOut** (byte 6 selects), and the mask changes which
+  grass grows, not where: the terrain-shape idea is refuted. Constant over every test, including cover on every
+  texture: grass where textures meet, never inside one texture at alpha 7/7. Diagnostic: btd_cover.py uniform
+  (terrain_cover.ps1 -UniformRow 58 -UniformCol 76): the 3 x 3 quadrants around the forest spot get LFieldGrass02
+  in all five layers at alpha 7, so every reading gives it at full strength.
+  Note: btd_before_cover holds a terrain with byte 6 = Base: do not run `terrain_cover.ps1 -Restore` any more.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

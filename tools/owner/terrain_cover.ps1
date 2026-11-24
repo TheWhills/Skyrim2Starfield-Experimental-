@@ -4,12 +4,17 @@
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_cover.ps1
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_cover.ps1 -Restore
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_cover.ps1 -Pad 40   (diagnostic: unique padding)
+#   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_cover.ps1 -UniformRow 58 -UniformCol 76
+#       (diagnostic: 3 x 3 quadrants = one texture in every layer at full strength; -UniformRestore undoes it)
 param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$Grass = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Grass Native",
     [switch]$Restore,
-    [int]$Pad = 0
+    [int]$Pad = 0,
+    [int]$UniformRow = -1,
+    [int]$UniformCol = -1,
+    [switch]$UniformRestore
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -22,6 +27,12 @@ foreach ($p in @("$Staging\overlays_params.json", "$SF\Data\Starfield.esm")) {
 if ($Restore) {
     Step "1. the terrain files from before the re-encoding"
     python -I scripts\terrain\btd_cover.py restore --staging $Staging
+} elseif ($UniformRestore) {
+    Step "1. the terrain files from before the uniform patch"
+    python -I scripts\terrain\btd_cover.py uniform-restore --staging $Staging
+} elseif ($UniformRow -ge 0) {
+    Step "1. diagnostic: 3 x 3 quadrants around ($UniformRow, $UniformCol) = field grass in every layer"
+    python -I scripts\terrain\btd_cover.py uniform --staging $Staging --quad $UniformRow $UniformCol
 } elseif ($Pad -gt 0) {
     Step "1. diagnostic: $Pad unique vanilla textures inserted before the mask entry"
     python -I scripts\terrain\btd_cover.py pad --staging $Staging --sf-esm "$SF\Data\Starfield.esm" --count $Pad

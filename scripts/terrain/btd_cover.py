@@ -19,6 +19,11 @@ pad     : (diagnostic, 2026-11-24) no duplicates: inserts --count unique vanilla
           values, so a front reading (table[b - 1]) is unchanged and every end reading (table[n - b]) moves by count.
           The encoded table (set) made the renderer draw end-reading textures on a hill (owner): this tells whether
           duplicate entries or the end reading itself caused it.
+uniform : (diagnostic, 2026-11-24) the N x N quadrants around quadrant (--quad ROW COL, ground_at prints it) get all
+          five bytes = one texture (--ltex, an LTEX of the table) and every alpha 7, so every reading gives that
+          texture at full strength. Grass grew only where textures meet, never inside a texture at alpha 7/7, with
+          every mask: this tells whether our layer encoding is what keeps ground cover off. Works on the current
+          files; originals in <staging>\btd_before_uniform; `uniform-restore` puts them back.
 restore : copies the originals back.
 Reinstall afterwards (tools\\owner\\terrain_cover.ps1 does both). Do not run btd_byte6.py on the encoded files.
 
@@ -118,6 +123,24 @@ def pad_table(t: btd.Btd, extra):
     return btd.Btd(t.version, t.hmin, t.hmax, table, t.heights_raw, t.weights, q)
 
 
+UNIFORM_BACKUP = "btd_before_uniform"
+
+
+def uniform_patch(t: btd.Btd, row: int, col: int, size: int, fid: int) -> btd.Btd:
+    """t with the size x size quadrants centred on (row, col): bytes 0..4 = fid's entry, every 3-bit alpha 7."""
+    T = list(t.ltex)
+    if fid not in T:
+        raise ValueError(f"{fid:08X} is not in the LTEX table")
+    b = T.index(fid) + 1
+    q = t.quad_map.copy()
+    w = t.weights.copy()
+    r0, c0 = max(row - size // 2, 0), max(col - size // 2, 0)
+    r1, c1 = min(r0 + size, q.shape[0]), min(c0 + size, q.shape[1])
+    q[r0:r1, c0:c1, :5] = b
+    w[r0 * 64:r1 * 64, c0 * 64:c1 * 64] = 0x7FFF
+    return btd.Btd(t.version, t.hmin, t.hmax, T, t.heights_raw, w, q)
+
+
 def check(old: btd.Btd, new: btd.Btd, covered=None):
     """Rendering unchanged (head reading of bytes 0..4 and 6) and ground cover's reading of byte j = what the renderer
     draws at slot 4 - j; returns the number of quadrant slots that disagree."""
@@ -140,7 +163,10 @@ def check(old: btd.Btd, new: btd.Btd, covered=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("set", "pad", "restore"))
+    ap.add_argument("cmd", choices=("set", "pad", "restore", "uniform", "uniform-restore"))
+    ap.add_argument("--quad", type=int, nargs=2, metavar=("ROW", "COL"), help="uniform: centre quadrant")
+    ap.add_argument("--size", type=int, default=3, help="uniform: quadrants per side (default 3 = 150 m)")
+    ap.add_argument("--ltex", default="00030137", help="uniform: LTEX FormID (hex), default SKYG LFieldGrass02")
     ap.add_argument("--count", type=int, default=40, help="pad: unique vanilla LTEX to insert")
     ap.add_argument("--sf-esm", default="", help="pad: Starfield.esm")
     ap.add_argument("--staging", required=True)
@@ -152,6 +178,34 @@ def main(argv=None):
     paths = btd_byte6.staged_btds(a.staging)
     if not paths:
         sys.exit("no staged BTD found (overlays_params.json btd_file)")
+    if a.cmd in ("uniform", "uniform-restore"):
+        ubak = os.path.join(a.staging, UNIFORM_BACKUP)
+        for p in paths:
+            keep = os.path.join(ubak, os.path.relpath(p, a.staging))
+            if a.cmd == "uniform-restore":
+                if os.path.exists(keep):
+                    shutil.copy2(keep, p)
+                    print(f"{os.path.relpath(p, a.staging)}: put back")
+                continue
+            if not a.quad:
+                sys.exit("uniform needs --quad ROW COL")
+            if not os.path.exists(keep):
+                os.makedirs(os.path.dirname(keep), exist_ok=True)
+                shutil.copy2(p, keep)
+            with open(keep, "rb") as fh:
+                t = btd.read(fh.read())
+            try:
+                new = uniform_patch(t, a.quad[0], a.quad[1], a.size, int(a.ltex, 16))
+            except ValueError as e:
+                sys.exit(str(e))
+            data = btd.write(new)
+            with open(p, "wb") as fh:
+                fh.write(data)
+            print(f"{os.path.relpath(p, a.staging)}: {a.size} x {a.size} quadrants around {tuple(a.quad)} = "
+                  f"{int(a.ltex, 16):08X} in all five layers at alpha 7")
+        if a.cmd == "uniform-restore" and os.path.isdir(ubak):
+            shutil.rmtree(ubak)
+        return 0
     if a.cmd == "restore":
         n = 0
         for p in paths:
