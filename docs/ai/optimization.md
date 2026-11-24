@@ -149,4 +149,8 @@ moving it would change textures.py again and cost one more full reconvert.
   player's 3D every frame (FollowBone already limits it to twice a second for that reason). Change: the found nodes
   are used without the lock, the root checked twice a second and after menus / equips / draws, dropped on a load;
   the report now times the follower and the lookups separately.
+- After (owner's run 15:34): game frames back to **11-12 ms** (left off: 7.5 ms), no climb; the owner saw no big drop.
+  The follower still took **~5-6 ms per call** and each Player3D lookup **~19 ms** (21 lookups = 400 ms per 10 s).
+  Next suspect: Readable() = one VirtualQuery per check, which measures the whole region (large game pools).
+  Change: readable regions kept for 2 s per thread; the report counts the checks, VirtualQuery calls and their time.
 - After: pending.

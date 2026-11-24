@@ -75,15 +75,36 @@ bool CallOnPlayer(const char* script, const char* function, Args... args) {
 
 // Reads memory only after VirtualQuery says it is committed and readable: for layouts CommonLibSF may not match on the
 // running game version. A system call per check: fine for rare paths (a key press), not per frame.
+std::atomic<std::uint64_t> g_vq_us{0}, g_vq_calls{0}, g_readable_calls{0};
+
+// Readable regions VirtualQuery found are kept for 2 s per thread. Owner's run 2026-11-24 15:34: the left weapon
+// follower took ~5 ms per frame and each Player3D ~19 ms with only a few checks each; VirtualQuery measures the whole
+// region (the game's memory pools are large), supported hypothesis that this was the cost (timed in the report).
 bool Readable(const void* a_ptr, std::size_t a_len) {
     if (!a_ptr) return false;
+    ++g_readable_calls;
+    const auto a = reinterpret_cast<std::uintptr_t>(a_ptr);
+    struct Region { std::uintptr_t start = 0, end = 0; double until = 0.0; };
+    thread_local std::array<Region, 16> cache{};
+    thread_local std::size_t next = 0;
+    const double now = Now();
+    for (const auto& r : cache)
+        if (a >= r.start && a + a_len <= r.end && now < r.until) return true;
+    const auto t0 = std::chrono::steady_clock::now();
     REX::W32::MEMORY_BASIC_INFORMATION mbi{};
-    if (!REX::W32::VirtualQuery(a_ptr, &mbi, sizeof(mbi)) || mbi.state != REX::W32::MEM_COMMIT) return false;
+    const auto got = REX::W32::VirtualQuery(a_ptr, &mbi, sizeof(mbi));
+    g_vq_us += static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+    ++g_vq_calls;
+    if (!got || mbi.state != REX::W32::MEM_COMMIT) return false;
     if (mbi.protect & (REX::W32::PAGE_NOACCESS | 0x100u)) return false;            // no access / guard page
     const auto ok = mbi.protect & (REX::W32::PAGE_READONLY | REX::W32::PAGE_READWRITE | REX::W32::PAGE_WRITECOPY |
                                    REX::W32::PAGE_EXECUTE_READ | REX::W32::PAGE_EXECUTE_READWRITE | 0x80u);
-    const auto end = reinterpret_cast<std::uintptr_t>(mbi.baseAddress) + mbi.regionSize;
-    return ok && reinterpret_cast<std::uintptr_t>(a_ptr) + a_len <= end;
+    const auto start = reinterpret_cast<std::uintptr_t>(mbi.baseAddress), end = start + mbi.regionSize;
+    if (!ok || a + a_len > end) return false;
+    cache[next] = {start, end, now + 2.0};
+    next = (next + 1) % cache.size();
+    return true;
 }
 
 double Now() {
@@ -1082,7 +1103,9 @@ void DropHandNodes() {
 std::string TakeHandNodeTimes() {
     const auto us = g_player3d_us.exchange(0), n = g_player3d_calls.exchange(0);
     const auto fus = g_follow_us.exchange(0), fn = g_follow_calls.exchange(0);
-    return std::format("left follower {} calls ({} us), player 3D lookups {} ({} us)", fn, fus, n, us);
+    const auto vus = g_vq_us.exchange(0), vn = g_vq_calls.exchange(0), rn = g_readable_calls.exchange(0);
+    return std::format("left follower {} calls ({} us), player 3D lookups {} ({} us), memory checks {} ({} VirtualQuery, "
+                       "{} us)", fn, fus, n, us, rn, vn, vus);
 }
 
 HandModels HandModelsNow() {
