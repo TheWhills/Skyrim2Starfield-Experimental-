@@ -715,6 +715,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   Riverwood cells carry a 381.43 m water plane. Supported hypothesis: the water clamp keeps our grass off (it would
   also explain why Skyrim grass builds grew nothing since 2026-11-22). Fifth run: `-GrassOnly` again, the script now
   adds --no-water-clamp (both clamps FLT_MAX). Still bare = the converted model (next: --keep-template-model).
+  **Fifth run (owner, built plugin checked: both clamps FLT_MAX): still bare.** The water clamp is refuted. Left: our
+  converted model (FieldGrass01 on the free vanilla path grasshellebore01.nif, GrassFieldLive01 material) or another
+  field of our GRAS (coverage 100, Skyrim density 64 / 20). Sixth run: `-GrassOnly -TemplateModel` (our records, the
+  vanilla GrassHelleboreField02 model): flowers across the field = our converted model is the failure.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

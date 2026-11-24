@@ -11,6 +11,8 @@
 # ACROSS it at the texture's own strength. Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly          (terrain already done)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -Control (vanilla moss cover)
+#   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly -TemplateModel
+#       (our Skyrim grass records with the vanilla hellebore model: tells our converted model from our records)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1                     (terrain + grass)
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -Restore            (terrain back)
 param(
@@ -25,6 +27,7 @@ param(
     [double]$Threshold = 0.1,
     [switch]$GrassOnly,
     [switch]$Control,
+    [switch]$TemplateModel,
     [switch]$Restore
 )
 $ErrorActionPreference = "Stop"
@@ -64,6 +67,7 @@ if (-not $GrassOnly) {
 }
 $extra = @()
 if ($Control) { $extra += "--control" }
+if ($TemplateModel) { $extra += "--keep-template-model" }   # our GRAS records, the vanilla hellebore model
 Step "3. grass mod: the biome's own Base entry = LFieldGrass02 + $(if ($Control) { 'a vanilla cover (control)' } else { 'its Skyrim grass' })"
 python -I scripts\terrain\skyrim_grass_native.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF `
     --terrain $Staging --texconv $Texconv --out $Grass `
