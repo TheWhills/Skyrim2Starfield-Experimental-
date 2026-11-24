@@ -53,7 +53,24 @@ Plugin& Plugin::Get() {
     return instance;
 }
 
+std::optional<combat::HandPair> Plugin::ReadHandPair() const {
+    if (left_pair_path_.empty()) return std::nullopt;
+    std::ifstream f(left_pair_path_);
+    if (!f) return std::nullopt;
+    std::stringstream buf;
+    buf << f.rdbuf();
+    return combat::parse_hand_pair(buf.str());
+}
+
+void Plugin::WriteHandPair(const combat::HandPair* p) const {
+    if (left_pair_path_.empty()) return;
+    std::ofstream f(left_pair_path_, std::ios::trunc);
+    if (f && p) f << combat::format_hand_pair(*p);
+}
+
 void Plugin::LoadSettings(const std::string& ini_path) {
+    if (const auto slash = ini_path.find_last_of("\\/"); slash != std::string::npos)
+        left_pair_path_ = ini_path.substr(0, slash + 1) + "S2SCombat_LeftHand.txt";
     std::ifstream in(ini_path);
     if (!in) {
         REX::WARN("{} not found: defaults used (see sfse/S2SCombat.ini in the repo)", ini_path);
@@ -248,6 +265,7 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         } else {
             left_wanted_ = false;
             left_equip_due_ = -1.0;
+            WriteHandPair(nullptr);                                // no left weapon to restore at the next load
             if (left_equipped_.load()) {
                 SFSE::GetTaskInterface()->AddTask([this]() {
                     REX::INFO("left equip: {}", game::LeftUnequip());
@@ -306,12 +324,21 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
     }
     follow_invalid_ = true;                            // equips happen in menus; loads rebuild the 3D
     // after a load, what the game restored in each hand (owner's save / load test of the native left weapon, 2026-11-24)
+    // a loading screen opens: set the remembered pair's records now, so the game builds both hands itself while loading
+    if (name == "LoadingMenu" && opening && settings_.left_equip_key && settings_.left_equip_either_hand) {
+        if (const auto pair = ReadHandPair()) {
+            REX::INFO("left equip: loading: records for right {:08X} / left {:08X}: {}", pair->right, pair->left,
+                      game::ApplyHandSlots(pair->left, pair->right));
+            records_set_ = true;
+            expected_left_ = pair->left;
+        }
+    }
     if (name == "LoadingMenu" && !opening && settings_.left_equip_key) {
         left_report_id_ = settings_.left_equip_weapon;
         left_report_at_ = game::Now() + 3.0;
         REX::INFO("left equip: a save loaded; the plugin's left weapon state: {} (reported in 3 s)",
                   left_equipped_.load() ? "on (from before the load)" : "off");
-        left_restore_at_ = game::Now() + 2.0;            // then redo the sequence if the save has a left weapon
+        left_restore_at_ = game::Now() + 1.0;            // then keep, redo or undo (s2s after_load)
     }
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
@@ -457,6 +484,10 @@ void Plugin::StartLeftEquip() {
                 }
             }
             game::Notify("Left equip: see S2SCombat.log");
+            if (right_id && right_id != 0x1F4u) {                 // for the next load (also after a restart)
+                const combat::HandPair pair{right_id, id};
+                WriteHandPair(&pair);
+            }
             left_equipped_ = true;
             left_report_id_ = id;
             left_report_at_ = game::Now() + 1.5;
@@ -603,17 +634,31 @@ void Plugin::Tick() {
     if (const double due = left_restore_at_.load(); due >= 0.0 && now >= due) {
         left_restore_at_ = -1.0;
         game::LeftWeaponId([this](std::uint32_t left_id) {
-            if (!left_id || left_id == 0x1F4u) {
-                REX::INFO("left equip: after the load no weapon in LeftHand ({:08X})", left_id);
-                return;
-            }
             SFSE::GetTaskInterface()->AddTask([this, left_id]() {
-                REX::INFO("left equip: after the load {:08X} is in LeftHand: equipping it again; {}", left_id,
-                          game::LeftRestorePrepare(left_id));
-                left_equipped_ = false;
-                left_restore_id_ = left_id;
-                left_wanted_ = true;                       // the dual stance (if off), then StartLeftEquip
-                left_equip_due_ = game::Now() + 1.2;
+                using A = combat::AfterLoad;
+                const auto models = game::HandModelsNow();
+                const bool records = records_set_.exchange(false);
+                const auto step = combat::after_load(records, expected_left_.load(), left_id, models.left, models.right);
+                const char* what = step == A::Keep ? "keep" : step == A::Redo ? "redo" : step == A::UndoRecords ? "undo records"
+                                                                                                             : "nothing";
+                REX::INFO("left equip: after the load: LeftHand {:08X}, models right {} left {}, records set {} -> {}",
+                          left_id, models.right, models.left, records, what);
+                if (step == A::UndoRecords) {
+                    REX::INFO("left equip: {}", game::UndoHandSlots());
+                    left_wanted_ = false;
+                    left_equipped_ = false;
+                } else if (step == A::Keep) {               // the game built both hands itself
+                    left_equipped_ = true;
+                    left_wanted_ = true;
+                    left_report_id_ = left_id;
+                    left_report_at_ = game::Now() + 1.0;
+                } else if (step == A::Redo) {
+                    REX::INFO("left equip: {:08X} equipped again; {}", left_id, game::LeftRestorePrepare(left_id));
+                    left_equipped_ = false;
+                    left_restore_id_ = left_id;
+                    left_wanted_ = true;                   // the dual stance (if off), then StartLeftEquip
+                    left_equip_due_ = game::Now() + 1.2;
+                }
             });
         });
     }

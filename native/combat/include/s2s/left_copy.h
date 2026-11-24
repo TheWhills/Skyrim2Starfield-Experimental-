@@ -81,6 +81,23 @@ inline constexpr std::uint32_t kSlotRightHand = 0x00013F42, kSlotLeftHand = 0x00
 struct HandSlots { std::uint32_t right_weapon = 0, left_weapon = 0; };   // 0 = no record to change
 HandSlots hand_slots(std::uint32_t left_id, std::uint32_t right_id);
 
+// The last right / left pair of the native left weapon, kept in a small file beside the INI (SFSE on 1.16 has no
+// save-game hook for plugins), so the records can be set when a loading screen opens, also after a restart.
+// Format: "right=0026D8A5\nleft=0004F760\n". parse: nullopt unless both are FormIDs.
+struct HandPair { std::uint32_t right = 0, left = 0; };
+std::string format_hand_pair(const HandPair& p);
+std::optional<HandPair> parse_hand_pair(std::string_view text);
+
+// After a load, what to do with the native left weapon. Owner's runs 2026-11-24: the game saves which weapon is in
+// which hand but rebuilt no model with the records back at BothHands; with the records set while the loading screen
+// was up the game may build both itself.
+//   Nothing: no left weapon in the save and no records set. UndoRecords: records were set but the save has no left
+//   weapon (put them back). Keep: the expected left weapon is in LeftHand and both models were built. Redo: anything
+//   else with a left weapon in hand (take it off, run the sequence again).
+enum class AfterLoad { Nothing, UndoRecords, Keep, Redo };
+AfterLoad after_load(bool records_set, std::uint32_t expected_left, std::uint32_t left_in_hand, bool left_model,
+                     bool right_model);
+
 // A FormID from the INI: "0x0001234F", "0001234F", "1234f" (hex); "" or 0 or anything else -> nullopt.
 std::optional<std::uint32_t> parse_form_id(std::string_view text);
 

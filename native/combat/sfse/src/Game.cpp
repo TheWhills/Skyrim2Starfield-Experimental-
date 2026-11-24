@@ -999,6 +999,74 @@ struct LeftFollow {
 } g_left_follow;
 }  // namespace
 
+namespace {
+// Each weapon's record to its own hand (s2s hand_slots): RightHand attaches to "Weapon", LeftHand to WeaponLeft. The
+// original slots go into g_left_equip.changed once (LeftUnequip / UndoHandSlots put them back).
+std::string SetHandRecords(std::uint32_t left_id, std::uint32_t right_id) {
+    auto* weap_l = RE::TESForm::LookupByID<RE::TESObjectWEAP>(left_id);
+    auto* weap_r = right_id ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(right_id) : nullptr;
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    auto* right = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotRightHand);
+    if (!weap_l || !left || !right) return "records: weapon or slot not found; ";
+    auto& st = g_left_equip;
+    std::string out;
+    const auto hs = combat::hand_slots(left_id, weap_r ? right_id : 0);
+    for (auto [w, slot_id] : {std::pair{weap_r, hs.right_weapon}, std::pair{weap_l, hs.left_weapon}}) {
+        if (!w || !slot_id) continue;
+        auto* slot = slot_id == combat::kSlotRightHand ? right : left;
+        auto* type = static_cast<RE::BGSEquipType*>(w);
+        if (type->equipSlot == slot) continue;
+        out += std::format("{:08X} slot {} -> {} (in memory); ", w->GetFormID(), SlotName(type->equipSlot),
+                           SlotName(slot));
+        const bool listed = std::any_of(st.changed.begin(), st.changed.end(), [w](const auto& c) { return c.first == w; });
+        if (!listed) st.changed.emplace_back(w, type->equipSlot);
+        type->equipSlot = slot;
+    }
+    return out;
+}
+}  // namespace
+
+std::string ApplyHandSlots(std::uint32_t left_id, std::uint32_t right_id) {
+    auto out = SetHandRecords(left_id, right_id);
+    g_right_hand_only = true;                               // the stance re-equips keep to RightHand
+    return out.empty() ? "records already set" : out;
+}
+
+std::string UndoHandSlots() {
+    auto& st = g_left_equip;
+    std::string out;
+    for (auto& [w, slot] : st.changed) {
+        static_cast<RE::BGSEquipType*>(w)->equipSlot = slot;
+        out += std::format("{:08X} slot back to {}; ", w->GetFormID(), SlotName(slot));
+    }
+    st = {};
+    g_right_hand_only = false;
+    return out.empty() ? "no records were changed" : out;
+}
+
+HandModels HandModelsNow() {
+    HandModels m;
+    if (!FindHandNodes().empty()) return m;
+    const auto& h = g_hand_nodes;
+    auto any_child = [](RE::NiAVObject* node, bool skip_ik) {
+        RE::NiAVObject** data = nullptr;
+        std::uint32_t size = 0;
+        if (!node || !ReadChildren(node, g_children, data, size)) return false;
+        for (std::uint32_t i = 0; i < size; ++i) {
+            auto* c = data[i];
+            if (!c || !Readable(c, 0x150) || ParentOf(c) != node) continue;
+            const char* n = c->name.c_str();
+            const std::string_view name(n ? n : "");
+            if (skip_ik && (name == "R_HandIk" || name == "L_HandIk")) continue;
+            return true;
+        }
+        return false;
+    };
+    m.right = any_child(h.right, true);
+    m.left = any_child(h.left, false) || (g_left_follow.node && HasChild(h.wrist, g_left_follow.node));
+    return m;
+}
+
 std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either_hand) {
     auto* player = Player();
     auto* mgr = RE::ActorEquipManager::GetSingleton();
@@ -1011,23 +1079,14 @@ std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either
     if (!weap_l) return std::format("{:08X} is not a weapon", left_id);
     if (!left || !right || !either) return "RightHand / LeftHand / EitherHand slot form not found";
     auto& st = g_left_equip;
+    auto keep = std::move(st.changed);                       // records already set (at a loading screen) stay listed
     st = {};
+    st.changed = std::move(keep);
     st.left = left_id;
     st.right = weap_r ? right_id : 0;
     std::string out;
     if (either_hand) {
-        // each weapon's record to its own hand (s2s hand_slots): RightHand attaches to "Weapon", LeftHand to WeaponLeft
-        const auto hs = combat::hand_slots(left_id, weap_r ? right_id : 0);
-        for (auto [w, slot_id] : {std::pair{weap_r, hs.right_weapon}, std::pair{weap_l, hs.left_weapon}}) {
-            if (!w || !slot_id) continue;
-            auto* slot = slot_id == combat::kSlotRightHand ? right : left;
-            auto* type = static_cast<RE::BGSEquipType*>(w);
-            if (type->equipSlot == slot) continue;
-            out += std::format("{:08X} slot {} -> {} (in memory); ", w->GetFormID(), SlotName(type->equipSlot),
-                               SlotName(slot));
-            st.changed.emplace_back(w, type->equipSlot);
-            type->equipSlot = slot;
-        }
+        out += SetHandRecords(left_id, weap_r ? right_id : 0);
         if (weap_r) {   // the right one again, into RightHand only, so LeftHand is free
             RE::BGSObjectInstance item_r(weap_r, nullptr);
             const bool ok = mgr->EquipObject(player, item_r, right, false, false, false, true, false);

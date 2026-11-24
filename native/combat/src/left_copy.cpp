@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <string>
 
@@ -129,6 +130,39 @@ HandSlots hand_slots(std::uint32_t left_id, std::uint32_t right_id) {
     if (right_id) h.right_weapon = kSlotRightHand;
     if (left_id && left_id != right_id) h.left_weapon = kSlotLeftHand;
     return h;
+}
+
+std::string format_hand_pair(const HandPair& p) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "right=%08X\nleft=%08X\n", p.right, p.left);
+    return buf;
+}
+
+std::optional<HandPair> parse_hand_pair(std::string_view text) {
+    HandPair p;
+    while (!text.empty()) {
+        const auto nl = text.find('\n');
+        auto line = text.substr(0, nl);
+        text = nl == std::string_view::npos ? std::string_view{} : text.substr(nl + 1);
+        const auto eq = line.find('=');
+        if (eq == std::string_view::npos) continue;
+        auto key = line.substr(0, eq);
+        while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back()))) key.remove_suffix(1);
+        while (!key.empty() && std::isspace(static_cast<unsigned char>(key.front()))) key.remove_prefix(1);
+        const auto id = parse_form_id(line.substr(eq + 1));
+        if (iequals(key, "right")) p.right = id.value_or(0);
+        if (iequals(key, "left")) p.left = id.value_or(0);
+    }
+    if (!p.right || !p.left) return std::nullopt;
+    return p;
+}
+
+AfterLoad after_load(bool records_set, std::uint32_t expected_left, std::uint32_t left_in_hand, bool left_model,
+                     bool right_model) {
+    const bool has_left = left_in_hand != 0 && left_in_hand != 0x1F4u;     // 000001F4 = fists
+    if (!has_left) return records_set ? AfterLoad::UndoRecords : AfterLoad::Nothing;
+    if (records_set && left_in_hand == expected_left && left_model && right_model) return AfterLoad::Keep;
+    return AfterLoad::Redo;
 }
 
 std::optional<std::uint32_t> parse_form_id(std::string_view text) {

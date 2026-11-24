@@ -234,3 +234,11 @@ a weapon there is taken off (LeftRestorePrepare: the whole sequence undone if st
 off LeftHand) and the normal sequence runs again on it (dual stance, then the RightHand / LeftHand equips).
 Untested: a load after a restart.
 
+Owner's save / load test 2026-11-24 (restore build), **verified**: after a load the left weapon came back by itself
+about 3 s after the loading screen (the plugin took it off and ran the sequence again). Owner: copy how the game
+restores the normal weapon. The game saves which weapon is in which hand (GetEquippedWeapon(1) = the axe right after
+the load) and rebuilds the hands while loading; only our record changes (memory only) were missing. Now the last pair
+is kept in `S2SCombat_LeftHand.txt` beside the INI (SFSE 1.16 offers plugins no save hook; MO2 puts the file in
+Overwrite), its records are set when a loading screen *opens*, and 1 s after the load s2s after_load (tested)
+decides: keep (the game built both hands), redo (the old restore), or undo the records (the save has no left weapon).
+

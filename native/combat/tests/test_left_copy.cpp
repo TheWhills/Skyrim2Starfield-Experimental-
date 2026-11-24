@@ -173,6 +173,25 @@ static void slots_per_hand() {
     CHECK(two.right_weapon != kSlotEitherHand && two.left_weapon != kSlotEitherHand);   // the 2026-11-24 mistake
 }
 
+static void pair_file_and_after_load() {
+    const HandPair p{0x26D8A5, 0x4F760};
+    const auto text = format_hand_pair(p);
+    CHECK(text == "right=0026D8A5\nleft=0004F760\n");
+    const auto back = parse_hand_pair(text);
+    CHECK(back && back->right == 0x26D8A5u && back->left == 0x4F760u);
+    CHECK(parse_hand_pair("right = 0x0026D8A5\r\n left=4f760\r\n").has_value());      // CRLF, spaces, 0x
+    CHECK(!parse_hand_pair("right=0026D8A5\n") && !parse_hand_pair("") && !parse_hand_pair("left=zz\nright=1\n"));
+    using L = AfterLoad;
+    CHECK(after_load(false, 0, 0, false, true) == L::Nothing);                 // no left weapon anywhere
+    CHECK(after_load(true, 0x4F760, 0, false, true) == L::UndoRecords);        // records set, the save has none
+    CHECK(after_load(true, 0x4F760, 0x1F4, false, true) == L::UndoRecords);    // fists are no left weapon
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, true) == L::Keep);          // the game built both itself
+    CHECK(after_load(true, 0x4F760, 0x4F760, false, true) == L::Redo);         // no left model
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, false) == L::Redo);         // no right model
+    CHECK(after_load(false, 0, 0x4F760, true, true) == L::Redo);               // records not set (the 13:55 run)
+    CHECK(after_load(true, 0x4F760, 0x12345, true, true) == L::Redo);          // another left weapon in the save
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -190,6 +209,7 @@ int main() {
     form_ids();
     follow_steps();
     slots_per_hand();
+    pair_file_and_after_load();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);

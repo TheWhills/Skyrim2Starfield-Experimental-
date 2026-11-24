@@ -76,6 +76,14 @@ bool RightWeaponId(std::function<void(std::uint32_t)> result);
 // the plugin's sequence if it is still in memory, else takes the saved left weapon off LeftHand, so the normal
 // sequence can run again and build both models.
 bool LeftWeaponId(std::function<void(std::uint32_t)> result);
+// Set the two weapons' records to their hands ahead of a load (s2s hand_slots; owner, 2026-11-24: the game saves which
+// weapon is in which hand and rebuilds the hands while loading, but with the records back at BothHands it built no
+// model); UndoHandSlots puts them back when the save has no left weapon. HandModelsNow: whether a model hangs on each
+// hand (right: under the "Weapon" bone, the IK helpers aside; left: under WeaponLeft or moved to L_Wrist).
+std::string ApplyHandSlots(std::uint32_t left_id, std::uint32_t right_id);
+std::string UndoHandSlots();
+struct HandModels { bool right = false, left = false; };
+HandModels HandModelsNow();
 std::string LeftRestorePrepare(std::uint32_t left_id);
 void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log);
 // The game's own left-hand model (a LeftHand-slot weapon, hung under WeaponLeft) moved onto L_Wrist at the left grip
