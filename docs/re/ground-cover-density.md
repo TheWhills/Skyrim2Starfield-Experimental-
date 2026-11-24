@@ -204,7 +204,9 @@ placeholders and replace the vanilla slot defaults (`FUN_140794170` overwrites t
   (owner, 2026-11-24, route A test): with a second mask-0 LNAM appended to NirnOceanNoCoating, the LDefault006Base
   layers drew the biome's FIRST mask-0 entry's ground (LSandPacked05_Gray) and grew nothing: **supported hypothesis**
   that the first LNAM per mask fills the slot. Route A therefore rewrites the biome's own first entry
-  (skyrim_grass_native.py --slot-first).
+  (skyrim_grass_native.py --slot-first). **Refuted for the look** (second run): with the first mask-0 LNAM naming our
+  texture the layers still drew pale sand and grew nothing. Open whether the slot's ground comes from the ANAM, or
+  whether the overlay entry is swapped at all for layers 0..4 (next run: --slot-alt with a vanilla cover).
 * **unresolved**: the `textures\terrain\` root of density-map keys; what OverlayMasks and bAllowProcGenOnOverlays
   drive (procedural blocks / objects).
 * **supported hypothesis**: GCVR +0x88 = threshold; biome per overlay from the anchor cell.

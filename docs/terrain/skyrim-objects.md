@@ -692,6 +692,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   test's appended mask-0 cover did grow at edges). Next: `grass_slot_test.ps1 -GrassOnly` rewrites the biome's own
   first mask-0 entry instead (skyrim_grass_native.py --slot-first); if the ground is field grass again but still
   bare, `-GrassOnly -Control` (vanilla moss cover) separates our grass model from the route.
+  **Second run (owner, --slot-first, verified in game): the same pale ground, no grass.** So the placeholder's look
+  does not come from the biome's first mask-0 LNAM texture (my "first entry" reading above is refuted for the look).
+  Candidates: the mask-0 ANAM texture (LSandRough02_Gray, also pale sand), or no swap at all (LDefault006Base drawing
+  itself). Third run: `-GrassOnly -Control` with --slot-alt (the first mask-0 ANAM names our texture too) and the
+  vanilla moss cover: field-grass look = the ANAM is the slot's ground; moss = the cover reaches the layer (then our
+  converted grass model is what failed); still pale and bare = the swap does not happen for layers 0..4.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

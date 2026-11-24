@@ -316,6 +316,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    still look the same? -Restore puts the terrain back.
    Second run (after the first gave pale "snow" ground and no grass; terrain stays): add -GrassOnly. If the ground is
    field grass again but bare: -GrassOnly -Control (a vanilla moss cover instead of the Skyrim grass).
+   Third run (second gave the same pale ground, no grass): -GrassOnly -Control (now also rewrites the mask's ANAM).
 8j. (2026-11-22) Grass test, terrain byte 6 (Starfield closed): powershell -ExecutionPolicy Bypass -File
    tools\owner\terrain_byte6.ps1 -Mask FlatOut ; -Restore undoes it. With S2S Grass Native (--control) on.
 8i. (2026-11-22) Skyrim's grass as Starfield grass (wind, fade), through Nirn's own biome under Riverwood:

@@ -346,6 +346,9 @@ class PlanetBiomeTests(unittest.TestCase):
         terr = [(e["kind"], e["mask"], e["ltex"], e["gcvr"]) for e in sfgrass.biome_terrain(out)]
         self.assertEqual(terr, [("LNAM", 0, 0x99, 0x77), ("ANAM", 0, 0x32, 0), ("LNAM", 0, 0x33, 0),
                                 ("LNAM", 1, 0x34, 5)])                    # only the first mask-0 LNAM changes
+        alt = [(e["kind"], e["mask"], e["ltex"], e["gcvr"])
+               for e in sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 0, 0x99, 0x77, alt=True))]
+        self.assertEqual(alt[1], ("ANAM", 0, 0x99, 0))                  # the ANAM's texture too, its cover kept
         added = sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 4, 0x99, 0x77))
         self.assertEqual(added[-1], {"kind": "LNAM", "mask": 4, "ltex": 0x99, "gcvr": 0x77})
 

@@ -5,7 +5,8 @@
 # 3. grass mod: Nirn's ocean biome's OWN first mask-0 (Base) entry becomes {our LFieldGrass02 slot, its Skyrim grass
 #    cover} (--slot-first), threshold 0.1, the working route's model options.
 # First run (2026-11-24, owner): with the entry APPENDED instead, the square drew the biome's first mask-0 ground
-# (LSandPacked05_Gray, pale "snow") and grew nothing. Now the first entry itself is changed.
+# (LSandPacked05_Gray, pale "snow") and grew nothing. Second run (first LNAM rewritten): the same pale ground, no
+# grass. Now the first ANAM's texture is rewritten too (--slot-alt), and -Control tells our grass model from the route.
 # Expected in game: the field looks as before (the biome draws our LFieldGrass02 for the placeholder) and grass grows
 # ACROSS it at the texture's own strength. Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\grass_slot_test.ps1 -GrassOnly          (terrain already done)
@@ -66,7 +67,7 @@ if ($Control) { $extra += "--control" }
 Step "3. grass mod: the biome's own Base entry = LFieldGrass02 + $(if ($Control) { 'a vanilla cover (control)' } else { 'its Skyrim grass' })"
 python -I scripts\terrain\skyrim_grass_native.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF `
     --terrain $Staging --texconv $Texconv --out $Grass `
-    --only-ltex LFieldGrass02 --biome-masks 0 --slot-first --threshold $Threshold `
+    --only-ltex LFieldGrass02 --biome-masks 0 --slot-first --slot-alt --threshold $Threshold `
     --vanilla-paths --coverage 100 --vanilla-material auto @extra
 if ($LASTEXITCODE -ne 0) { Fail "skyrim_grass_native" }
 Write-Host "`ndone. S2S Grass Native on in MO2 (after SkyrimTerrainTamriel_Mars.esm), then coc SKY_TamrielRiverwoodSpawn." -ForegroundColor Green

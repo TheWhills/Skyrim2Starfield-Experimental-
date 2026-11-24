@@ -107,14 +107,18 @@ def biome_with_entries(subs, entries: Iterable[Tuple[int, int, int]]):
     return out
 
 
-def biome_with_slot(subs, mask: int, ltex: int, gcvr: int):
+def biome_with_slot(subs, mask: int, ltex: int, gcvr: int, alt: bool = False):
     """A BIOM's subrecords with the FIRST LNAM of `mask` set to {ltex, gcvr} (inserted after the last LNAM if the
-    biome has none for that mask). 2026-11-24 (owner, in game): a second mask-0 entry appended after NirnOceanNoCoating's
-    own did not take the Base slot: the placeholder drew the first entry's ground (LSandPacked05_Gray) and no grass
-    grew, so a slot is changed by changing the biome's own entry."""
+    biome has none for that mask); with alt also the first ANAM of `mask` gets ltex (its cover kept).
+    2026-11-24 (owner, in game): a second mask-0 entry appended after NirnOceanNoCoating's own did not take the Base
+    slot: the placeholder drew a pale sand ground and no grass grew. Rewriting the first LNAM kept the same pale ground
+    (and no grass with our converted Skyrim grass): the ground may come from the ANAM (LSandRough02_Gray), hence alt."""
     subs = [(s, bytes(d)) for s, d in subs]
-    out, last, done = [], None, False
+    out, last, done, done_alt = [], None, False, False
     for s, d in subs:
+        if s == b"ANAM" and alt and len(d) >= 12 and not done_alt and struct.unpack_from("<I", d)[0] == mask:
+            d = struct.pack("<2I", mask, ltex) + d[8:]
+            done_alt = True
         if s == b"LNAM" and len(d) >= 12:
             m = struct.unpack_from("<I", d)[0]
             if m == mask and not done:

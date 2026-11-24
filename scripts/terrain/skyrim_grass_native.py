@@ -520,6 +520,9 @@ def main(argv=None):
                     help="test (2026-11-24, docs/re/ground-cover-density.md route A): instead of appending entries, "
                          "rewrite the biome's own FIRST entry of each --biome-masks mask to {the one --only-ltex "
                          "slot, its cover}. An appended second mask-0 entry did not take the Base slot in game")
+    ap.add_argument("--slot-alt", action="store_true",
+                    help="with --slot-first: also the biome's first ANAM of each mask names that slot's texture "
+                         "(2026-11-24: rewriting the LNAM alone left the placeholder drawing pale sand)")
     ap.add_argument("--ltex-kind-from", default="", metavar="EDITORID",
                     help="test (2026-11-23): give every covered slot's LTEX the material type (MNAM) and QNAM of this "
                          "vanilla LTEX (e.g. LDirtCracked02), overriding the terrain's re-skin in S2SGrass.esm; the "
@@ -806,12 +809,12 @@ def main(argv=None):
             sys.exit(f"--slot-first needs exactly one covered texture (--only-ltex), got {len(slots)}")
         subs = target[2]
         for m in masks:
-            subs = sfgrass.biome_with_slot(subs, m, slots[0], covers[0][1])
+            subs = sfgrass.biome_with_slot(subs, m, slots[0], covers[0][1], alt=a.slot_alt)
         recs.append((b"BIOM", target[1], subs, target[3]))
         report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "masks": masks,
                            "entries_added": 0, "slot_first": {"ltex": f"{slots[0]:08X}", "gcvr": f"{covers[0][1]:08X}"}}
         print(f"--slot-first: the biome's own first entry of mask(s) {', '.join(map(str, masks))} = "
-              f"{{{slots[0]:08X}, {covers[0][1]:08X}}}")
+              f"{{{slots[0]:08X}, {covers[0][1]:08X}}}" + (" (and its first ANAM's texture)" if a.slot_alt else ""))
     elif a.mask_test and target is not None:
         picks = mask_test_grasses([(r[3], r[2]) for r in sf if r[0] == b"GRAS"], masks)
         entries = []
