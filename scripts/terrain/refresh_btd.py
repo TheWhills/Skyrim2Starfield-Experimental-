@@ -119,6 +119,26 @@ def cmd_rebuild(a):
     return subprocess.call(cmd)
 
 
+def lookalikes(overrides, sky_ltex, ltex_grass):
+    """{Starfield LTEX form id: (look key, grassy)} for the converted Skyrim ground textures (2026-11-24,
+    landtex.choose_layers): look key = the Skyrim texture's diffuse + normal (lower case; None without a diffuse),
+    grassy = Skyrim grows grass on it. overrides: overlays_params.json ltex_overrides; sky_ltex: {Skyrim fid: {"edid",
+    "diffuse", "normal"}}; ltex_grass: {Skyrim fid: [GRAS]}."""
+    by_edid = {}
+    for fid, v in sky_ltex.items():
+        by_edid.setdefault((v.get("edid") or "").lower(), fid)
+    out = {}
+    for o in overrides or []:
+        f = o["form_id"]
+        sf = int(f, 16) if isinstance(f, str) else int(f)
+        sk = by_edid.get(o["skyrim"].lower())
+        v = sky_ltex.get(sk, {}) if sk is not None else {}
+        d = (v.get("diffuse") or "").lower()
+        key = (d, (v.get("normal") or "").lower()) if d else None
+        out[sf] = (key, bool(ltex_grass.get(sk)) if sk is not None else False)
+    return out
+
+
 def staged_textures(staging, skyrim_esm, sf_data, world="Tamriel", consistent_edges=True):
     """(planes {form id: uint8 vertex grid}, ox, oy, sp, Starfield LTEX names {form id: name}) from Skyrim.esm and the
     staging's own mapping (ltex_mapping.json) and converted-ground slots (overlays_params.json ltex_overrides)."""
@@ -344,7 +364,16 @@ def cmd_recompute(a):
         if match < a.min_match:
             print(f"  {o['world']}: below {a.min_match:.0%}: these inputs are not the build's; nothing written")
             continue
-        words, qmap, beyond = tile_layers(planes, table, ox, oy, sp, t, a.blend, "head", a.warp)
+        looks = None
+        if not getattr(a, "no_lookalikes", False):
+            from fo4sf import landtex as _lt, skyrimgrass
+            looks = lookalikes(prm.get("ltex_overrides"), _lt.read_ltex_loaded(a.skyrim), skyrimgrass.read_grass(a.skyrim)[0])
+            groups = {}
+            for f, (k, _g) in looks.items():
+                if k is not None:
+                    groups.setdefault(k, []).append(f)
+            print(f"  look-alike groups (same diffuse + normal): {sum(1 for v in groups.values() if len(v) > 1)}")
+        words, qmap, beyond = tile_layers(planes, table, ox, oy, sp, t, a.blend, "head", a.warp, looks=looks)
         data = btd.write(btd.Btd(old.version, old.hmin, old.hmax, table, old.heights_raw, words, qmap))
         assert np.array_equal(btd.read(data).heights_raw, old.heights_raw)      # heights exactly as installed
         if not a.dry_run:
@@ -381,6 +410,9 @@ def main(argv=None):
     ap.add_argument("--blend", choices=("solid", "dither", "noise", "smooth"), default="smooth", help="--ltex-blend")
     ap.add_argument("--warp", type=float, default=1.5, help="--ltex-warp (m)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-lookalikes", action="store_true",
+                    help="recompute: the plain top-five cut per quadrant (before 2026-11-24): look-alike Skyrim twins "
+                         "(LFieldGrass02 / LFieldGrass02NoGrass) compete for the five separately")
     ap.add_argument("--skyrim-esm-only", action="store_true",
                     help="recompute: paint from Skyrim.esm alone, without Update.esm and the DLC over it (before "
                          "2026-11-23)")

@@ -316,6 +316,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    (lines "overlay palette ... given our ground cover"). -GrassOnly rebuilds only the grass mod.
    Second run (after the terrain fix: rock ground had drawn Nirn's vanilla ground): the same command, without -GrassOnly
    (it reinstalls the terrain).
+   Third (look-alike twins kept grassy; terrain recomputed by Claude in the staging): the same command again.
+   For a bare spot: player.getpos x / y there AND right after coc SKY_TamrielRiverwoodSpawn in the same session
+   (ground_at.py --spawn-at; the shift changes between sessions).
 8l. (2026-11-24) Skyrim's grass on all of Tamriel, 7 grass textures (after 8k worked). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\grass_tamriel.ps1
    (terrain: the 7 textures as slot placeholders everywhere; reinstall; grass mod with all 7 covers, own material,

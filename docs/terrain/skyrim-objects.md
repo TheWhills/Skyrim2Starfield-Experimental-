@@ -852,6 +852,18 @@ Max Density; what a vanilla grass model needs. Two tools:
   92 %; LRocks01 20 % -> 83 %; LSnow01 90 % -> 98 %; Skyrim's default dirt 81 % -> 96 %. Fixed with
   `btd_byte6.py restore` (byte 6 = 0, as the converter writes it) on the staged files and the slot test's backup;
   `grass_hook.ps1` now always runs it. Probably also the pale "snow" ground of the first slot test.
+* **Look-alike twins (2026-11-24, verified offline)**: owner's bare spot on the Riverwood river bank (ground_at with a
+  fresh merge shift): Skyrim paints LFieldGrass02 at 1.0, the BTD quadrant held LFieldGrass02NoGrass instead
+  (same diffuse and normal, no grass list). A 50 m quadrant covers ~800 Skyrim vertices with up to 14 textures there;
+  the top-five cut kept the no-grass twin. Now look-alike twins (same diffuse + normal: 13 groups such as FieldGrass02,
+  FallForestGrass01 / NoFern / NoGrass, Rocks01 / NoRocks) compete for the five as one group, grassy twin first
+  (landtex.choose_layers, GRASSY_BIAS 2), and a dropped twin's weight is drawn as its kept twin (same look). Recompute
+  (refresh_btd.py recompute, smooth, 5 min): 2,138 quadrants merge a twin; the spot now draws LFieldGrass02 at 7/7.
+  Every 2nd Skyrim vertex, grassy textures without the underwater three: our grassy weight / Skyrim's 97.0 % -> 100.3 %;
+  where Skyrim is at least half grassy, ours has a grassy layer >= 0.1 at 92.1 % -> 93.0 %. Ivarstead spot unchanged
+  (LFallForestGrass01NoFern 4/7 over fall forest dirt: should grow, thinner than Skyrim). `--no-lookalikes` = before.
+* **Positions in game**: the merge shift changes between sessions (2026-11-24: (-2200, +1500) m, earlier
+  (-37.6, +47.0)); ground_at.py needs `player.getpos` right after `coc` of the same session (--spawn-at).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

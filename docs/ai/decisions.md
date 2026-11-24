@@ -2877,3 +2877,14 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   palette entry's GCVR is a plain FormID the game looks up later (verified), so filling it is a small, checkable hook.
 - Alternatives: more textures sharing the 7 slots (they render as one texture); hooking FUN_1409a84d0 (would see the
   whole merged palette, needs the overlay filter); keeping route A as the fallback without SFSE (it stays available).
+
+## 2026-11-24 (night): look-alike Skyrim textures share a quadrant slot, grassy twin first (Claude)
+- Decision: the terrain's per-quadrant five-texture cut (make_skyrim_overlay.tile_layers, aligned slots) groups
+  converted textures with the same Skyrim diffuse + normal; a group is ranked by its total weight, its grassy members
+  first (GRASSY_BIAS 2), and a dropped member's weight is drawn as a kept member of its group.
+- Why: Skyrim's NoGrass / NoFern / NoRocks twins look the same as their grassy texture; the plain cut kept the
+  no-grass twin at the owner's Riverwood spot, so the ground looked right and grew nothing. Measured: grassy weight
+  97.0 % -> 100.3 % of Skyrim's, grassy layer where Skyrim is mostly grassy 92.1 % -> 93.0 %.
+- Alternatives: merging twins outright (loses Skyrim's own no-grass spots, e.g. paths); per-sample texture choice
+  (not possible: one LTEX per layer per quadrant). Trade-off: a kept grassy twin also covers its no-grass twin's share
+  in that quadrant, so some grass grows where Skyrim had none.

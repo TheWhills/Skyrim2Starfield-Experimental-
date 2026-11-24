@@ -595,6 +595,54 @@ def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blen
 EDGE_SAMPLES = 4
 SLOTS = 5                                    # bytes 0..4; byte 4 is the base (every alpha 0)
 
+# 2026-11-24 (owner's Riverwood river bank, ground_at with a fresh merge shift): Skyrim paints LFieldGrass02 at 1.0,
+# the BTD quadrant there holds LFieldGrass02NoGrass instead. Skyrim's "NoGrass" / "NoFern" / "NoRocks" twins share
+# the diffuse and normal of their grassy texture; a 50 m quadrant covers ~800 Skyrim vertices with up to 14 textures,
+# and the top-five cut kept the no-grass twin (4.8 % of the quadrant) over the grassy one (5.5 %) at random. Twins
+# look the same, so they compete for one slot as a group and all of a group's weight goes to its kept members.
+GRASSY_BIAS = 2.0                            # a grassy twin counts double when a group picks its members
+
+
+def choose_layers(sums, looks=None, grassy=None, slots: int = SLOTS):
+    """One quadrant's textures: sums [k] weights per plane; looks[j]: a key shared by planes that render the same
+    (diffuse + normal; None = its own); grassy[j]: Skyrim grows grass on it. Returns (kept: plane indices, most
+    (merged) weight first, at most `slots`; merge {dropped plane: kept plane of the same look}; kept weights {j: w}).
+    A look group's first member is ranked by the group's total weight, later members by their own; within a group,
+    members are taken grassy-first (GRASSY_BIAS). A dropped member's weight goes to a kept member of its group,
+    grassy to grassy where possible. Without looks this is the plain top-`slots` cut."""
+    k = len(sums)
+    present = [j for j in range(k) if sums[j] > 0]
+    if not present:
+        return [0], {}, {0: 0.0}
+    looks = looks or [None] * k
+    grassy = grassy or [False] * k
+    groups = {}
+    for j in present:
+        key = looks[j] if looks[j] is not None else ("own", j)
+        groups.setdefault(key, []).append(j)
+    entries = []
+    for key, mem in groups.items():
+        mem.sort(key=lambda j: -(float(sums[j]) * (GRASSY_BIAS if grassy[j] else 1.0)))
+        total = float(sum(sums[j] for j in mem))
+        entries.append((total, 0, mem[0], key))
+        for i, j in enumerate(mem[1:], 1):
+            entries.append((float(sums[j]), i, j, key))
+    entries.sort(key=lambda e: (-e[0], e[1]))
+    taken = {e[2] for e in entries[:slots]}
+    merge = {}
+    weights = {j: float(sums[j]) for j in taken}
+    for key, mem in groups.items():
+        kept = [j for j in mem if j in taken]
+        for j in mem:
+            if j in taken or not kept:
+                continue
+            same = [m for m in kept if grassy[m] == grassy[j]]
+            dst = (same or kept)[0]
+            merge[j] = dst
+            weights[dst] += float(sums[j])
+    kept = sorted(taken, key=lambda j: -weights[j])
+    return kept, merge, weights
+
 
 def plan_slots(kept, weights=None, rounds=3):
     """kept: {(qr, qc): [table index, ...] (the quadrant's textures, most weight first, at most SLOTS)} ->

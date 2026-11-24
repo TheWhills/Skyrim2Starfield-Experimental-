@@ -220,13 +220,16 @@ def skyrim_ground(a, ltex, cells, usage, out, colours=None):
             "free_slots": len(slots), "borrowed": borrowed}
 
 
-def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.0, rows=None, slots="aligned"):
+def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.0, rows=None, slots="aligned",
+                looks=None):
     """One tile's BTD texture part: (sample words [size, size] uint16, quad map [2n, 2n, 8] uint8, [weight beyond the
     five layers per band]). planes: {Starfield LTEX form id: merged Skyrim vertex grid of its weight (uint8 0..255)},
     origin (ox, oy) and spacing sp in Skyrim units; used: the BTD's LTEX table; t: the overlay tile (sample_coords);
     warp_m: landtex.warp_offsets for blend "noise". rows: only these 64-row bands (a spot check; the rest left 0).
     slots "aligned" (blend "noise", 2026-11-22): two passes, first each quadrant's five textures, then byte positions
-    planned with the neighbours (landtex.plan_slots) and the samples encoded edge-aware (encode_band_aligned)."""
+    planned with the neighbours (landtex.plan_slots) and the samples encoded edge-aware (encode_band_aligned).
+    looks (aligned slots only, 2026-11-24): {form id: (look key or None, grassy)}: textures that render the same
+    compete for the five as one group and pass their weight to the kept twin (landtex.choose_layers)."""
     import numpy as np
     from fo4sf import landtex
     xs, ys = t.sample_coords()
@@ -252,22 +255,39 @@ def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.
                                               sp, xu, yu) for f in used])
     if blend in ("noise", "smooth") and slots == "aligned" and rows is None:
         nq = size // 64
-        kept, kw = {}, {}
+        kept, kw, merges = {}, {}, {}
+        lk = [(looks or {}).get(f, (None, False))[0] for f in used] if looks else None
+        gr = [bool((looks or {}).get(f, (None, False))[1]) for f in used] if looks else None
         for r0 in range(0, size, 64):                        # pass 1: each quadrant's textures, most weight first
             sums = band_weights(r0).reshape(len(used), 64, nq, 64).sum(axis=(1, 3))     # [k, nq]
             for qc in range(nq):
-                order = [j for j in np.argsort(-sums[:, qc]) if sums[j, qc] > 0][:landtex.SLOTS] or [0]
+                if looks:
+                    order, merge, wk = landtex.choose_layers(sums[:, qc], lk, gr, landtex.SLOTS)
+                    if merge:
+                        merges[(r0 // 64, qc)] = merge
+                    kw[(r0 // 64, qc)] = {int(j): w for j, w in wk.items()}
+                    order = [int(j) for j in order]
+                else:
+                    order = [j for j in np.argsort(-sums[:, qc]) if sums[j, qc] > 0][:landtex.SLOTS] or [0]
+                    kw[(r0 // 64, qc)] = {int(j): float(sums[j, qc]) for j in order}
                 kept[(r0 // 64, qc)] = order
-                kw[(r0 // 64, qc)] = {int(j): float(sums[j, qc]) for j in order}
                 tot = float(sums[:, qc].sum()) or 1.0
-                beyond.append(float(sum(sums[j, qc] for j in np.argsort(-sums[:, qc])[landtex.SLOTS:])) / tot)
+                beyond.append(max(0.0, tot - sum(kw[(r0 // 64, qc)].values())) / tot)
         plan = landtex.plan_slots(kept, kw)
         est = {}
+        if looks:
+            print(f"    look-alike textures: {len(merges)} quadrants pass a dropped twin's weight to the kept one")
         for r0 in range(0, size, 64):                        # pass 2: the samples, edge-aware
             qr = r0 // 64
             side = {"w": (0, -1), "e": (0, 1), "s": (-1, 0), "n": (1, 0)}
+            bw = band_weights(r0)
+            for qc in range(nq):
+                for src, dst in merges.get((qr, qc), {}).items():
+                    cs = slice(qc * 64, (qc + 1) * 64)
+                    bw[dst, :, cs] += bw[src, :, cs]
+                    bw[src, :, cs] = 0.0
             q, w = landtex.encode_band_aligned(
-                band_weights(r0), used, [plan[(qr, qc)] for qc in range(nq)],
+                bw, used, [plan[(qr, qc)] for qc in range(nq)],
                 lambda qc, sd: plan.get((qr + side[sd][0], qc + side[sd][1])), (xs, ys[r0:r0 + 64]), len(used),
                 index_rule, stats=est, partial=blend == "smooth")
             qmap[qr, :, :] = q
