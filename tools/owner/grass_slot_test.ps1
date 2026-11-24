@@ -67,7 +67,7 @@ if ($Control) { $extra += "--control" }
 Step "3. grass mod: the biome's own Base entry = LFieldGrass02 + $(if ($Control) { 'a vanilla cover (control)' } else { 'its Skyrim grass' })"
 python -I scripts\terrain\skyrim_grass_native.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF `
     --terrain $Staging --texconv $Texconv --out $Grass `
-    --only-ltex LFieldGrass02 --biome-masks 0 --slot-first --slot-alt --threshold $Threshold `
+    --only-ltex LFieldGrass02 --biome-masks 0 --slot-first --slot-alt --no-water-clamp --threshold $Threshold `
     --vanilla-paths --coverage 100 --vanilla-material auto @extra
 if ($LASTEXITCODE -ne 0) { Fail "skyrim_grass_native" }
 Write-Host "`ndone. S2S Grass Native on in MO2 (after SkyrimTerrainTamriel_Mars.esm), then coc SKY_TamrielRiverwoodSpawn." -ForegroundColor Green

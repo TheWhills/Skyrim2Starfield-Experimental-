@@ -352,6 +352,16 @@ class PlanetBiomeTests(unittest.TestCase):
         added = sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 4, 0x99, 0x77))
         self.assertEqual(added[-1], {"kind": "LNAM", "mask": 4, "ltex": 0x99, "gcvr": 0x77})
 
+    def test_no_water_clamp(self):
+        dnam = bytes(range(40))
+        out = sfgrass.without_water_clamps(dnam)
+        self.assertEqual(out[:20], dnam[:20])
+        self.assertEqual(out[28:], dnam[28:])
+        self.assertEqual(struct.unpack_from("<2f", out, 20), (sfgrass.NO_CLAMP, sfgrass.NO_CLAMP))
+        _raw, by, _log = self._run(["--only-ltex", "LFernGround", "--no-water-clamp"])
+        d = sfgrass.parse_gras_dnam(dict((s, bytes(v)) for s, v in by["S2S_Fern"][2])[b"DNAM"])
+        self.assertEqual((d["above_water_clamp"], d["below_water_clamp"]), (sfgrass.NO_CLAMP, sfgrass.NO_CLAMP))
+
     def test_slot_first(self):
         _raw, by, log = self._run(["--only-ltex", "LFernGround", "--slot-first"])
         cover = by["S2S_Cover_00000031"]

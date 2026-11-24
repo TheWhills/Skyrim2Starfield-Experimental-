@@ -33,6 +33,19 @@ def parse_gras_dnam(d: bytes) -> Dict:
             "dirtiness_max": dmax}
 
 
+NO_CLAMP = 3.4028234663852886e+38     # FLT_MAX: the vanilla moss mounds' water clamps (no clamp)
+
+
+def without_water_clamps(dnam: bytes) -> bytes:
+    """A GRAS DNAM with both water clamps (above / below, floats at 20 and 24) set to FLT_MAX = no clamp.
+    2026-11-24: the vanilla moss cover (clamps FLT_MAX) grew across the slot-test field, our Skyrim grass (template
+    GrassHelleboreField02: above-water clamp 0.5) grew nothing on the same setup; the placement code
+    (FUN_140621fc0) compares each point's height with the cell's water height plus these clamps."""
+    b = bytearray(dnam)
+    struct.pack_into("<2f", b, 20, NO_CLAMP, NO_CLAMP)
+    return bytes(b)
+
+
 def gras_dnam_from_skyrim(template_dnam: bytes, sky: Dict, density_scale: float = 1.0) -> bytes:
     """The template GRAS's DNAM with Skyrim's density, slopes, height / colour range and flags written in; the
     Starfield-only fields (contrast, cluster scale, wind, water clamps, coverage, dirtiness) stay the template's."""

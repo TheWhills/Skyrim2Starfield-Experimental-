@@ -708,6 +708,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   `grass_slot_test.ps1 -GrassOnly` (no -Control) now; (2) a few pale-sand spots remain (owner's 2nd screenshot of the
   run): if outside the square or not LFieldGrass02 ground, the byte-6 FlatIn remainder layer draws the ocean biome's
   mask-3 ground there.
+  **Fourth run (owner, -GrassOnly = our converted Skyrim grass, verified in game): field-grass ground (no pale sand),
+  NO grass.** Same route as the third run, so our grass records / model fail, not the route. Our GRAS copy the
+  GrassHelleboreField02 template: above-water clamp 0.5 (the moss mounds that grew: FLT_MAX for both clamps), and the
+  placement code (FUN_140621fc0) tests each point's height against the cell's water height plus the clamps; our
+  Riverwood cells carry a 381.43 m water plane. Supported hypothesis: the water clamp keeps our grass off (it would
+  also explain why Skyrim grass builds grew nothing since 2026-11-22). Fifth run: `-GrassOnly` again, the script now
+  adds --no-water-clamp (both clamps FLT_MAX). Still bare = the converted model (next: --keep-template-model).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

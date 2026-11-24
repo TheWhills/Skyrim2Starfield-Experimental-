@@ -520,6 +520,10 @@ def main(argv=None):
                     help="test (2026-11-24, docs/re/ground-cover-density.md route A): instead of appending entries, "
                          "rewrite the biome's own FIRST entry of each --biome-masks mask to {the one --only-ltex "
                          "slot, its cover}. An appended second mask-0 entry did not take the Base slot in game")
+    ap.add_argument("--no-water-clamp", action="store_true",
+                    help="test (2026-11-24): our grasses get no water clamps (both FLT_MAX, as the vanilla moss mounds "
+                         "that grew across the slot-test field); the hellebore template's above-water clamp 0.5 is "
+                         "the one difference left between that control and our grass")
     ap.add_argument("--slot-alt", action="store_true",
                     help="with --slot-first: also the biome's first ANAM of each mask names that slot's texture "
                          "(2026-11-24: rewriting the LNAM alone left the placeholder drawing pale sand)")
@@ -763,9 +767,11 @@ def main(argv=None):
             fid = sfplugin.new_form_id(len(recs), nm)
             # MODT: Mutagen's "TextureFileHashes"; the template's describes the template's model, not ours (2026-11-23:
             # the vanilla NIF at our path grew nothing, at its own path with the same MODT it grows)
+            dnam = with_coverage(sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale), a.coverage)
+            if a.no_water_clamp:
+                dnam = sfgrass.without_water_clamps(dnam)
             subs = sfplugin.edit(gt[2], {b"EDID": sfplugin.zs("S2S_" + r["edid"]), b"MODL": sfplugin.zs(model),
-                                         b"DNAM": with_coverage(sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale),
-                                                                a.coverage)},
+                                         b"DNAM": dnam},
                                  drop=[b"MODT"] if (a.drop_modt and not a.keep_template_model) else [])
             recs.append((b"GRAS", gt[1], subs, fid))
             gras_fid[g] = fid
