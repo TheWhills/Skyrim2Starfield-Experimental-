@@ -771,6 +771,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   (fo4sf.textures.coverage_mips: every level rescaled so the share of texels passing the alpha test stays level 0's;
   each level BC4 by texconv, joined; checked with the real texconv: 9 levels, exact BC4 size). Twelfth run:
   `-GrassOnly -OwnMaterial`.
+  **Twelfth run (owner, coverage mips, verified in game): fins remain** (smaller, pale arrowheads). Our opacity map is
+  clean (83 % exactly 0, 2 % between 1 and the threshold) and Skyrim's FieldGrass01 really is 3 cards (9 verts, UVs
+  -0.08..1.17), so a missing cut-out on our model would show whole cards, not arrowheads. The vanilla model at our
+  path (grasscityshort01_shape01.nif) is Starfield's short city grass: 50 tris, 0.32 m tall pointed blade clusters,
+  which matches the fins. Supported hypothesis: some instances resolve the cellgrass copy (made at start-up with each
+  file's location) to the vanilla file. Also found: FieldGrass02 is Skyrim's FieldGrassFlowers02.nif, which
+  --vanilla-paths made share FieldGrass01's model. Thirteenth run: `-GrassOnly -OwnMaterial -FlatPaths` (each Skyrim
+  grass its own model at a NEW path directly in landscape\grass\, s2s_landscape_grass_<name>.nif): grass and no fins =
+  fins were vanilla instances and new paths work (no 6-path limit); no grass = new files miss the start-up copy.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
