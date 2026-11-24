@@ -726,6 +726,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   GrassFieldLive01), so supported hypothesis: a game material brings its own texture layout and FieldGrass01's UVs
   land on transparent parts of it. Seventh run: `-GrassOnly -Material Bladed\GrassCityShort01`. The real fix is the
   open item "Skyrim's textures on grass" (the grass system refuses our .mat; why = next Starfield.exe question).
+  **Seventh run (owner, GrassCityShort01 on the field grass model, verified in game): still bare.** Not the material.
+  Offline comparison (grass_model_compare.py + sfmesh, verified): the NIF blocks match the vanilla hellebore's; our
+  FieldGrass01 .mesh is 0.9 m tall, 6 tris, UVs about 0..1, but carries Skyrim's vertex colours with **alpha 0 on
+  14 of 18 vertices** (0x72..0x8C at the blade tips: Skyrim's wind weight), while the vanilla grass .mesh has no
+  vertex colours at all (and a uv2). Supported hypothesis: the grass shader reads that alpha as opacity. The grass
+  build now drops grass vertex colours (`--keep-vertex-colours` for the old way). Eighth run: `-GrassOnly`.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

@@ -390,9 +390,20 @@ def ltex_kind_overrides(terrain_ltex, sf_ltex, slots, donor_edid):
     return out, changed
 
 
-def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None) -> str:
+def without_vertex_colours(sh):
+    """The shape with no vertex colours. 2026-11-24: Skyrim grass keeps its wind sway in the vertex-colour alpha (0 on
+    most vertices of FieldGrass01, 0x72..0x8C at the blade tips); vanilla Starfield grass meshes have no vertex colours,
+    and our converted field grass stayed invisible on a field where our records grew the vanilla model densely
+    (supported hypothesis: the grass shader reads that alpha as opacity)."""
+    import dataclasses
+    return dataclasses.replace(sh, colors=[])
+
+
+def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
+                  keep_colours: bool = False) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
-    sided); returns its path under meshes\\. info: a dict to fill with model_info."""
+    sided, no vertex colours unless keep_colours); returns its path under meshes\\. info: a dict to fill with
+    model_info."""
     raw = conv.src.mesh(name)
     if raw is None:
         raise FileNotFoundError("not in the Skyrim archives")
@@ -405,6 +416,8 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
             continue
         if skyrimnif.double_sided(src, sh.shader_ref):
             sh = skyrimconvert.with_back_faces(sh) or sh
+        if not keep_colours:
+            sh = without_vertex_colours(sh)
         shapes.append(sh)
         mats.append(m)
     if info is not None:
@@ -520,6 +533,10 @@ def main(argv=None):
                     help="test (2026-11-24, docs/re/ground-cover-density.md route A): instead of appending entries, "
                          "rewrite the biome's own FIRST entry of each --biome-masks mask to {the one --only-ltex "
                          "slot, its cover}. An appended second mask-0 entry did not take the Base slot in game")
+    ap.add_argument("--keep-vertex-colours", action="store_true",
+                    help="keep Skyrim's grass vertex colours (before 2026-11-24 the default); now dropped like vanilla "
+                         "grass meshes have none: their alpha (Skyrim's wind weight, 0 on most vertices) may hide the "
+                         "blades")
     ap.add_argument("--no-water-clamp", action="store_true",
                     help="test (2026-11-24): our grasses get no water clamps (both FLT_MAX, as the vanilla moss mounds "
                          "that grew across the slot-test field); the hellebore template's above-water clamp 0.5 is "
@@ -746,7 +763,8 @@ def main(argv=None):
                     mat = (family_material(r["edid"], fam_mats) if a.vanilla_material == "auto"
                            else a.vanilla_material)
                     minfo = {}
-                    model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo)
+                    model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo,
+                                          keep_colours=a.keep_vertex_colours)
                     report.setdefault("model_info", {})[r["edid"]] = minfo
                     if mat:
                         report.setdefault("materials", {})[r["edid"]] = mat

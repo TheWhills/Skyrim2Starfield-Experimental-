@@ -352,6 +352,18 @@ class PlanetBiomeTests(unittest.TestCase):
         added = sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 4, 0x99, 0x77))
         self.assertEqual(added[-1], {"kind": "LNAM", "mask": 4, "ltex": 0x99, "gcvr": 0x77})
 
+    def test_without_vertex_colours(self):
+        import dataclasses
+        import skyrim_grass_native as N
+
+        @dataclasses.dataclass
+        class Sh:
+            positions: list
+            colors: list
+        out = N.without_vertex_colours(Sh([(0, 0, 0)], [(255, 255, 255, 0)]))
+        self.assertEqual(out.colors, [])
+        self.assertEqual(out.positions, [(0, 0, 0)])
+
     def test_no_water_clamp(self):
         dnam = bytes(range(40))
         out = sfgrass.without_water_clamps(dnam)
