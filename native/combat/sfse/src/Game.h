@@ -9,6 +9,10 @@ namespace s2s::sfse::game {
 double Now();
 bool Readable(const void* ptr, std::size_t bytes);   // committed, readable memory (VirtualQuery)                                    // seconds, steady clock
 RE::PlayerCharacter* Player();
+// A raw argument of a game function, for the attach log (bLogWeaponAttach): "player", a weapon record "WEAP 0004F760"
+// (also one pointer hop away: "->WEAP ..."), an equip slot "slot LeftHand 00013F43", a small integer, or hex. Forms
+// are told apart by their vtable (that of the live UnarmedHuman / RightHand records), so nothing is assumed.
+std::string DescribeArg(std::uint64_t v);
 // True while the plugin itself sends a graph event on this thread (SendEvent / SendActorEvents): the clash's event
 // filter (Hooks.cpp) lets those through.
 bool SendingOwnEvent();

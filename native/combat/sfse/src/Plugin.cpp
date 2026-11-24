@@ -134,6 +134,7 @@ void Plugin::LoadSettings(const std::string& ini_path) {
         to_int(plugin, "bleftequiphandslots", to_int(plugin, "bleftequipeitherhand", 1)) != 0;
     settings_.left_equip_grip = to_int(plugin, "bleftequipgrip", 1) != 0;
     settings_.left_equip_same_copy = to_int(plugin, "bleftequipsamecopy", 1) != 0;
+    settings_.log_weapon_attach = to_int(plugin, "blogweaponattach", 0) != 0;
     if (auto it = plugin.find("sleftcopyrotation"); it != plugin.end() && !it->second.empty() &&
         !combat::parse_degrees(it->second, settings_.left_copy_rotation))
         REX::WARN("[Plugin] sLeftCopyRotation = {}: not three numbers (x y z degrees)", it->second);

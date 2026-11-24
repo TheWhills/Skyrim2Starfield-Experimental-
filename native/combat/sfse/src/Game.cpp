@@ -94,6 +94,7 @@ double Now() {
 
 RE::PlayerCharacter* Player() { return RE::PlayerCharacter::GetSingleton(); }
 
+
 namespace {
 thread_local bool g_own_event = false;      // a graph event the plugin itself is sending (the clash filter lets it pass)
 struct OwnEvent {
@@ -1675,6 +1676,29 @@ bool SetActorVariable(std::uint32_t form_id, const combat::VariableSet& v) {
         else if (v.type == combat::VariableSet::Type::Int) RE::BSScript::PackVariable(out[1], static_cast<std::int32_t>(v.value));
         else RE::BSScript::PackVariable(out[1], static_cast<float>(v.value));
     });
+}
+
+std::string DescribeArg(std::uint64_t v) {
+    if (v < 0x10000) return std::format("{}", v);
+    const auto* p = reinterpret_cast<const void*>(v);
+    if (p == Player()) return "player";
+    static const std::uintptr_t weap_vt = [] {
+        auto* w = RE::TESForm::LookupByID(0x1F4);   // UnarmedHuman, a WEAP record in Starfield.esm
+        return w ? *reinterpret_cast<const std::uintptr_t*>(w) : 0;
+    }();
+    static const std::uintptr_t slot_vt = [] {
+        auto* s = RE::TESForm::LookupByID(combat::kSlotRightHand);
+        return s ? *reinterpret_cast<const std::uintptr_t*>(s) : 0;
+    }();
+    if (!Readable(p, 8)) return std::format("{:X}", v);
+    const auto vt = *reinterpret_cast<const std::uintptr_t*>(p);
+    if (weap_vt && vt == weap_vt)
+        return std::format("WEAP {:08X}", static_cast<const RE::TESForm*>(p)->GetFormID());
+    if (slot_vt && vt == slot_vt) return "slot " + SlotName(static_cast<const RE::BGSEquipSlot*>(p));
+    const auto* q = reinterpret_cast<const void*>(vt);
+    if (vt > 0x10000 && Readable(q, 8) && weap_vt && *reinterpret_cast<const std::uintptr_t*>(q) == weap_vt)
+        return std::format("{:X}->WEAP {:08X}", v, static_cast<const RE::TESForm*>(q)->GetFormID());
+    return std::format("{:X}", v);
 }
 
 }  // namespace s2s::sfse::game

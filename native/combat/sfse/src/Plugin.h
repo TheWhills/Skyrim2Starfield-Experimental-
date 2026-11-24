@@ -55,6 +55,7 @@ struct Settings {
     bool left_equip_either_hand = true;
     bool left_equip_grip = true;                   // the game's left model moved to L_Wrist at the grip
     bool left_equip_same_copy = true;              // same weapon in both hands: the clone shows the left one
+    bool log_weapon_attach = false;                // log the player's weapon attach / detach calls (Hooks.cpp)
 };
 
 class Plugin {

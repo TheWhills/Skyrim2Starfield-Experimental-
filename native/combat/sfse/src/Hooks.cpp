@@ -427,6 +427,50 @@ public:
 };
 MenuSink g_menu_sink;
 
+// ------------------------------------------------------------------------------------------------ weapon attach log
+// bLogWeaponAttach (owner's question 2026-11-24: why does a left weapon need a re-equip after a load, when a normal
+// weapon does not?). Logs the player's calls of the draw / sheathe path (docs/re/findings.md section 3): the animation
+// handlers WeaponAttachHandler / WeaponDetachHandler (slot 1 of vtables 453937 / 453939) and the Actor virtuals
+// AttachWeapon / DetachWeapon (slots 232 / 233 = 0xE8 / 0xE9, on the player's own vtable). Only watches: every call
+// goes to the original first, with all its arguments. The exact signatures are not known, so six integer arguments
+// are passed through (four registers and two stack slots; extra ones are ignored by the original) and the original's
+// rax is returned; nothing is logged before the call, so the float registers reach it untouched.
+using Pass6 = std::uint64_t(std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t);
+Pass6* g_attach_original[4] = {};
+constexpr const char* kAttachNames[4] = {"AttachWeapon vE8", "DetachWeapon vE9", "WeaponAttachHandler",
+                                         "WeaponDetachHandler"};
+std::atomic_int g_attach_logged{0};
+
+template <int K>
+std::uint64_t AttachLogged(std::uint64_t a, std::uint64_t b, std::uint64_t c, std::uint64_t d, std::uint64_t e,
+                           std::uint64_t f) {
+    const auto r = g_attach_original[K](a, b, c, d, e, f);
+    // the virtuals: this = the player (its own vtable); the handlers are shared by all actors: the actor is argument 2
+    const auto* player = game::Player();
+    const bool mine = K < 2 || reinterpret_cast<const void*>(b) == player;
+    if (mine && g_attach_logged.fetch_add(1) < 600)
+        REX::INFO("attach log: {} ({}, {}, {}, {}) -> {:X} at {:.3f} s, thread {}", kAttachNames[K], game::DescribeArg(b),
+                  game::DescribeArg(c), game::DescribeArg(d), game::DescribeArg(e), r, game::Now(),
+                  REX::W32::GetCurrentThreadId());
+    return r;
+}
+
+void InstallAttachLog(RE::PlayerCharacter* player) {
+    const auto base = reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));   // Starfield.exe
+    REL::Relocation<std::uintptr_t> pc_vtbl{*reinterpret_cast<std::uintptr_t*>(player)};
+    g_attach_original[0] = reinterpret_cast<Pass6*>(pc_vtbl.write_vfunc(0xE8, &AttachLogged<0>));
+    g_attach_original[1] = reinterpret_cast<Pass6*>(pc_vtbl.write_vfunc(0xE9, &AttachLogged<1>));
+    REL::Relocation<std::uintptr_t> attach_vtbl{REL::ID(453937)}, detach_vtbl{REL::ID(453939)};
+    g_attach_original[2] = reinterpret_cast<Pass6*>(attach_vtbl.write_vfunc(1, &AttachLogged<2>));
+    g_attach_original[3] = reinterpret_cast<Pass6*>(detach_vtbl.write_vfunc(1, &AttachLogged<3>));
+    // findings.md: vE8 0x140b41240, attach handler vtable 0x144cc5068 -> 0x141aebca0, detach 0x144cc5080 -> 0x141aebd20
+    auto rva = [base](auto v) { return static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(v)) - base; };
+    REX::INFO("attach log: on. player vtable +{:X}: vE8 +{:X}, vE9 +{:X}; attach handler vtable +{:X} -> +{:X}, detach "
+              "handler vtable +{:X} -> +{:X}", pc_vtbl.address() - base, rva(g_attach_original[0]),
+              rva(g_attach_original[1]), attach_vtbl.address() - base, rva(g_attach_original[2]),
+              detach_vtbl.address() - base, rva(g_attach_original[3]));
+}
+
 }  // namespace
 
 bool Install() {
@@ -449,6 +493,7 @@ bool Install() {
     g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
 
     InstallControls();
+    if (Plugin::Get().settings().log_weapon_attach) InstallAttachLog(player);
 
     ui->RegisterSink<RE::MenuOpenCloseEvent>(&g_menu_sink);
     // CommonLibSF (9d090c4, its latest as of 2026-10-21) has no Address Library ID for this on Starfield 1.16: ID 0, and
