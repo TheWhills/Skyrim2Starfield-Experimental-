@@ -164,3 +164,8 @@ WeaponLeft in builds 2-3 this did not show (the local was the identity, and the 
 weapon's frame; only the vanilla turns, which leave WeaponLeft at rest, went wrong). Sixth build: ReadXform /
 WriteXform go through xform store_engine / load_engine (tested against the engine's own compose).
 
+Owner's run 2026-11-23 (sixth build): **the left copy's angle is right** (verified, owner), held at the grip under
+L_Wrist. Same run (iLogKeys 400): in every stance the game starts one more attack ~1.2 s after the last
+AttackStateNextAttack when a combo stops (1.8-2.0 s after the last click, no V press, nothing sent by the plugin);
+`bCancelUnpressedAttacks` / `fUnpressedAttackGap` (1.4 s) now cancel such an attack with sQueuedPowerCancelEvent.
+

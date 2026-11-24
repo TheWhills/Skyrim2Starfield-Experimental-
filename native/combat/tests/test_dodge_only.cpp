@@ -64,6 +64,7 @@ static void everything_else_off() {
     full.block_reduction = 0.6;
     auto c = dodge_only(full);
     CHECK(!c.buffer_attacks && c.power_key == 0 && !c.power_in_combo && !c.cancel_queued_power && !c.stance_reequip);
+    CHECK(!c.cancel_unpressed_attacks);                         // S2SDodge leaves the game's attacks alone
     CHECK(c.dual_worn_keyword.empty() && c.dual_stance_keyword.empty());
     CHECK(c.parry_window == 0.0 && c.block_reduction == 0.0 && c.block_reraise_event.empty() && !c.defer_kill);
     CHECK(c.dodge_key == full.dodge_key && c.dodge_events == full.dodge_events && c.dodge_iframes == full.dodge_iframes);

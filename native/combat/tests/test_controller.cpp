@@ -754,7 +754,9 @@ static void rtti_vtables() {
 // Owner's logs (2026-10-23): after a mid-combo power press the game starts its own standing power attack once the
 // combo is over (AttackStart, no attack press, nothing sent): cancelled; attacks the player or plugin started are not.
 static void queued_power_cancel() {
-    Controller v;
+    // the queued-power rule alone (the unpressed-attack rule would also take the late AttackStarts below)
+    const auto queued_only = parse_config("[Combat]\nbCancelUnpressedAttacks = 0\n");
+    Controller v(queued_only);
     PlayerState s;
     auto sent = [](const std::vector<Command>& cs, const char* name) {
         for (const auto& c : cs)
@@ -772,7 +774,7 @@ static void queued_power_cancel() {
     v.on_anim_event("AttackStart", "", 12.0);                              // nothing left to cancel
     CHECK(!sent(v.tick(12.1, s), "ActionInterrupt"));
 
-    Controller a;                                                          // a normal attack whose press logs late
+    Controller a(queued_only);                                             // a normal attack whose press logs late
     a.on_anim_event("preHitFrame", "", 1.0);
     a.on_key(47, true, 1.1, s);
     a.on_anim_event("AttackStart", "", 2.000);
@@ -796,6 +798,28 @@ static void queued_power_cancel() {
     b.on_key(47, true, 1.6, s);
     b.on_anim_event("AttackStart", "", 1.62);
     CHECK(!sent(b.tick(1.8, s), "ActionInterrupt"));
+
+    // the owner's run 2026-11-23 (no V): the extra attack 1.8 s after the last click is cancelled; real ones are not
+    Controller u;
+    u.on_anim_event("AttackStart", "", 24.492);                              // the click's own (logged 2 ms later)
+    u.on_key(256, true, 24.494, s);
+    u.on_key(256, false, 24.635, s);
+    CHECK(!sent(u.tick(24.6, s), "ActionInterrupt"));
+    u.on_anim_event("AttackStateNextAttack", "", 25.192);
+    u.on_anim_event("AttackStart", "", 26.328);                              // nobody pressed for this one
+    CHECK(!sent(u.tick(26.35, s), "ActionInterrupt"));                       // decided 50 ms later
+    CHECK(sent(u.tick(26.4, s), "ActionInterrupt"));
+    u.on_anim_event("AttackStart", "", 28.479);                              // a new click from idle: logs 2 ms later
+    u.on_key(256, true, 28.481, s);
+    CHECK(!sent(u.tick(28.55, s), "ActionInterrupt"));
+    u.on_key(256, true, 29.0, s);                                            // buffered click, window opens 0.7 s on
+    u.on_anim_event("AttackStart", "", 29.7);
+    CHECK(!sent(u.tick(29.8, s), "ActionInterrupt"));
+    u.on_anim_event("AttackStart", "", 40.0);                                // a standing V power attack
+    u.on_key(47, true, 40.004, s);
+    CHECK(!sent(u.tick(40.1, s), "ActionInterrupt"));
+    CHECK(!parse_config("[Combat]\nbCancelUnpressedAttacks = 0\n").cancel_unpressed_attacks);
+    CHECK(parse_config("[Combat]\nfUnpressedAttackGap = 2.5\n").unpressed_attack_gap == 2.5);
 
     Controller off(parse_config("[Combat]\nbCancelQueuedPower = 0\nfQueuedPowerWindow = 5\n"));
     CHECK(!off.config().cancel_queued_power && off.config().queued_power_window == 5.0);
