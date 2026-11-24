@@ -1,9 +1,9 @@
-"""Pad the staged Skyrim terrain's LTEX table head (2026-11-24, fo4sf.btd.with_head_padding): read-modify-write.
+r"""Pad the staged Skyrim terrain's LTEX table head (2026-11-24, fo4sf.btd.with_head_padding): read-modify-write.
 
 Every 50 m quadrant that used byte value 3 drew the default ground in game (owner's Rift label test); the converter now
 puts Starfield's per-mask placeholders at the head of the table, as vanilla does, so no byte we use is below 8. This
 applies that to an existing staging (both BTD copies), losslessly: every quadrant byte still names the same FormID.
-Idempotent. Reinstall the exterior afterwards (tools\owner\grass_hook.ps1 does it).
+Idempotent. Reinstall the exterior afterwards (tools/owner/grass_hook.ps1 does it).
 
     python -I scripts\terrain\btd_head_pad.py --staging C:\Modding\staging\skyrim_all
 """
