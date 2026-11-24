@@ -162,3 +162,6 @@ moving it would change textures.py again and cost one more full reconvert.
   (~8-12 ms each, event-triggered); game frames **9.6-9.7 ms**, max 29 / 91 ms. Left weapon off in the same run:
   7.3 ms. The remaining ~2.3 ms per frame is not the plugin's own time (unresolved: the game with a second weapon
   model, or the moved model; bLeftEquipGrip = 0 would tell).
+- bLeftEquipGrip = 0 (owner's run 16:01, follower off): left weapon on **9.9 ms** per frame, plugin 43 us; left off
+  in the same run 6.1 ms. So the gap is not the follower (supported: one 10 s window each; frame times also vary
+  9.7-10.1 ms with the left weapon off in menus). The grip is back on (the axe swung outward again without it).
