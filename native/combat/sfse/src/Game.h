@@ -9,6 +9,11 @@ namespace s2s::sfse::game {
 double Now();
 bool Readable(const void* ptr, std::size_t bytes);   // committed, readable memory (VirtualQuery)                                    // seconds, steady clock
 RE::PlayerCharacter* Player();
+// The hand nodes the left weapon uses (WeaponLeft, Weapon, L_Wrist) are kept between frames: look at the player's 3D
+// again soon (a menu, equip or draw), or forget them (a loading screen opening: the 3D is rebuilt). Main thread.
+void RecheckHandNodes();
+void DropHandNodes();
+std::string TakeHandNodeTimes();   // "player 3D lookups N (T us)" since the last call (the timing report)
 // A raw argument of a game function, for the attach log (bLogWeaponAttach): "player", a weapon record "WEAP 0004F760"
 // (also one pointer hop away: "->WEAP ..."), an equip slot "slot LeftHand 00013F43", a small integer, or hex. Forms
 // are told apart by their vtable (that of the live UnarmedHuman / RightHand records), so nothing is assumed.

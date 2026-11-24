@@ -117,8 +117,8 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
     const auto limit = std::chrono::seconds(secs);
     if ((secs < 0 || t0 - g_perf_start < limit + std::chrono::seconds(1)) && t0 - g_perf_last >= std::chrono::seconds(10)) {
         g_perf_last = t0;
-        REX::INFO("timing (the plugin's own work): per frame {}; per animation event {}; game frames {} (left weapon {}, "
-                  "menu {})", g_perf_frame.take(), g_perf_event.take(), g_frame_gaps.take(),
+        REX::INFO("timing (the plugin's own work): per frame {}; per animation event {}; {}; game frames {} (left weapon "
+                  "{}, menu {})", g_perf_frame.take(), g_perf_event.take(), game::TakeHandNodeTimes(), g_frame_gaps.take(),
                   plugin.left_weapon_on() ? "on" : "off", plugin.menu_open() ? "open" : "closed");
     }
     g_input_original(a_this, a_head);

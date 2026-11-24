@@ -324,6 +324,8 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         DoLeftCopy(a);
     }
     follow_invalid_ = true;                            // equips happen in menus; loads rebuild the 3D
+    game::RecheckHandNodes();
+    if (name == "LoadingMenu" && opening) game::DropHandNodes();
     // after a load, what the game restored in each hand (owner's save / load test of the native left weapon, 2026-11-24)
     // a loading screen opens: set the remembered pair's records now, so the game builds both hands itself while loading
     if (name == "LoadingMenu" && opening && settings_.left_equip_key && settings_.left_equip_either_hand) {
@@ -440,6 +442,8 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
         cmds = controller_.on_anim_event(tag, payload, game::Now());
         if (tag == "weaponDraw" || tag == "weaponSheathe" || tag == "UnequipComplete" || tag == "BeginWeaponDraw")
             follow_invalid_ = true;                   // the weapon's 3D may be rebuilt
+        if (tag == "weaponDraw" || tag == "weaponSheathe" || tag == "UnequipComplete" || tag == "BeginWeaponDraw")
+            game::RecheckHandNodes();
         left_copy_action = left_copy_.on_event(tag);
         if (armor_blade_on_.load() || left_blade_.parked())          // a worn blade (not the pair weapon)
             if (const auto a = left_blade_.on_event(tag); a != combat::LeftBlade::Action::None)

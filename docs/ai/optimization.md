@@ -144,4 +144,9 @@ moving it would change textures.py again and cost one more full reconvert.
   (supported hypothesis): FindHandNodes (sfse/src/Game.cpp) walked the player's 3D (up to 4000 nodes, a VirtualQuery
   each) every frame while a hand node was missing; the follower (bLeftEquipGrip) calls it each frame.
 - Change: the found nodes stand for the same 3D; a missing one is searched for at most every 2 s (logged once).
-- After: pending (owner's next run, same report lines labelled "left weapon on").
+- After (owner's run 15:10, same test): **worse**, plugin 1.9 ms then **58 ms** per frame, game frames 67 ms; no
+  node was missing, so the walk was not it (hypothesis wrong). Next suspect: Player3D() takes the read lock on the
+  player's 3D every frame (FollowBone already limits it to twice a second for that reason). Change: the found nodes
+  are used without the lock, the root checked twice a second and after menus / equips / draws, dropped on a load;
+  the report now times the follower and the lookups separately.
+- After: pending.

@@ -930,6 +930,9 @@ std::string SlotName(const RE::BGSEquipSlot* s) {
     return std::format("{} {:08X}", n, id);
 }
 
+std::atomic_bool g_hand_recheck{true}, g_hand_drop{false};
+std::atomic<std::uint64_t> g_player3d_us{0}, g_player3d_calls{0}, g_follow_us{0}, g_follow_calls{0};
+
 // WeaponLeft and Weapon, found in one walk per player 3D (owner's run: two walks per report froze the game ~1 s)
 struct HandNodes {
     RE::NiAVObject* root = nullptr;
@@ -950,22 +953,35 @@ std::string Subtree(RE::NiAVObject* node) {
 
 // WeaponLeft, Weapon and L_Wrist of the player's 3D, looked up once per 3D and checked before use. "" = ok.
 std::string FindHandNodes() {
+    auto& h = g_hand_nodes;
+    if (g_hand_drop.exchange(false)) h = {};
+    auto same = [](RE::NiAVObject* o, std::string_view n) { return !o || StillNamed(o, n); };
+    static double s_walked_at = -1.0, s_root_at = -1.0;
+    static int s_missing_logged = 0;
+    const double now = Now();
+    const bool missing = !h.left || !h.right || !h.wrist;
+    // Player3D takes the read lock on the player's 3D, and the follower calls this every frame (owner's run 2026-11-24
+    // 15:10: with the left weapon on the plugin took 2 ms, then 58 ms per frame). The found nodes are used without it;
+    // the root is checked twice a second, after a menu / equip / draw (RecheckHandNodes) and after a load (DropHandNodes).
+    if (h.root && !g_hand_recheck.load() && now - s_root_at < 0.5 && !(missing && now - s_walked_at >= 2.0) &&
+        same(h.left, "WeaponLeft") && same(h.right, "Weapon") && same(h.wrist, "L_Wrist"))
+        return {};
+    g_hand_recheck = false;
+    s_root_at = now;
+    const auto t0 = std::chrono::steady_clock::now();
     auto* root = Player3D();
+    g_player3d_us += static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+    ++g_player3d_calls;
     if (!root) return "no player 3D";
     if (g_children.offset < 0) {
         if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return "no child list found";
     }
-    auto& h = g_hand_nodes;
-    // the cached nodes stand while the 3D is the same and each found one still has its name. A node not found is not
-    // searched for every frame: owner's run 2026-11-24, with the left weapon on the plugin took 20-40 ms per frame
-    // (frames 29-47 ms instead of ~10), the walk below running each frame; now at most every 2 s for a missing node.
-    auto same = [](RE::NiAVObject* o, std::string_view n) { return !o || StillNamed(o, n); };
+    // the found nodes stand while the 3D is the same and each one still has its name. A node not found is searched
+    // for at most every 2 s (owner's run 2026-11-24 14:55: 20-40 ms per frame, supported hypothesis: the walk)
     const bool kept = h.root == root && same(h.left, "WeaponLeft") && same(h.right, "Weapon") && same(h.wrist, "L_Wrist");
-    const bool missing = !h.left || !h.right || !h.wrist;
-    static double s_walked_at = -1.0;
-    static int s_missing_logged = 0;
-    if (!kept || (missing && Now() - s_walked_at >= 2.0)) {
-        s_walked_at = Now();
+    if (!kept || (missing && now - s_walked_at >= 2.0)) {
+        s_walked_at = now;
         h = {root, nullptr, nullptr, nullptr};
         int budget = 4000;
         Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
@@ -1056,6 +1072,17 @@ std::string UndoHandSlots() {
     st = {};
     g_right_hand_only = false;
     return out.empty() ? "no records were changed" : out;
+}
+
+void RecheckHandNodes() { g_hand_recheck = true; }
+void DropHandNodes() {
+    g_hand_drop = true;
+    g_hand_recheck = true;
+}
+std::string TakeHandNodeTimes() {
+    const auto us = g_player3d_us.exchange(0), n = g_player3d_calls.exchange(0);
+    const auto fus = g_follow_us.exchange(0), fn = g_follow_calls.exchange(0);
+    return std::format("left follower {} calls ({} us), player 3D lookups {} ({} us)", fn, fus, n, us);
 }
 
 HandModels HandModelsNow() {
@@ -1214,6 +1241,14 @@ void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string
 }
 
 LeftFollowResult LeftWeaponFollow(bool active, int turn, const float degrees[3]) {
+    struct Timer {
+        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        ~Timer() {
+            g_follow_us += static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+            ++g_follow_calls;
+        }
+    } timer;
     LeftFollowResult r;
     auto& f = g_left_follow;
     if (auto err = FindHandNodes(); !err.empty()) {
