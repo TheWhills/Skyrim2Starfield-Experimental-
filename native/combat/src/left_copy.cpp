@@ -157,11 +157,14 @@ std::optional<HandPair> parse_hand_pair(std::string_view text) {
     return p;
 }
 
-AfterLoad after_load(bool records_set, std::uint32_t expected_left, std::uint32_t left_in_hand, bool left_model,
-                     bool right_model) {
+AfterLoad after_load(bool records_set, std::uint32_t expected_left, std::uint32_t left_in_hand, bool drawn,
+                     bool left_model, bool right_model, double waited) {
     const bool has_left = left_in_hand != 0 && left_in_hand != 0x1F4u;     // 000001F4 = fists
     if (!has_left) return records_set ? AfterLoad::UndoRecords : AfterLoad::Nothing;
-    if (records_set && left_in_hand == expected_left && left_model && right_model) return AfterLoad::Keep;
+    if (records_set && left_in_hand == expected_left) {
+        if (!drawn || (left_model && right_model)) return AfterLoad::Keep;
+        if (waited < kAfterLoadWait) return AfterLoad::Wait;
+    }
     return AfterLoad::Redo;
 }
 

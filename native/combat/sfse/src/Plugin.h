@@ -134,6 +134,7 @@ private:
     std::atomic_bool left_wanted_{false};         // the key asked for a native left weapon (dual stance from here)
     std::atomic<double> left_equip_due_{-1.0};    // when to equip it (after the dual stance's re-equip)
     std::atomic<double> left_restore_at_{-1.0};   // after a load: when to check the LeftHand weapon
+    std::atomic<double> left_restore_first_{-1.0};  // ... and when it was first checked (s2s after_load: Wait)
     std::atomic<std::uint32_t> left_restore_id_{0};   // the saved left weapon, equipped again by StartLeftEquip
     // the last right / left pair (s2s HandPair), kept in S2SCombat_LeftHand.txt beside the INI; its records are set
     // when a loading screen opens (records_set_), and the after-load check expects expected_left_ in LeftHand

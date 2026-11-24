@@ -182,14 +182,19 @@ static void pair_file_and_after_load() {
     CHECK(parse_hand_pair("right = 0x0026D8A5\r\n left=4f760\r\n").has_value());      // CRLF, spaces, 0x
     CHECK(!parse_hand_pair("right=0026D8A5\n") && !parse_hand_pair("") && !parse_hand_pair("left=zz\nright=1\n"));
     using L = AfterLoad;
-    CHECK(after_load(false, 0, 0, false, true) == L::Nothing);                 // no left weapon anywhere
-    CHECK(after_load(true, 0x4F760, 0, false, true) == L::UndoRecords);        // records set, the save has none
-    CHECK(after_load(true, 0x4F760, 0x1F4, false, true) == L::UndoRecords);    // fists are no left weapon
-    CHECK(after_load(true, 0x4F760, 0x4F760, true, true) == L::Keep);          // the game built both itself
-    CHECK(after_load(true, 0x4F760, 0x4F760, false, true) == L::Redo);         // no left model
-    CHECK(after_load(true, 0x4F760, 0x4F760, true, false) == L::Redo);         // no right model
-    CHECK(after_load(false, 0, 0x4F760, true, true) == L::Redo);               // records not set (the 13:55 run)
-    CHECK(after_load(true, 0x4F760, 0x12345, true, true) == L::Redo);          // another left weapon in the save
+    CHECK(after_load(false, 0, 0, true, false, true) == L::Nothing);                 // no left weapon anywhere
+    CHECK(after_load(true, 0x4F760, 0, true, false, true) == L::UndoRecords);        // records set, the save has none
+    CHECK(after_load(true, 0x4F760, 0x1F4, true, false, true) == L::UndoRecords);    // fists are no left weapon
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, true, true) == L::Keep);          // drawn, the game built both
+    CHECK(after_load(true, 0x4F760, 0x4F760, false, false, false) == L::Keep);       // sheathed: no models is normal
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, false, true) == L::Wait);         // drawn, no left model yet
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, false, false, 3.9) == L::Wait);   // the 3D may still be loading
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, false, true, 4.0) == L::Redo);    // drawn, no left model in time
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, true, false, 5.0) == L::Redo);    // drawn, no right model in time
+    CHECK(after_load(true, 0x4F760, 0x4F760, true, true, true, 2.0) == L::Keep);     // built while waiting
+    CHECK(after_load(false, 0, 0x4F760, true, false, false) == L::Redo);             // no waiting without records
+    CHECK(after_load(false, 0, 0x4F760, false, true, true) == L::Redo);              // records not set (the 13:55 run)
+    CHECK(after_load(true, 0x4F760, 0x12345, false, true, true) == L::Redo);         // another left weapon in the save
 }
 
 static void disabled() {
