@@ -658,6 +658,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   outside the terrain file** (supported hypothesis: the procedural planet tiles' density under the overlay). Owner
   chose (2026-11-24) to find the density source in Starfield.exe: scripts/re/exe_xrefs.py lists the code that
   references density-map strings (RIP-relative references, functions from .pdata, callees' strings).
+  **exe_xrefs run (owner, 10:43, verified strings):** density maps are a ProcGen resource database
+  (BSProcGen::DensityMapDB, used by BGSPlanet::BaseProcGenDB in the ProcGen resource scatter tables); one function
+  (0x140bf45f0, 3.8 KB) both checks "Size of density map %s does not match block %s" and implements
+  GetBiomeMaskValueConditionFunction "mask(%u,%u,%u), cellIndex(%i,%i)": per-cell biome mask values are read from the
+  procedural blocks' density maps. Setting bDensityMapDBHandlesStorageEnabled:ProcGenRuntimeService. The mask names
+  FlatInner / FlatOuter / Talus sit together at 0x144d60328.. (a name table, reached through pointers, not
+  RIP-relative: the tool found no code refs). Supported hypothesis: ground-cover density on any world comes from the
+  ProcGen density maps of the planet's procedural blocks; our overlay has none of its own, so the planet's show
+  through. Next: decompile 0x140bf45f0 and its callers (Ghidra headless).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
