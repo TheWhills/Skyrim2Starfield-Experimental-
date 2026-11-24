@@ -37,6 +37,7 @@ param(
     [string]$Material = "",
     [switch]$FlatPaths,
     [switch]$OwnMaterial,
+    [switch]$NoBackFaces,
     [switch]$Restore
 )
 $ErrorActionPreference = "Stop"
@@ -77,6 +78,7 @@ if (-not $GrassOnly) {
 $extra = @()
 if ($Control) { $extra += "--control" }
 if ($TemplateModel) { $extra += "--keep-template-model" }   # our GRAS records, the vanilla hellebore model
+if ($NoBackFaces) { $extra += "--no-back-faces" }   # cards without mirrored copies (test)
 $mat = @("--vanilla-material", "auto")
 if ($OwnMaterial) { $mat = @() }   # our converted Skyrim material (Skyrim's own textures)
 $paths = @("--vanilla-paths")

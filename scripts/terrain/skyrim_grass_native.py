@@ -501,7 +501,7 @@ def without_vertex_colours(sh):
 
 def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
                   keep_colours: bool = False, flat: bool = False, veg_template: dict = None,
-                  blades: bool = False) -> str:
+                  blades: bool = False, back_faces: bool = True) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided, no vertex colours unless keep_colours); returns its path under meshes\\. info: a dict to fill with
     model_info."""
@@ -523,7 +523,7 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
                 sh, st = grasscards.blade_shape(sh, alpha, max(int(sh.alpha_ref or 0), BLADE_REF))
                 if info is not None:
                     info.setdefault("blades", []).append(st)
-        if skyrimnif.double_sided(src, sh.shader_ref):
+        if skyrimnif.double_sided(src, sh.shader_ref) and back_faces:
             sh = skyrimconvert.with_back_faces(sh) or sh
         if not keep_colours:
             sh = without_vertex_colours(sh)
@@ -652,10 +652,13 @@ def main(argv=None):
                          "(s2s_<name>.nif) instead of over a free vanilla path: the grass system only sees direct "
                          "children of that folder (2026-11-24, Starfield.exe); whether it sees new files depends on "
                          "them being in the file index when the grass manager starts (test)")
-    ap.add_argument("--grass-geometry", choices=("blades", "cards"), default="blades",
-                    help="'blades' (default, 2026-11-24): every Skyrim grass card cut into strips that follow its "
-                         "cut-out texture (fo4sf.grasscards), like vanilla grass is real blade geometry; some cards "
-                         "drew as solid triangles in game. 'cards' keeps Skyrim's cards as they are")
+    ap.add_argument("--grass-geometry", choices=("cards", "blades"), default="cards",
+                    help="'cards' (default): Skyrim's grass cards as they are. 'blades' (test, 2026-11-24): every "
+                         "card cut into strips along its cut-out (fo4sf.grasscards); owner: blades come out "
+                         "disconnected and the shape off, so not the default")
+    ap.add_argument("--no-back-faces", action="store_true",
+                    help="test (2026-11-24): no mirrored copy of double-sided Skyrim grass triangles; the game's "
+                         "grass material draws both sides already, so each card was two coplanar triangles")
     ap.add_argument("--grass-shader", choices=("vegetation", "plain"), default="vegetation",
                     help="our own grass materials: 'vegetation' (default, 2026-11-24) rebuilds them on the game's "
                          "grass material GrassFieldLive01 (VegetationTranslucent1Layer: wind, translucency, terrain "
@@ -903,7 +906,8 @@ def main(argv=None):
                     minfo = {}
                     model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo,
                                           keep_colours=a.keep_vertex_colours, flat=a.flat_paths,
-                                          veg_template=veg_template, blades=a.grass_geometry == "blades")
+                                          veg_template=veg_template, blades=a.grass_geometry == "blades",
+                                          back_faces=not a.no_back_faces)
                     report.setdefault("model_info", {})[r["edid"]] = minfo
                     if a.flat_paths:
                         print(f"  {r['edid']} -> meshes\\{model}  {info_text(minfo)}")

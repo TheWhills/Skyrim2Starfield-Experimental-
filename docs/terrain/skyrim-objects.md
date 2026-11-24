@@ -802,6 +802,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   some grass instances (not a distance switch, not our texture formats, not the path); the strips only shrink what
   shows. Cost: FieldGrass01 648 tris, FieldGrassFlowers02 708 (vanilla grass ~50). Open: which instances skip the
   cut-out (Starfield.exe: grass instancing / material resolve), a finer or smarter cut, density back to Skyrim's.
+  **Owner (2026-11-24): the blade-strip grass does not look right at all: blades disconnected, shape off** (a blade
+  thinner than the grid is cut into pieces). Blades are no longer the default (`--grass-geometry blades` keeps the
+  test); cards again. New lead: the game's grass shader model VegetationTranslucent1Layer sets
+  FlipBackFaceNormalsInViewSpace = true (it draws both sides), while the converter also adds a mirrored copy of every
+  double-sided Skyrim triangle: each card was drawn twice in the same plane. Fifteenth run:
+  `-GrassOnly -OwnMaterial -FlatPaths -NoBackFaces` (cards without the copies): fins gone = the duplicates; cards
+  missing from behind = the shader is not two-sided for us; fins unchanged = elsewhere (Starfield.exe next).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
