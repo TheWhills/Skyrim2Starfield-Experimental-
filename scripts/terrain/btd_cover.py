@@ -126,8 +126,15 @@ def pad_table(t: btd.Btd, extra):
 UNIFORM_BACKUP = "btd_before_uniform"
 
 
-def uniform_patch(t: btd.Btd, row: int, col: int, size: int, fid: int) -> btd.Btd:
-    """t with the size x size quadrants centred on (row, col): bytes 0..4 = fid's entry, every 3-bit alpha 7."""
+def alpha_word(alpha: int) -> int:
+    """The 15-bit sample word with all five 3-bit alphas = alpha."""
+    a = max(0, min(7, int(alpha)))
+    return sum(a << (3 * i) for i in range(5))
+
+
+def uniform_patch(t: btd.Btd, row: int, col: int, size: int, fid: int, alpha: int = 7) -> btd.Btd:
+    """t with the size x size quadrants centred on (row, col): bytes 0..4 = fid's entry, every 3-bit alpha = alpha.
+    2026-11-24: with alpha 7 ground cover grew nothing there (owner), while it grows where textures blend."""
     T = list(t.ltex)
     if fid not in T:
         raise ValueError(f"{fid:08X} is not in the LTEX table")
@@ -137,7 +144,7 @@ def uniform_patch(t: btd.Btd, row: int, col: int, size: int, fid: int) -> btd.Bt
     r0, c0 = max(row - size // 2, 0), max(col - size // 2, 0)
     r1, c1 = min(r0 + size, q.shape[0]), min(c0 + size, q.shape[1])
     q[r0:r1, c0:c1, :5] = b
-    w[r0 * 64:r1 * 64, c0 * 64:c1 * 64] = 0x7FFF
+    w[r0 * 64:r1 * 64, c0 * 64:c1 * 64] = alpha_word(alpha)
     return btd.Btd(t.version, t.hmin, t.hmax, T, t.heights_raw, w, q)
 
 
@@ -166,6 +173,7 @@ def main(argv=None):
     ap.add_argument("cmd", choices=("set", "pad", "restore", "uniform", "uniform-restore"))
     ap.add_argument("--quad", type=int, nargs=2, metavar=("ROW", "COL"), help="uniform: centre quadrant")
     ap.add_argument("--size", type=int, default=3, help="uniform: quadrants per side (default 3 = 150 m)")
+    ap.add_argument("--alpha", type=int, default=7, help="uniform: the 3-bit alpha of every layer (0..7)")
     ap.add_argument("--ltex", default="00030137", help="uniform: LTEX FormID (hex), default SKYG LFieldGrass02")
     ap.add_argument("--count", type=int, default=40, help="pad: unique vanilla LTEX to insert")
     ap.add_argument("--sf-esm", default="", help="pad: Starfield.esm")
@@ -195,14 +203,14 @@ def main(argv=None):
             with open(keep, "rb") as fh:
                 t = btd.read(fh.read())
             try:
-                new = uniform_patch(t, a.quad[0], a.quad[1], a.size, int(a.ltex, 16))
+                new = uniform_patch(t, a.quad[0], a.quad[1], a.size, int(a.ltex, 16), a.alpha)
             except ValueError as e:
                 sys.exit(str(e))
             data = btd.write(new)
             with open(p, "wb") as fh:
                 fh.write(data)
             print(f"{os.path.relpath(p, a.staging)}: {a.size} x {a.size} quadrants around {tuple(a.quad)} = "
-                  f"{int(a.ltex, 16):08X} in all five layers at alpha 7")
+                  f"{int(a.ltex, 16):08X} in all five layers at alpha {a.alpha}")
         if a.cmd == "uniform-restore" and os.path.isdir(ubak):
             shutil.rmtree(ubak)
         return 0

@@ -86,6 +86,9 @@ class CoverEncodeTest(unittest.TestCase):
         self.assertTrue((new.weights[:128, :128] == 0x7FFF).all())
         with self.assertRaises(ValueError):
             C.uniform_patch(t, 1, 1, 2, 0x99)
+        self.assertEqual(C.alpha_word(7), 0x7FFF)
+        self.assertEqual(C.alpha_word(3), 0b011011011011011)
+        self.assertTrue((C.uniform_patch(t, 1, 1, 2, 0xC, 3).weights[:128, :128] == 0x36DB).all())
 
     def test_too_many_pairs(self):
         q = np.zeros((40, 40, 8), np.uint8)

@@ -647,6 +647,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   (terrain_cover.ps1 -UniformRow 58 -UniformCol 76): the 3 x 3 quadrants around the forest spot get LFieldGrass02
   in all five layers at alpha 7, so every reading gives it at full strength.
   Note: btd_before_cover holds a terrain with byte 6 = Base: do not run `terrain_cover.ps1 -Restore` any more.
+  **Uniform patch, alpha 7 (owner, 10:28-10:31, verified):** the square renders plain LFieldGrass02 with hard edges,
+  and NO wheat grows in it, also at the mill log where wheat grew before: **ground cover gives a texture at alpha 7
+  nothing**; it grows only where alphas are partial (blends, edges). Supported hypothesis: ground cover reads the
+  3-bit alphas differently from the renderer (7 as zero, or an inverted / other scale). Next: the same square at
+  alpha 3 (`-Alpha 3`).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

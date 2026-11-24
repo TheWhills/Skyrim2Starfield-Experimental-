@@ -14,6 +14,7 @@ param(
     [int]$Pad = 0,
     [int]$UniformRow = -1,
     [int]$UniformCol = -1,
+    [int]$Alpha = 7,
     [switch]$UniformRestore
 )
 $ErrorActionPreference = "Stop"
@@ -31,8 +32,8 @@ if ($Restore) {
     Step "1. the terrain files from before the uniform patch"
     python -I scripts\terrain\btd_cover.py uniform-restore --staging $Staging
 } elseif ($UniformRow -ge 0) {
-    Step "1. diagnostic: 3 x 3 quadrants around ($UniformRow, $UniformCol) = field grass in every layer"
-    python -I scripts\terrain\btd_cover.py uniform --staging $Staging --quad $UniformRow $UniformCol
+    Step "1. diagnostic: 3 x 3 quadrants around ($UniformRow, $UniformCol) = field grass in every layer, alpha $Alpha"
+    python -I scripts\terrain\btd_cover.py uniform --staging $Staging --quad $UniformRow $UniformCol --alpha $Alpha
 } elseif ($Pad -gt 0) {
     Step "1. diagnostic: $Pad unique vanilla textures inserted before the mask entry"
     python -I scripts\terrain\btd_cover.py pad --staging $Staging --sf-esm "$SF\Data\Starfield.esm" --count $Pad
