@@ -410,6 +410,65 @@ def ltex_kind_overrides(terrain_ltex, sf_ltex, slots, donor_edid):
     return out, changed
 
 
+VEGETATION_TEMPLATE = "Materials/Landscape/Grass/Bladed/GrassFieldLive01.mat"   # VegetationTranslucent1Layer
+SLOT_NAMES = {0: "Albedo", 1: "Normal", 2: "Opacity", 3: "Roughness"}
+ATLAS_ONLY = {5: "AmbientOcclusion", 8: "Transmissive"}   # the template's atlas maps: wrong layout for Skyrim's UVs
+
+
+def vegetation_mat(ours: dict, template: dict, name: str) -> dict:
+    """Our converted grass material rebuilt on the game's grass material (2026-11-24): the owner's tenth slot-test run
+    drew Skyrim's field grass with our own material (PlasticPlainSmooth01 parent, alpha-tested opacity map), but some
+    cards showed as solid pale / dark triangles; vanilla grass uses the VegetationTranslucent1Layer shader model
+    (wind, translucency, terrain tint). Keeps our albedo / normal / opacity / roughness files, drops the template's
+    atlas-only AO and transmissive maps (their constant replacements stay)."""
+    from fo4sf import convert_material
+    files = {}
+    for o in ours.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") in SLOT_NAMES:
+                files[SLOT_NAMES[c["Index"]]] = c["Data"]["FileName"]
+    if "Albedo" not in files:
+        raise ValueError(f"{name}: our material names no albedo texture")
+    mat = convert_material.build_from_template(template, name, files)
+    for o in mat["Objects"]:
+        o["Components"] = [c for c in o.get("Components", [])
+                           if not (c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") in ATLAS_ONLY)]
+    tex = mat.get("Summary", {}).get("Layer1", {}).get("Textures", {})
+    for slot in ATLAS_ONLY.values():
+        if slot in tex:
+            tex[slot]["File"] = ""
+            tex[slot]["UseReplacement"] = True
+    return mat
+
+
+def material_file(staging: str, game_path: str) -> str:
+    """The staged file of a material game path (Materials\\..., Data\\Materials\\..., any case), or ''."""
+    rel = game_path.replace("\\", "/")
+    if rel.lower().startswith("data/"):
+        rel = rel[5:]
+    for cand in (rel, rel.lower()):
+        p = os.path.join(staging, *cand.split("/"))
+        if os.path.isfile(p):
+            return p
+    return ""
+
+
+def rebuild_as_vegetation(staging: str, game_path: str, template: dict) -> bool:
+    """Rewrite a staged converted material in place as a vegetation (grass shader) material; False if not found."""
+    from fo4sf import convert_material
+    p = material_file(staging, game_path)
+    if not p:
+        return False
+    with open(p, encoding="utf-8-sig") as fh:
+        ours = json.load(fh)
+    if any(o.get("Parent", "").lower().endswith("vegetationtranslucent1layer.mat") for o in ours.get("Objects", [])):
+        return True                    # already rebuilt (materials are shared between models)
+    mat = vegetation_mat(ours, template, os.path.splitext(os.path.basename(p))[0])
+    with open(p, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(convert_material.dump_mat(mat))
+    return True
+
+
 def without_vertex_colours(sh):
     """The shape with no vertex colours. 2026-11-24: Skyrim grass keeps its wind sway in the vertex-colour alpha (0 on
     most vertices of FieldGrass01, 0x72..0x8C at the blade tips); vanilla Starfield grass meshes have no vertex colours,
@@ -420,7 +479,7 @@ def without_vertex_colours(sh):
 
 
 def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
-                  keep_colours: bool = False, flat: bool = False) -> str:
+                  keep_colours: bool = False, flat: bool = False, veg_template: dict = None) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided, no vertex colours unless keep_colours); returns its path under meshes\\. info: a dict to fill with
     model_info."""
@@ -453,6 +512,9 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
     if material:
         files = {rel: (with_material(d, material) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
                  if not rel.lower().endswith(".mat")}
+    elif veg_template is not None:   # our own material, rebuilt on the game's grass shader model
+        for m in sorted({x for x in mats if x}):
+            rebuild_as_vegetation(staging, m, veg_template)
     if geometry is not None:
         files = {rel: (with_geometry(d, geometry) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
                  if not rel.lower().endswith(".mesh")}
@@ -560,6 +622,11 @@ def main(argv=None):
                          "(s2s_<name>.nif) instead of over a free vanilla path: the grass system only sees direct "
                          "children of that folder (2026-11-24, Starfield.exe); whether it sees new files depends on "
                          "them being in the file index when the grass manager starts (test)")
+    ap.add_argument("--grass-shader", choices=("vegetation", "plain"), default="vegetation",
+                    help="our own grass materials: 'vegetation' (default, 2026-11-24) rebuilds them on the game's "
+                         "grass material GrassFieldLive01 (VegetationTranslucent1Layer: wind, translucency, terrain "
+                         "tint) with Skyrim's textures; 'plain' keeps the converter's standard material (some cards "
+                         "drew as solid triangles in game)")
     ap.add_argument("--keep-vertex-colours", action="store_true",
                     help="keep Skyrim's grass vertex colours (before 2026-11-24 the default); now dropped like vanilla "
                          "grass meshes have none: their alpha (Skyrim's wind weight, 0 on most vertices) may hide the "
@@ -724,6 +791,14 @@ def main(argv=None):
         conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), staging, a.texconv, cr, None,
                                              prefix=PREFIX)
         tdnam = dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"]
+        veg_template = None
+        if a.grass_shader == "vegetation" and not a.vanilla_material:
+            from fo4sf import convert_material
+            try:
+                veg_template = convert_material.read_template_path(cr, VEGETATION_TEMPLATE)
+            except StopIteration:
+                print(f"note: {VEGETATION_TEMPLATE} not in {os.path.basename(cr)}: plain grass materials")
+            report["grass_shader"] = "vegetation" if veg_template else "plain"
         variants = [template_nif(os.path.join(a.starfield, "Data"), v[1]) for v in PATH_VARIANTS] \
             if a.path_variants else None
         order = lambda g: gras_sky.get(g, {}).get("edid", "")              # noqa: E731
@@ -792,7 +867,8 @@ def main(argv=None):
                            else a.vanilla_material)
                     minfo = {}
                     model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo,
-                                          keep_colours=a.keep_vertex_colours, flat=a.flat_paths)
+                                          keep_colours=a.keep_vertex_colours, flat=a.flat_paths,
+                                          veg_template=veg_template)
                     report.setdefault("model_info", {})[r["edid"]] = minfo
                     if mat:
                         report.setdefault("materials", {})[r["edid"]] = mat

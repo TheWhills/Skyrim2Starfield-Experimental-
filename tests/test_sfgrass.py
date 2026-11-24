@@ -352,6 +352,45 @@ class PlanetBiomeTests(unittest.TestCase):
         added = sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 4, 0x99, 0x77))
         self.assertEqual(added[-1], {"kind": "LNAM", "mask": 4, "ltex": 0x99, "gcvr": 0x77})
 
+    def test_vegetation_mat(self):
+        import skyrim_grass_native as N
+        atlas = "Data\\Textures\\Grass\\Atlas_"
+        tex = lambda i, f: {"Data": {"FileName": f}, "Index": i, "Type": "BSMaterial::MRTextureFile"}  # noqa: E731
+        template = {"Objects": [
+            {"Parent": "Data\\MATERIALS\\Layered\\ShaderModels\\VegetationTranslucent1Layer.mat",
+             "Components": [{"Data": {"Name": "GrassFieldLive01"}, "Index": 0, "Type": "BSComponentDB::CTName"},
+                            {"Data": {"ID": "res:00000001:0005BB6C:A5E8C819"}, "Index": 0,
+                             "Type": "BSMaterial::LayerID"}]},
+            {"ID": "res:00000002:0005BB6C:A5E8C819", "Parent": "res:6C18301C:0005E297:A06346EA",
+             "Components": [tex(0, atlas + "color.dds"), tex(1, atlas + "normal.dds"), tex(2, atlas + "opacity.dds"),
+                            tex(3, atlas + "rough.dds"), tex(5, atlas + "ao.dds"), tex(8, atlas + "transmissive.dds")]}],
+            "Summary": {"Layer1": {"Textures": {k: {"File": atlas + f, "UseReplacement": False} for k, f in (
+                ("Albedo", "color.dds"), ("Normal", "normal.dds"), ("Opacity", "opacity.dds"),
+                ("Roughness", "rough.dds"), ("AmbientOcclusion", "ao.dds"), ("Transmissive", "transmissive.dds"))}}}}
+        ours = {"Objects": [{"Components": [tex(0, "Data\\Textures\\s2s\\g_color.dds"),
+                                            tex(1, "Data\\Textures\\s2s\\g_normal.dds"),
+                                            tex(2, "Data\\Textures\\s2s\\g_opacity.dds"),
+                                            tex(3, "Data\\Textures\\s2s\\g_rough.dds")]}]}
+        mat = N.vegetation_mat(ours, template, "fieldgrass01_x")
+        files = {c["Index"]: c["Data"]["FileName"] for o in mat["Objects"] for c in o["Components"]
+                 if c.get("Type") == "BSMaterial::MRTextureFile"}
+        self.assertEqual(files, {0: "Data\\Textures\\s2s\\g_color.dds", 1: "Data\\Textures\\s2s\\g_normal.dds",
+                                 2: "Data\\Textures\\s2s\\g_opacity.dds", 3: "Data\\Textures\\s2s\\g_rough.dds"})
+        self.assertTrue(mat["Objects"][0]["Parent"].endswith("VegetationTranslucent1Layer.mat"))   # the grass shader
+        self.assertNotEqual(mat["Objects"][1]["ID"], "res:00000002:0005BB6C:A5E8C819")             # own object IDs
+        self.assertTrue(mat["Summary"]["Layer1"]["Textures"]["AmbientOcclusion"]["UseReplacement"])
+        with self.assertRaises(ValueError):
+            N.vegetation_mat({"Objects": []}, template, "x")
+        with tempfile.TemporaryDirectory() as st:
+            os.makedirs(os.path.join(st, "materials", "s2s"))
+            with open(os.path.join(st, "materials", "s2s", "g.mat"), "w", encoding="utf-8") as fh:
+                json.dump(ours, fh)
+            self.assertTrue(N.rebuild_as_vegetation(st, "Data\\Materials\\S2S\\g.mat", template))
+            self.assertTrue(N.rebuild_as_vegetation(st, "Materials\\s2s\\g.mat", template))     # twice: kept
+            with open(os.path.join(st, "materials", "s2s", "g.mat"), encoding="utf-8") as fh:
+                self.assertTrue(json.load(fh)["Objects"][0]["Parent"].endswith("VegetationTranslucent1Layer.mat"))
+            self.assertFalse(N.rebuild_as_vegetation(st, "Materials\\missing.mat", template))
+
     def test_grass_visible(self):
         import skyrim_grass_native as N
         self.assertTrue(N.grass_visible("Landscape\\Grass\\GrassSage02.nif"))

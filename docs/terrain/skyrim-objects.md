@@ -754,6 +754,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   GrassFieldLive01 texture (another layout). Tenth run: `-GrassOnly -OwnMaterial` (our converted material with
   Skyrim's own textures, on the same visible path): Skyrim's look = our .mat works for grass (the 2026-11-23 refusal
   was the path); bare = materials are a real second block (next Starfield.exe question).
+  **Tenth run (owner, -OwnMaterial, verified in game): Skyrim's field grass with SKYRIM'S OWN TEXTURE grows across
+  the field** (upright green Skyrim blades). So our own .mat works for grass; the 2026-11-23 "refused" was the path.
+  Left: some cards draw as solid pale / dark triangles ("fins": FieldGrass01 is 3 big cards, a fin is one drawn
+  without its cut-out). Our material is the converter's plain one (parent PlasticPlainSmooth01, opacity map,
+  alpha test 0.392); vanilla grass (GrassFieldLive01) uses the VegetationTranslucent1Layer shader model (alpha test,
+  translucency, wind, terrain tint), also with a separate opacity map. Supported hypothesis: a grass pass (shadow /
+  depth) expects the vegetation shader. The grass build now rebuilds our grass materials on GrassFieldLive01 with
+  Skyrim's textures (`--grass-shader vegetation`, default; the atlas AO / transmissive maps dropped; `plain` = old).
+  Eleventh run: `-GrassOnly -OwnMaterial` again.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
