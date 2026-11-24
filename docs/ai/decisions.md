@@ -2848,3 +2848,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   with NiNode::AttachChild under WeaponLeft shows in the left hand and follows it (verified, owner's screenshots).
   The runtime-copy route works; what is left is posing (dual moveset, left grip, an orientation offset) and the
   hotkey / damage steps of the plan.
+- 2026-11-24 owner: a real left-hand weapon rather than a copy. Starfield.esm has RightHand / LeftHand / EitherHand /
+  BothHands equip slots (the combat robots hold a gun per hand); melee weapons are BothHands. Verified in game
+  (S2SCombat left-equip test, branch claude/left-hand-copy-test): ActorEquipManager::EquipObject into LeftHand, with the
+  weapons' records set in memory to RightHand / LeftHand (BothHands bumped the right weapon; EitherHand sent both models
+  to WeaponLeft), the stance re-equip kept to RightHand, and the game's left model moved to L_Wrist at the grip with its
+  root renamed (a root named "Weapon" took the right weapon's attach). Two of the same weapon get no left model from the
+  game: the clone covers that case (untested). Decision: the native equip is the route; the clone is the fallback.

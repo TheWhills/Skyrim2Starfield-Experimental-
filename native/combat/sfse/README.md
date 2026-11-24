@@ -220,3 +220,10 @@ later run had the dual stance's re-equip right after it, which rebuilt both mode
 churn). Next build: the key asks for the dual stance first and does the left equip 1.2 s later (no re-equip after the
 left equip); the move log names the model (its first child).
 
+Owner's run 2026-11-24 (renamed-root build), **verified**: a real left-hand weapon works. Cutlass (0026D8A5) in the
+right hand, Rescue Axe (0004F760) in the game's LeftHand slot, held at the grip on L_Wrist (looked right, owner), dual
+moveset on, attacks / sheathe / draw work, the second press restores everything (records back to BothHands, the right
+weapon re-equipped, normal stance). The game rebuilds the left model on every re-equip and draw (13 re-moves in the
+log: "the game took the left model off", then moved again within a frame or so). Untested: two of the same weapon
+(bLeftEquipSameCopy), save / load with both on, left-hand damage.
+
