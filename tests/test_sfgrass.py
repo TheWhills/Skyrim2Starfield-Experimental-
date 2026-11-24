@@ -391,6 +391,19 @@ class PlanetBiomeTests(unittest.TestCase):
                 self.assertTrue(json.load(fh)["Objects"][0]["Parent"].endswith("VegetationTranslucent1Layer.mat"))
             self.assertFalse(N.rebuild_as_vegetation(st, "Materials\\missing.mat", template))
 
+    def test_vegetation_terrain_tint(self):
+        import skyrim_grass_native as N
+        tint = {"Data": {"Enabled": "true", "TerrainBlendStrength": "0.7"}, "Index": 0,
+                "Type": "BSMaterial::TerrainTintSettingsComponent"}
+        template = {"Objects": [{"Parent": "x\\VegetationTranslucent1Layer.mat", "Components": [tint]}],
+                    "Summary": {"Layer1": {"Textures": {"Albedo": {"File": "a.dds"}}}}}
+        ours = {"Objects": [{"Components": [{"Data": {"FileName": "o.dds"}, "Index": 0,
+                                             "Type": "BSMaterial::MRTextureFile"}]}]}
+        enabled = lambda m: [c["Data"]["Enabled"] for o in m["Objects"] for c in o["Components"]  # noqa: E731
+                             if c["Type"] == "BSMaterial::TerrainTintSettingsComponent"]
+        self.assertEqual(enabled(N.vegetation_mat(ours, template, "g")), ["false"])
+        self.assertEqual(enabled(N.vegetation_mat(ours, template, "g", terrain_tint=True)), ["true"])
+
     def test_with_clamp(self):
         import skyrim_grass_native as N
         mat = {"Objects": [

@@ -418,7 +418,7 @@ SLOT_NAMES = {0: "Albedo", 1: "Normal", 2: "Opacity", 3: "Roughness"}
 ATLAS_ONLY = {5: "AmbientOcclusion", 8: "Transmissive"}   # the template's atlas maps: wrong layout for Skyrim's UVs
 
 
-def vegetation_mat(ours: dict, template: dict, name: str) -> dict:
+def vegetation_mat(ours: dict, template: dict, name: str, terrain_tint: bool = False) -> dict:
     """Our converted grass material rebuilt on the game's grass material (2026-11-24): the owner's tenth slot-test run
     drew Skyrim's field grass with our own material (PlasticPlainSmooth01 parent, alpha-tested opacity map), but some
     cards showed as solid pale / dark triangles; vanilla grass uses the VegetationTranslucent1Layer shader model
@@ -436,6 +436,10 @@ def vegetation_mat(ours: dict, template: dict, name: str) -> dict:
     for o in mat["Objects"]:
         o["Components"] = [c for c in o.get("Components", [])
                            if not (c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") in ATLAS_ONLY)]
+    for o in mat["Objects"]:            # 2026-11-24: dark spots along the blades (owner); the ground under the grass
+        for c in o.get("Components", []):   # is mixed in at 0.7 by world position, its specks drawn on the blades
+            if c.get("Type") == "BSMaterial::TerrainTintSettingsComponent":
+                c.setdefault("Data", {})["Enabled"] = "true" if terrain_tint else "false"
     tex = mat.get("Summary", {}).get("Layer1", {}).get("Textures", {})
     for slot in ATLAS_ONLY.values():
         if slot in tex:
@@ -503,7 +507,7 @@ def clamp_material(staging: str, game_path: str) -> bool:
     return True
 
 
-def rebuild_as_vegetation(staging: str, game_path: str, template: dict) -> bool:
+def rebuild_as_vegetation(staging: str, game_path: str, template: dict, terrain_tint: bool = False) -> bool:
     """Rewrite a staged converted material in place as a vegetation (grass shader) material; False if not found."""
     from fo4sf import convert_material
     p = material_file(staging, game_path)
@@ -513,7 +517,7 @@ def rebuild_as_vegetation(staging: str, game_path: str, template: dict) -> bool:
         ours = json.load(fh)
     if any(o.get("Parent", "").lower().endswith("vegetationtranslucent1layer.mat") for o in ours.get("Objects", [])):
         return True                    # already rebuilt (materials are shared between models)
-    mat = vegetation_mat(ours, template, os.path.splitext(os.path.basename(p))[0])
+    mat = vegetation_mat(ours, template, os.path.splitext(os.path.basename(p))[0], terrain_tint)
     with open(p, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(convert_material.dump_mat(mat))
     return True
@@ -530,7 +534,7 @@ def without_vertex_colours(sh):
 
 def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
                   keep_colours: bool = False, flat: bool = False, veg_template: dict = None,
-                  blades: bool = False, back_faces: bool = True) -> str:
+                  blades: bool = False, back_faces: bool = True, terrain_tint: bool = False) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided, no vertex colours unless keep_colours); returns its path under meshes\\. info: a dict to fill with
     model_info."""
@@ -574,7 +578,7 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
     else:                            # our own material
         for m in sorted({x for x in mats if x}):
             if veg_template is not None:     # rebuilt on the game's grass shader model
-                rebuild_as_vegetation(staging, m, veg_template)
+                rebuild_as_vegetation(staging, m, veg_template, terrain_tint)
             clamp_material(staging, m)       # Skyrim's grass textures clamp, Starfield wraps by default
     if geometry is not None:
         files = {rel: (with_geometry(d, geometry) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
@@ -687,6 +691,10 @@ def main(argv=None):
                     help="'cards' (default): Skyrim's grass cards as they are. 'blades' (test, 2026-11-24): every "
                          "card cut into strips along its cut-out (fo4sf.grasscards); owner: blades come out "
                          "disconnected and the shape off, so not the default")
+    ap.add_argument("--terrain-tint", action="store_true",
+                    help="keep the grass shader's terrain tint (the ground's colour mixed into the blades at 0.7 by "
+                         "world position). Off by default since 2026-11-24: it drew the ground's specks as dark spots "
+                         "on Skyrim's blades, and Skyrim's grass has no such tint")
     ap.add_argument("--no-back-faces", action="store_true",
                     help="test (2026-11-24): no mirrored copy of double-sided Skyrim grass triangles; the game's "
                          "grass material draws both sides already, so each card was two coplanar triangles")
@@ -938,7 +946,7 @@ def main(argv=None):
                     model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo,
                                           keep_colours=a.keep_vertex_colours, flat=a.flat_paths,
                                           veg_template=veg_template, blades=a.grass_geometry == "blades",
-                                          back_faces=not a.no_back_faces)
+                                          back_faces=not a.no_back_faces, terrain_tint=a.terrain_tint)
                     report.setdefault("model_info", {})[r["edid"]] = minfo
                     if a.flat_paths:
                         print(f"  {r['edid']} -> meshes\\{model}  {info_text(minfo)}")

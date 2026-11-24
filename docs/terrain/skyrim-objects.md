@@ -817,6 +817,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   texture (and the sides wrapped likewise). Starfield materials can clamp: BSMaterial::TextureAddressModeComponent
   'Clamp' on the UV stream object (12,997 vanilla uses; the grass template has none). The grass build now sets it on
   every converted grass material. Sixteenth run: `-GrassOnly -OwnMaterial -FlatPaths -NoBackFaces`.
+  **Sixteenth run (owner, clamp, verified in game): "that fixed it"** - Skyrim's field grass and flowers with
+  Skyrim's textures, no floating pieces, on Skyrim's original 3-triangle cards. Left: small dark spots along the
+  blades. Our colour texture is clean (blade mean ~112/113/59, gaps olive ~74/81/49, not black; no dark blade texels
+  at level 0); the spots came with the vegetation shader, whose terrain tint (TerrainBlendStrength 0.7) mixes in the
+  ground texture under the grass by world position - our field-grass ground is full of dark specks and white flowers.
+  Supported hypothesis; terrain tint is now off for converted Skyrim grass (`--terrain-tint` keeps it; Skyrim's
+  grass had no such tint). Seventeenth run: same command.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
