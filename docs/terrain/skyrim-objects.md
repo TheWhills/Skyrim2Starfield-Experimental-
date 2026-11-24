@@ -732,6 +732,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   14 of 18 vertices** (0x72..0x8C at the blade tips: Skyrim's wind weight), while the vanilla grass .mesh has no
   vertex colours at all (and a uv2). Supported hypothesis: the grass shader reads that alpha as opacity. The grass
   build now drops grass vertex colours (`--keep-vertex-colours` for the old way). Eighth run: `-GrassOnly`.
+  **Eighth run (owner, no vertex colours, built mesh checked: 0 colours; verified in game): still bare.** Summary of
+  runs 4-8: placement, records, water clamps, material choice and vertex colours are ruled out; only the converted
+  FieldGrass01 model with a borrowed game material stays invisible. FieldGrass01 is 3 Skyrim cards (6 tris with back
+  faces) meant for Skyrim's own grass texture; supported hypothesis: a game grass material's texture layout leaves
+  those cards mostly transparent (bigger Skyrim models, e.g. forest grass, showed on 2026-11-23). Showing Skyrim's
+  grass as Skyrim draws it needs Skyrim's textures on grass: the open "why does the grass system refuse our .mat"
+  question (Starfield.exe). Working fallback: vanilla Starfield grass models per Skyrim grass family with our records.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
