@@ -143,6 +143,15 @@ static void copy_names() {
     CHECK(copy_node_name("").empty());
 }
 
+static void form_ids() {
+    CHECK(parse_form_id("0x0001234F") == 0x1234Fu);
+    CHECK(parse_form_id(" 0026D8A5 ") == 0x26D8A5u);
+    CHECK(parse_form_id("1234f") == 0x1234Fu);
+    CHECK(!parse_form_id("") && !parse_form_id("0") && !parse_form_id("0x") && !parse_form_id("12G4"));
+    CHECK(!parse_form_id("123456789"));                               // more than 8 digits
+    CHECK(kSlotLeftHand == 0x13F43u && kSlotEitherHand == 0x13F44u);   // Starfield.esm EQUP
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -157,6 +166,7 @@ int main() {
     turns_and_angles();
     grip_is_a_rotation();
     copy_names();
+    form_ids();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);

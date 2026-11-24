@@ -169,3 +169,13 @@ L_Wrist. Same run (iLogKeys 400): in every stance the game starts one more attac
 AttackStateNextAttack when a combo stops (1.8-2.0 s after the last click, no V press, nothing sent by the plugin);
 `bCancelUnpressedAttacks` / `fUnpressedAttackGap` (1.4 s) now cancel such an attack with sQueuedPowerCancelEvent.
 
+## Native left-hand equip test (2026-11-24)
+Owner: a real left-hand weapon (equipped as far as the game knows, one of two identical swords per hand) rather than a
+copy. Starfield.esm's EQUP records (read 2026-11-24): RightHand 00013F42, LeftHand 00013F43, EitherHand 00013F44
+(parents Right + Left), BothHands 00013F45; the combat robots equip crModelA_CombatRightGun_Auto in RightHand and
+crModelA_CombatLeftGun_Auto in LeftHand; player melee weapons are BothHands. `iLeftEquipKey` (53 = /) calls
+ActorEquipManager::EquipObject with the LeftHand slot (S2SCombat passed no slot before) on `sLeftEquipWeapon` or the
+right-hand weapon; `bLeftEquipEitherHand` switches the weapon's slot to EitherHand in memory first; the second press
+unequips and restores. Logged 1.5 s later: GetEquippedWeapon(0..2), copies carried, the 3D under WeaponLeft / Weapon.
+Questions: does the right weapon stay, does a stack of two give one per hand, does the model hang under WeaponLeft.
+

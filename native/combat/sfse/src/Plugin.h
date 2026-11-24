@@ -48,6 +48,11 @@ struct Settings {
     int left_copy_turn = 0;                        // 0..23: s2s/left_copy.h turn()
     float left_copy_rotation[3] = {0, 0, 0};       // degrees about x, y, z, after the turn
     std::uint32_t left_copy_turn_key = 0;          // steps through the 24 turns while a copy is on (0 = off)
+    // Native left-hand equip test: the key (0 = off), the weapon (0 = the one in the right hand), and whether its
+    // BothHands slot is switched to EitherHand in memory first.
+    std::uint32_t left_equip_key = 0;
+    std::uint32_t left_equip_weapon = 0;
+    bool left_equip_either_hand = false;
 };
 
 class Plugin {
@@ -122,6 +127,9 @@ private:
     int left_copy_turn_now_ = 0;                  // the turn in use (the turn key changes it; main thread)
     int dual_polled_ = -1;                        // the worn-keyword poll's last answer (-1 none yet)
     bool copy_dual_prev_ = false;
+    std::atomic_bool left_equipped_{false};       // the native left-hand equip test put a weapon on (main thread)
+    std::atomic<double> left_report_at_{-1.0};    // when to log what is equipped (1.5 s after the equip / unequip)
+    std::atomic<std::uint32_t> left_report_id_{0};
     double copy_report_at_ = 0.0;                 // LeftCopyReport every 2 s while a copy is on (first 40)
     int copy_reports_ = 0;                 // a left-hand copy was on at the last Tick (bLeftCopyDual)
     std::atomic_int poll_gen_{0}, worn_gen_{0};

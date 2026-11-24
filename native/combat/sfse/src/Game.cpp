@@ -899,6 +899,133 @@ bool EquipWeapon(std::function<void(const std::string&)> report) {
     return ok;
 }
 
+// ---- Native left-hand equip test (s2s/left_copy.h kSlot*) ----
+namespace {
+struct LeftEquipState {
+    std::uint32_t weapon = 0;                 // the weapon the test tried to put into LeftHand
+    bool equipped = false;                    // the game said yes
+    RE::BGSEquipSlot* old_slot = nullptr;     // its equip slot before bLeftEquipEitherHand changed it
+    bool slot_changed = false;
+} g_left_equip;
+
+std::string SlotName(const RE::BGSEquipSlot* s) {
+    if (!s) return "none";
+    const auto id = s->GetFormID();
+    const char* n = id == combat::kSlotRightHand  ? "RightHand"
+                    : id == combat::kSlotLeftHand ? "LeftHand"
+                    : id == combat::kSlotEitherHand ? "EitherHand"
+                    : id == combat::kSlotBothHands  ? "BothHands"
+                                                    : "other";
+    return std::format("{} {:08X}", n, id);
+}
+
+// The names under a node (depth-first, at most 40), for the log
+std::string Under(std::string_view node_name) {
+    auto* root = Player3D();
+    if (!root || g_children.offset < 0) return "(no 3D / child list)";
+    RE::NiAVObject* node = nullptr;
+    int budget = 4000;
+    Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+        const char* n = o->name.c_str();
+        if (!node && n && node_name == n) node = o;
+    });
+    if (!node) return "(not found)";
+    std::string out;
+    int b2 = 40;
+    Walk(node, 0, b2, [&](RE::NiAVObject* o, int depth) {
+        const char* n = o->name.c_str();
+        out += std::format(" {}{}", std::string(static_cast<std::size_t>(depth), '>'), n ? n : "");
+    });
+    return out;
+}
+}  // namespace
+
+std::string LeftEquip(std::uint32_t form_id, bool either_hand) {
+    auto* player = Player();
+    auto* mgr = RE::ActorEquipManager::GetSingleton();
+    auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(form_id);
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    auto* either = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotEitherHand);
+    if (!player || !mgr) return "no player / ActorEquipManager";
+    if (!weap) return std::format("{:08X} is not a weapon", form_id);
+    if (!left || !either) return "LeftHand / EitherHand slot form not found";
+    auto* type = static_cast<RE::BGSEquipType*>(weap);
+    const std::string before = SlotName(type->equipSlot);
+    if (either_hand && type->equipSlot != either) {
+        g_left_equip.old_slot = type->equipSlot;
+        g_left_equip.slot_changed = true;
+        type->equipSlot = either;                       // in memory only, until LeftUnequip
+    }
+    // Starfield 1.16 (CommonLibSF): EquipObject(actor, instance, slot, queue, force, sounds, applyNow, locked)
+    RE::BGSObjectInstance item(weap, nullptr);
+    const bool ok = mgr->EquipObject(player, item, left, false, false, true, true, false);
+    g_left_equip.weapon = form_id;
+    g_left_equip.equipped = ok;
+    return std::format("equip {:08X} into {}: {} (weapon's slot {} -> {})", form_id, SlotName(left),
+                       ok ? "game says yes" : "game says NO", before, SlotName(type->equipSlot));
+}
+
+std::string LeftUnequip() {
+    auto& s = g_left_equip;
+    auto* player = Player();
+    auto* mgr = RE::ActorEquipManager::GetSingleton();
+    auto* weap = s.weapon ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(s.weapon) : nullptr;
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    std::string out = "nothing equipped by the test";
+    if (player && mgr && weap && left && s.equipped) {
+        RE::BGSObjectInstance item(weap, nullptr);
+        const bool ok = mgr->UnequipObject(player, item, left, false, false, true, true, nullptr);
+        out = std::format("unequip {:08X} from LeftHand: {}", s.weapon, ok ? "game says yes" : "game says NO");
+    }
+    if (s.slot_changed && weap) {
+        static_cast<RE::BGSEquipType*>(weap)->equipSlot = s.old_slot;
+        out += std::format("; weapon's slot back to {}", SlotName(s.old_slot));
+    }
+    s = {};
+    return out;
+}
+
+bool RightWeaponId(std::function<void(std::uint32_t)> result) {
+    return Dispatch("Actor", "GetEquippedWeapon",
+        [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+            out.resize(1);
+            RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(0));
+        },
+        [result](const RE::BSScript::Variable& weapon) {
+            auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+            if (result) result(obj ? static_cast<std::uint32_t>(obj->GetHandle() & 0xFFFFFFFFull) : 0u);
+        });
+}
+
+void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log) {
+    if (!log) return;
+    // Papyrus Actor.GetEquippedWeapon(i): which weapon the game reports per equip index (FO4: 0 = the default /
+    // right hand; what 1 and 2 mean on Starfield is part of the test)
+    for (int i = 0; i < 3; ++i)
+        Dispatch("Actor", "GetEquippedWeapon",
+            [i](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                out.resize(1);
+                RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(i));
+            },
+            [i, log](const RE::BSScript::Variable& weapon) {
+                auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+                log(obj ? std::format("GetEquippedWeapon({}) = {:08X}", i, obj->GetHandle() & 0xFFFFFFFFull)
+                        : std::format("GetEquippedWeapon({}) = none", i));
+            });
+    if (auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(form_id))
+        Dispatch("ObjectReference", "GetItemCount",
+            [weap](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                out.resize(1);
+                RE::BSScript::PackVariable(out[0], weap);
+            },
+            [form_id, log](const RE::BSScript::Variable& v) {
+                log(std::format("copies of {:08X} carried: {}", form_id,
+                                v.is<std::int32_t>() ? RE::BSScript::get<std::int32_t>(v) : -1));
+            });
+    log("3D under WeaponLeft:" + Under("WeaponLeft"));
+    log("3D under Weapon:" + Under("Weapon"));
+}
+
 float ActorValue(std::string_view editor_id) {
     auto* player = Player();
     auto* info = RE::TESForm::LookupByEditorID<RE::ActorValueInfo>(RE::BSFixedString(std::string(editor_id).c_str()));

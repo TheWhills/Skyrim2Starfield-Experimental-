@@ -124,6 +124,21 @@ std::string copy_node_name(std::string_view name) {
     return std::string(kCopyNamePrefix) + std::string(name);
 }
 
+std::optional<std::uint32_t> parse_form_id(std::string_view text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) text.remove_prefix(1);
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.remove_suffix(1);
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) text.remove_prefix(2);
+    if (text.empty() || text.size() > 8) return std::nullopt;
+    std::uint32_t v = 0;
+    for (char c : text) {
+        int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+        if (d < 0) return std::nullopt;
+        v = v * 16 + static_cast<std::uint32_t>(d);
+    }
+    if (v == 0) return std::nullopt;
+    return v;
+}
+
 Xform left_grip() {
     Xform g;
     g.r = {{{-0.179094f, 0.980503f, 0.080866f}, {-0.231144f, 0.037960f, -0.972179f}, {-0.956294f, -0.192803f, 0.219839f}}};

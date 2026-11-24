@@ -63,6 +63,14 @@ LeftCopyResult TurnLeftCopy(int turn, const float degrees[3]);
 // Where the copy is (its world transform) against where its parent's world and our local put it: "" when none is on.
 // Owner's run 2026-11-23: the copy floated away from the hand and the turn key changed nothing visible.
 std::string LeftCopyReport();
+// Native left-hand equip test (s2s/left_copy.h kSlot*): LeftEquip equips the weapon into the LeftHand equip slot
+// (either_hand: its BothHands slot set to EitherHand in memory first); LeftUnequip takes it off and restores the slot.
+// Main thread. RightWeaponId: Papyrus GetEquippedWeapon(0)'s FormID (0 none), on the VM thread. LeftEquipReport (main
+// thread; Papyrus parts answer later): GetEquippedWeapon(0..2), copies carried, the 3D under WeaponLeft and Weapon.
+std::string LeftEquip(std::uint32_t form_id, bool either_hand);
+std::string LeftUnequip();
+bool RightWeaponId(std::function<void(std::uint32_t)> result);
+void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log);
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
 // ObjectReference.GetItemCount on the player, result on the VM thread. EquipForm: the native equip / unequip of a base

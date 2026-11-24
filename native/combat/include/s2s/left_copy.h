@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -65,6 +66,15 @@ Xform oriented(const Xform& original, int turn_index, const float degrees[3]);
 // the stance re-equip (it most likely went into the copy). "" stays "", an already prefixed name is kept.
 inline constexpr std::string_view kCopyNamePrefix = "S2SL_";
 std::string copy_node_name(std::string_view name);
+
+// Native left-hand equip test (owner, 2026-11-24: a real left-hand weapon, not a copy). Starfield.esm has the slots
+// (EQUP): RightHand 00013F42, LeftHand 00013F43, EitherHand 00013F44 (parents Right + Left), BothHands 00013F45; the
+// combat robots hold crModelA_CombatRightGun_Auto in RightHand and crModelA_CombatLeftGun_Auto in LeftHand, and the
+// player's melee weapons (CombatKnife, RescueAxe, ...) are BothHands (read from Starfield.esm, 2026-11-24).
+inline constexpr std::uint32_t kSlotRightHand = 0x00013F42, kSlotLeftHand = 0x00013F43, kSlotEitherHand = 0x00013F44,
+                               kSlotBothHands = 0x00013F45;
+// A FormID from the INI: "0x0001234F", "0001234F", "1234f" (hex); "" or 0 or anything else -> nullopt.
+std::optional<std::uint32_t> parse_form_id(std::string_view text);
 
 // When the copy is made and dropped. The game side reports back whether it worked (on_result); until then nothing
 // else is asked for.
