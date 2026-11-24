@@ -346,7 +346,9 @@ def model_info(all_shapes, kept) -> dict:
 
 def info_text(i: dict) -> str:
     return (f"{i['shapes']} shape(s)" + (f" (+{i['dropped']} dropped)" if i.get("dropped") else "")
-            + f", {i['tris']} tris, {i['height']:.0f} units tall")
+            + f", {i['tris']} tris, {i['height']:.0f} units tall"
+            + (f", {sum(b['cards'] for b in i['blades'])} card(s) cut into "
+               f"{sum(b['strips'] for b in i['blades'])} blade strips" if i.get("blades") else ""))
 
 
 def parse_model_from(items):
@@ -411,6 +413,7 @@ def ltex_kind_overrides(terrain_ltex, sf_ltex, slots, donor_edid):
 
 
 VEGETATION_TEMPLATE = "Materials/Landscape/Grass/Bladed/GrassFieldLive01.mat"   # VegetationTranslucent1Layer
+BLADE_REF = 96                       # the template's AlphaTestThreshold 0.375 x 255
 SLOT_NAMES = {0: "Albedo", 1: "Normal", 2: "Opacity", 3: "Roughness"}
 ATLAS_ONLY = {5: "AmbientOcclusion", 8: "Transmissive"}   # the template's atlas maps: wrong layout for Skyrim's UVs
 
@@ -453,6 +456,24 @@ def material_file(staging: str, game_path: str) -> str:
     return ""
 
 
+def opacity_of(staging: str, game_path: str):
+    """The level-0 opacity plane (uint8) of a staged converted material, or None (no cut-out / not found)."""
+    from fo4sf import grasscards
+    p = material_file(staging, game_path)
+    if not p:
+        return None
+    with open(p, encoding="utf-8-sig") as fh:
+        mat = json.load(fh)
+    for o in mat.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") == 2:
+                q = material_file(staging, c["Data"]["FileName"])
+                if q:
+                    with open(q, "rb") as fh:
+                        return grasscards.opacity_plane(fh.read())
+    return None
+
+
 def rebuild_as_vegetation(staging: str, game_path: str, template: dict) -> bool:
     """Rewrite a staged converted material in place as a vegetation (grass shader) material; False if not found."""
     from fo4sf import convert_material
@@ -479,7 +500,8 @@ def without_vertex_colours(sh):
 
 
 def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
-                  keep_colours: bool = False, flat: bool = False, veg_template: dict = None) -> str:
+                  keep_colours: bool = False, flat: bool = False, veg_template: dict = None,
+                  blades: bool = False) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided, no vertex colours unless keep_colours); returns its path under meshes\\. info: a dict to fill with
     model_info."""
@@ -493,6 +515,14 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
         m = conv._shape_material(src, sh, flat_normal_ok=True, albedo_tint=tint)
         if m is None:
             continue
+        if blades:                       # 2026-11-24: cards cut into blade strips along their cut-out
+            alpha = opacity_of(staging, m)
+            if alpha is not None:
+                from fo4sf import grasscards
+                # strips at the material's own cut (vegetation template 0.375 = 96), not Skyrim's (FieldGrass: 4)
+                sh, st = grasscards.blade_shape(sh, alpha, max(int(sh.alpha_ref or 0), BLADE_REF))
+                if info is not None:
+                    info.setdefault("blades", []).append(st)
         if skyrimnif.double_sided(src, sh.shader_ref):
             sh = skyrimconvert.with_back_faces(sh) or sh
         if not keep_colours:
@@ -622,6 +652,10 @@ def main(argv=None):
                          "(s2s_<name>.nif) instead of over a free vanilla path: the grass system only sees direct "
                          "children of that folder (2026-11-24, Starfield.exe); whether it sees new files depends on "
                          "them being in the file index when the grass manager starts (test)")
+    ap.add_argument("--grass-geometry", choices=("blades", "cards"), default="blades",
+                    help="'blades' (default, 2026-11-24): every Skyrim grass card cut into strips that follow its "
+                         "cut-out texture (fo4sf.grasscards), like vanilla grass is real blade geometry; some cards "
+                         "drew as solid triangles in game. 'cards' keeps Skyrim's cards as they are")
     ap.add_argument("--grass-shader", choices=("vegetation", "plain"), default="vegetation",
                     help="our own grass materials: 'vegetation' (default, 2026-11-24) rebuilds them on the game's "
                          "grass material GrassFieldLive01 (VegetationTranslucent1Layer: wind, translucency, terrain "
@@ -869,8 +903,10 @@ def main(argv=None):
                     minfo = {}
                     model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo,
                                           keep_colours=a.keep_vertex_colours, flat=a.flat_paths,
-                                          veg_template=veg_template)
+                                          veg_template=veg_template, blades=a.grass_geometry == "blades")
                     report.setdefault("model_info", {})[r["edid"]] = minfo
+                    if a.flat_paths:
+                        print(f"  {r['edid']} -> meshes\\{model}  {info_text(minfo)}")
                     if mat:
                         report.setdefault("materials", {})[r["edid"]] = mat
                     if free is not None:             # --vanilla-paths: move it over an unused vanilla grass path

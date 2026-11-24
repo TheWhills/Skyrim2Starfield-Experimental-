@@ -789,6 +789,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   distance dependent) applies the cut-out weakly or not at all; vanilla grass is real blade geometry (e.g. 50 tris in
   0.32 m clusters) and barely shows it, Skyrim's grass is 3 big cards (FieldGrass01: 3 triangles) shaped only by the
   cut-out. Next: does a fin turn into blades when walked up to (distance switch) or stay a fin (instance)?
+  **Owner: a fin stays a fin up close** (not a distance switch). Skyrim's FieldGrass / FieldGrassFlowers cut-out
+  threshold is 4 of 255 (NiAlphaProperty); ours 0.375. Vanilla card-style grass (hellebore: 38 tris) shows no fins;
+  its mesh has a uv2 (u 1.0, v falling with height: a wind / bend weight), the city grass has none and is fine, so
+  uv2 is not required. Fourteenth run: `-GrassOnly -OwnMaterial -FlatPaths` with **blade geometry** (default now,
+  fo4sf.grasscards, `--grass-geometry cards` = old): every card cut into column strips along its cut-out at 0.375
+  (FieldGrass01: 3 cards -> 54 strips per card at a 32 grid, about 650 tris per clump with back faces; strips cover
+  ~60 % of a card against 22 % blades, 97 % of the blades). Fins turning into blocky clump shapes = the cut-out is
+  skipped on some instances (then a finer cut or the cause in Starfield.exe); fins gone = fixed.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
