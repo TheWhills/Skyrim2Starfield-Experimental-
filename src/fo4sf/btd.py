@@ -138,3 +138,30 @@ def write(t: Btd, level: int = 9) -> bytes:   # vanilla zlib header is 78 DA (be
         out.append(b"".join(struct.pack("<II", o, s) for o, s in table[l]))
     out.extend(blocks)
     return b"".join(out)
+
+
+# 2026-11-24 (owner's Rift label test, docs/terrain/skyrim-objects.md): every 50 m quadrant that used byte value 3
+# (table entry 2) drew the default ground (table entry 0) instead of its five textures; after swapping that entry to the
+# end of the table (same textures, other byte values) the same ground showed its real textures. Values 8 and 14 were
+# seen working. Vanilla tables start with Starfield's per-mask placeholder textures, which quadrant bytes 0..4 never
+# name; padding our tables the same way keeps every byte we use at 8 or above.
+HEAD_PAD = (0x00010861, 0x00010860, 0x0001085F, 0x0001085E, 0x0001085D, 0x0001085C, 0x001235C2)   # LDefault006Base ..
+#                                                                         001Solid, LDirtFootprints01 (fo4sf.grassslots)
+
+
+def with_head_padding(t: Btd, pad=HEAD_PAD) -> Btd:
+    """t with the `pad` FormIDs at the head of its LTEX table, unreferenced, and every quadrant byte b > 0 shifted
+    by the number of entries added. Already padded: returned unchanged. A pad FormID already elsewhere in the table
+    is left out of the padding (no duplicates)."""
+    table = list(t.ltex)
+    if table[:len(pad)] == list(pad):
+        return t
+    add = [f for f in pad if f not in table]
+    if not add:
+        return t
+    if len(table) + len(add) > 255:
+        raise BtdError("LTEX table would pass 255 entries")
+    k = len(add)
+    q = t.quad_map.astype(np.int32)
+    q = np.where(q > 0, q + k, 0).astype(np.uint8)
+    return Btd(t.version, t.hmin, t.hmax, add + table, t.heights_raw, t.weights, q)

@@ -50,6 +50,9 @@ if (-not $GrassOnly) {
     # Nirn's FlatInner ground). The converter writes byte 6 = 0, so clearing it is always right here.
     python -I scripts\terrain\btd_byte6.py restore --staging $Staging
     if ($LASTEXITCODE -ne 0) { Fail "btd_byte6 restore" }
+    # 2026-11-24: quadrants using low byte values (table entry 2) drew the default ground; pad the table head
+    python -I scripts\terrain\btd_head_pad.py --staging $Staging
+    if ($LASTEXITCODE -ne 0) { Fail "btd_head_pad" }
     Step "2. reinstall the exterior"
     if (Test-Path "$SF\Data\SkyrimExterior.deploy.json") {
         python -I scripts\deploy_skyrim_exterior.py uninstall --starfield $SF --staging $Staging

@@ -434,8 +434,9 @@ class OverlayTextureTests(unittest.TestCase):
                 mapping = json.load(f)
             with open(os.path.join(out, "skyrim_source.json"), encoding="utf-8") as f:
                 src = json.load(f)
-        self.assertEqual(sorted(t.ltex), sorted([SF["LDirtFootprints01"], SF["LGrassMeadow01"], SF["LSnowDeep01"],
-                                                 SF["LGravelPath01"]]))
+        self.assertEqual(sorted(t.ltex), sorted(set(btd.HEAD_PAD) | {SF["LDirtFootprints01"], SF["LGrassMeadow01"],
+                                                                     SF["LSnowDeep01"], SF["LGravelPath01"]}))
+        self.assertGreaterEqual(int(t.quad_map[t.quad_map > 0].min()), 7)    # 2026-11-24: placeholders head the table
         dec = landtex.decode_quadrants(t.quad_map, t.weights, t.ltex)
         n = t.ncx
         o = tg.grid_origin(n)

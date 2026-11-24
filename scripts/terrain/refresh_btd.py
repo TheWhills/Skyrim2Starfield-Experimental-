@@ -374,7 +374,9 @@ def cmd_recompute(a):
                     groups.setdefault(k, []).append(f)
             print(f"  look-alike groups (same diffuse + normal): {sum(1 for v in groups.values() if len(v) > 1)}")
         words, qmap, beyond = tile_layers(planes, table, ox, oy, sp, t, a.blend, "head", a.warp, looks=looks)
-        data = btd.write(btd.Btd(old.version, old.hmin, old.hmax, table, old.heights_raw, words, qmap))
+        # 2026-11-24: low byte values drew the default ground (btd.with_head_padding)
+        data = btd.write(btd.with_head_padding(btd.Btd(old.version, old.hmin, old.hmax, table, old.heights_raw, words,
+                                                       qmap)))
         assert np.array_equal(btd.read(data).heights_raw, old.heights_raw)      # heights exactly as installed
         if not a.dry_run:
             backup = os.path.join(a.staging, BACKUP)

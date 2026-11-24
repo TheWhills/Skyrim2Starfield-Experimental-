@@ -384,6 +384,8 @@ def build(a):
         land_tex = getattr(a, "land_textures", None)   # optional (tab, weights, quad map) per tile, e.g. Skyrim's layers
         if land_tex:
             tab, wts, qmap = land_tex(t)
+            padded = btd.with_head_padding(btd.Btd(6, hmin, hmax, list(tab), raw, wts, qmap))   # 2026-11-24
+            tab, qmap = padded.ltex, padded.quad_map
         else:
             tab, wts, qmap = table, np.zeros_like(raw), np.tile(np.frombuffer(quad, np.uint8), (2 * t.n, 2 * t.n, 1))
         data = btd.write(btd.Btd(6, hmin, hmax, tab, raw, wts, qmap))

@@ -2888,3 +2888,11 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - Alternatives: merging twins outright (loses Skyrim's own no-grass spots, e.g. paths); per-sample texture choice
   (not possible: one LTEX per layer per quadrant). Trade-off: a kept grassy twin also covers its no-grass twin's share
   in that quadrant, so some grass grows where Skyrim had none.
+
+## 2026-11-24 (late): pad the terrain LTEX table head with Starfield's placeholders (Claude)
+- Decision: every Skyrim terrain BTD's LTEX table starts with the 7 per-mask placeholder textures (LDefault006Base ..
+  001Solid, LDirtFootprints01), never named by a quadrant byte; our bytes shift up by 7 (btd.with_head_padding).
+- Why: owner's label test: Rift quadrants using byte value 3 drew the default ground (entry 0); renumbering that entry
+  to the end of the table fixed the same ground. Vanilla tables also start with these placeholders.
+- Alternatives: finding the exact rule in Starfield.exe first (the Ghidra project is in use; the fix is lossless and
+  matches vanilla, so it goes first); skipping only the values seen failing (1..3; unknown which others fail).

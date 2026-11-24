@@ -883,6 +883,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   overlay entries are appended after the planet palette and the bytes rebased (u8); the renderer stops at 256
   entries, so some of our entries land past the limit and fall back to the default. S2SGrass.dll (iLogLevel=2) now
   logs the merged planet palette size before the overlay ("merged planet palette before this overlay").
+  **Palette size (S2SGrass log, owner's start): refuted** - the merged planet palette held 14 entries before ours
+  (14 + 61 = 75 of 256); the overlay's entries are our table in order, then 6 of Nirn's biome entries.
+  **Table swap test (owner, label test still on, verified in game):** table entries 2 (LFallForestLeaves01) and 54
+  swapped and every byte renumbered (same FormID at every byte, checked): the same ground now reads LFALLFOREST... So
+  a quadrant using byte value 3 drew the default ground (entry 0) as a whole; values 8 (pine forest) and 14
+  (Riverwood) were seen working. Why low values fail is open (unresolved). Fix: Starfield's 7 per-mask placeholders
+  head the table, unreferenced, as in vanilla tables (btd.with_head_padding; the overlay build, refresh_btd recompute
+  and btd_head_pad.py for a staging; grass_hook.ps1 runs it), so every byte we use is 8 or above.
 * **Positions in game**: the merge shift changes between sessions (2026-11-24: (-2200, +1500) m, earlier
   (-37.6, +47.0)); ground_at.py needs `player.getpos` right after `coc` of the same session (--spawn-at).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
