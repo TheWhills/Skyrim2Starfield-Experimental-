@@ -156,3 +156,11 @@ world times our local: shows whether our local drives it). The "power attack whe
 AttackStart 0.45 s after AttackStateNextAttack with no click and nothing sent by the plugin (its only events in that
 log were MeleeAttack02, the back dodge).
 
+Owner's run 2026-11-23 (fifth build): right weapon back (the rename worked), copy 0.079 m from L_Wrist (= the grip
+offset: our translation is used) but at the wrong angle in every clip, and the `left copy where:` rotation never matched
+our compose(). Ghidra (NiAVObject world update 0x142bd5000 -> 0x140316a50): world = local * parent in the row-vector
+convention, i.e. the stored rows are our columns; the grip rotation had been written transposed (its inverse). Under
+WeaponLeft in builds 2-3 this did not show (the local was the identity, and the dual clips pose WeaponLeft as the left
+weapon's frame; only the vanilla turns, which leave WeaponLeft at rest, went wrong). Sixth build: ReadXform /
+WriteXform go through xform store_engine / load_engine (tested against the engine's own compose).
+

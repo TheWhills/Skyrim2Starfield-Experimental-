@@ -375,20 +375,19 @@ std::string DumpBoneSearch() {
 namespace {
 // NiAVObject transforms on 1.16 (owner's dump 2026-10-27: local at +0x40, world at +0x80; each 3 rows of 16 bytes,
 // translation +0x30, scale +0x3C; the root's world translation was the player's position)
+// (stored in the engine's row-vector layout: combat::load_engine / store_engine)
 combat::Xform ReadXform(const void* node, std::ptrdiff_t at) {
-    const auto* b = reinterpret_cast<const std::byte*>(node) + at;
-    combat::Xform x;
-    for (int i = 0; i < 3; ++i) std::memcpy(x.r[i].data(), b + 0x10 * i, 12);
-    std::memcpy(x.t.data(), b + 0x30, 12);
-    std::memcpy(&x.s, b + 0x3C, 4);
-    return x;
+    float f[16];
+    std::memcpy(f, reinterpret_cast<const std::byte*>(node) + at, sizeof(f));
+    return combat::load_engine(f);
 }
 
 void WriteXform(void* node, std::ptrdiff_t at, const combat::Xform& x) {
+    float f[16];
+    combat::store_engine(x, f);
     auto* b = reinterpret_cast<std::byte*>(node) + at;
-    for (int i = 0; i < 3; ++i) std::memcpy(b + 0x10 * i, x.r[i].data(), 12);
-    std::memcpy(b + 0x30, x.t.data(), 12);
-    std::memcpy(b + 0x3C, &x.s, 4);
+    for (int i = 0; i < 3; ++i) std::memcpy(b + 0x10 * i, f + 4 * i, 12);   // the rows' 4th lane is left as it is
+    std::memcpy(b + 0x30, f + 12, 16);
 }
 
 bool NameIs(const RE::NiAVObject* o, std::string_view want) {
