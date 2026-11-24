@@ -780,6 +780,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   --vanilla-paths made share FieldGrass01's model. Thirteenth run: `-GrassOnly -OwnMaterial -FlatPaths` (each Skyrim
   grass its own model at a NEW path directly in landscape\grass\, s2s_landscape_grass_<name>.nif): grass and no fins =
   fins were vanilla instances and new paths work (no 6-path limit); no grass = new files miss the start-up copy.
+  **Thirteenth run (owner, -FlatPaths, verified in game): Skyrim's grass grows from NEW files directly in
+  landscape\grass\** (both s2s_landscape_grass_*.nif), FieldGrass02 now with its own FieldGrassFlowers02 model (Skyrim's
+  yellow-orange flowers). So new flat paths work: **no 6-path limit**, every Skyrim grass can have its own model.
+  The fins remain (mostly at middle distance, near clumps cut cleanly), so the vanilla-file idea is refuted: they are
+  our cards. Textures match vanilla's formats (colour BC1 sRGB without alpha, opacity BC4, both for vanilla
+  GrassFieldLiveAtlas01 and ours), so not a colour-alpha cut-out. Supported hypothesis: some grass rendering (likely
+  distance dependent) applies the cut-out weakly or not at all; vanilla grass is real blade geometry (e.g. 50 tris in
+  0.32 m clusters) and barely shows it, Skyrim's grass is 3 big cards (FieldGrass01: 3 triangles) shaped only by the
+  cut-out. Next: does a fin turn into blades when walked up to (distance switch) or stay a fin (instance)?
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
