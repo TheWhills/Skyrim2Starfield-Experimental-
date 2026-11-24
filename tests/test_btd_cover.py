@@ -109,6 +109,26 @@ class CoverEncodeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             C.slot_patch(t, 1, 1, 2, 0x99, 0x777)
 
+    def test_slots_patch(self):
+        q = np.zeros((4, 4, 8), np.uint8)
+        q[:, :, :5] = [1, 3, 2, 3, 5]
+        q[:, :, 6] = 6
+        h = np.zeros((256, 256), np.uint16)
+        w = np.full((256, 256), 0x1234, np.uint16)
+        t = btd.Btd(5, 0.0, 1.0, [0xA, 0xB, 0xC, 0xD, 0xE, 0xF0], h, w, q)
+        new, changed = C.slots_patch(t, {0xC: 0x777, 0xA: 0xF0, 0x99: 0x778})
+        self.assertEqual(list(new.ltex), [0xA, 0xB, 0xC, 0xD, 0xE, 0xF0, 0x777, 0x778])
+        self.assertEqual(new.quad_map[3, 3, :7].tolist(), [6, 7, 2, 7, 5, 0, 0])   # world-wide, byte 6 cleared
+        self.assertEqual(changed, {0xC: 32, 0xA: 16, 0x99: 0})
+        self.assertTrue(np.array_equal(new.weights, w))
+        from fo4sf import grassslots
+        self.assertEqual(grassslots.parse_slot_map("LFieldGrass02=0, LRocks01=2"), {"lfieldgrass02": 0, "lrocks01": 2})
+        with self.assertRaises(ValueError):
+            grassslots.parse_slot_map("A=0,B=0")
+        with self.assertRaises(ValueError):
+            grassslots.parse_slot_map("A=7")
+        self.assertEqual(len(grassslots.parse_slot_map(grassslots.DEFAULT_SLOT_MAP)), 7)
+
     def test_too_many_pairs(self):
         q = np.zeros((40, 40, 8), np.uint8)
         rng = np.random.default_rng(1)

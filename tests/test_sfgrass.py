@@ -449,6 +449,19 @@ class PlanetBiomeTests(unittest.TestCase):
         d = sfgrass.parse_gras_dnam(dict((s, bytes(v)) for s, v in by["S2S_Fern"][2])[b"DNAM"])
         self.assertEqual((d["above_water_clamp"], d["below_water_clamp"]), (sfgrass.NO_CLAMP, sfgrass.NO_CLAMP))
 
+    def test_slot_map(self):
+        _raw, by, log = self._run(["--slot-map", "LFernGround=3"])
+        cover = by["S2S_Cover_00000031"]
+        terr = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])
+        self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x30, "gcvr": 0})          # other masks kept
+        self.assertIn({"kind": "LNAM", "mask": 3, "ltex": 0x31, "gcvr": cover[3]}, terr)          # its own slot
+        self.assertIn("mask 3 (FlatInner): lfernground", log)
+        import skyrim_grass_native as N
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stdout(io.StringIO()):
+                N.main(["--skyrim", "x", "--skyrim-data", "x", "--starfield", "x", "--terrain", "x",
+                        "--texconv", "x", "--out", "x", "--slot-map", "A=9"])
+
     def test_slot_first(self):
         _raw, by, log = self._run(["--only-ltex", "LFernGround", "--slot-first"])
         cover = by["S2S_Cover_00000031"]

@@ -2859,3 +2859,12 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - Alternatives: keep byte 6 = one mask and tune alphas (the leftover weight cannot follow Skyrim's textures);
   naming our LTEX records `LDefault...` (would replace the vanilla slot defaults); baked grass patches (the current
   fallback; no Starfield fading).
+
+## 2026-11-24 (evening): route A for the whole Tamriel, the 7 grassiest Skyrim textures (Claude)
+- Decision: after the one-slot test worked in game, every one of the 7 biome slots carries one Skyrim texture and
+  its grass, chosen by layer strength on the staged terrain (fo4sf.grassslots.DEFAULT_SLOT_MAP); their layers are
+  repainted as the slot placeholders world-wide (`btd_cover.py slots`) and byte 6 is cleared everywhere.
+- Why: route A needs no code and is proven; these 7 textures cover most grassy ground. Byte 6 with a real slot
+  texture behind its placeholder would draw that texture as a leftover layer (the pale ground of the first test).
+- Alternatives: route B (SFSE hook, every texture its own cover; later if 7 are too few); several Skyrim textures
+  sharing a slot (they would render as one texture).

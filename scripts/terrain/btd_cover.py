@@ -185,6 +185,35 @@ def slot_patch(t: btd.Btd, row: int, col: int, size: int, src_fid: int, slot_fid
     return btd.Btd(t.version, t.hmin, t.hmax, T, t.heights_raw, t.weights, q), n_bytes, n_quads
 
 
+SLOTS_BACKUP = "btd_before_slots"
+
+
+def slots_patch(t: btd.Btd, src_to_slot: dict):
+    """(new Btd, {src fid: layer bytes changed}). World-wide: every layer byte (0..4) naming a src LTEX names its slot
+    placeholder instead (placeholders appended to the table if missing), alphas untouched, byte 6 = 0 everywhere
+    (route A, fo4sf.grassslots: the placeholder layers grow their slot's cover at their own strength; byte 6 was only
+    a leftover sixth layer, and with a real slot texture behind it it would draw that texture everywhere)."""
+    T = list(t.ltex)
+    for slot_fid in src_to_slot.values():
+        if slot_fid not in T:
+            T.append(slot_fid)
+    if len(T) > MAX_CODES:
+        raise ValueError("LTEX table would pass 255 entries")
+    q = t.quad_map.copy()
+    layers = q[:, :, :5]
+    changed = {}
+    for src_fid, slot_fid in src_to_slot.items():
+        if src_fid not in T:
+            changed[src_fid] = 0
+            continue
+        hit = t.quad_map[:, :, :5] == T.index(src_fid) + 1
+        layers[hit] = T.index(slot_fid) + 1
+        changed[src_fid] = int(hit.sum())
+    q[:, :, :5] = layers
+    q[:, :, 6] = 0
+    return btd.Btd(t.version, t.hmin, t.hmax, T, t.heights_raw, t.weights, q), changed
+
+
 def check(old: btd.Btd, new: btd.Btd, covered=None):
     """Rendering unchanged (head reading of bytes 0..4 and 6) and ground cover's reading of byte j = what the renderer
     draws at slot 4 - j; returns the number of quadrant slots that disagree."""
@@ -207,7 +236,10 @@ def check(old: btd.Btd, new: btd.Btd, covered=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("set", "pad", "restore", "uniform", "uniform-restore", "slot", "slot-restore"))
+    ap.add_argument("cmd", choices=("set", "pad", "restore", "uniform", "uniform-restore", "slot", "slot-restore",
+                                    "slots", "slots-restore"))
+    ap.add_argument("--map", default="", help="slots: Skyrim texture EditorID=mask list (default: "
+                                              "fo4sf.grassslots.DEFAULT_SLOT_MAP)")
     ap.add_argument("--quad", type=int, nargs=2, metavar=("ROW", "COL"), help="uniform / slot: centre quadrant")
     ap.add_argument("--size", type=int, default=3,
                     help="uniform / slot: quadrants per side (default 3 = 150 m; slot test: 20 = 1 km)")
@@ -225,6 +257,55 @@ def main(argv=None):
     paths = btd_byte6.staged_btds(a.staging)
     if not paths:
         sys.exit("no staged BTD found (overlays_params.json btd_file)")
+    if a.cmd in ("slots", "slots-restore"):
+        import json
+        from fo4sf import grassslots
+        sbak = os.path.join(a.staging, SLOTS_BACKUP)
+        if a.cmd == "slots":
+            try:
+                want = grassslots.parse_slot_map(a.map or grassslots.DEFAULT_SLOT_MAP)
+            except ValueError as e:
+                sys.exit(str(e))
+            with open(os.path.join(a.staging, "overlays_params.json"), encoding="utf-8") as fh:
+                over = {o["skyrim"].lower(): int(o["form_id"]) for o in json.load(fh).get("ltex_overrides", [])}
+            missing = [e for e in want if e not in over]
+            if missing:
+                sys.exit(f"not converted Skyrim textures of this terrain: {', '.join(missing)}")
+            src_to_slot = {over[e]: grassslots.PLACEHOLDERS[m] for e, m in want.items()}
+            name_of = {over[e]: e for e in want}
+        for p in paths:
+            rel = os.path.relpath(p, a.staging)
+            keep = os.path.join(sbak, rel)
+            if a.cmd == "slots-restore":
+                if os.path.exists(keep):
+                    shutil.copy2(keep, p)
+                    print(f"{rel}: put back")
+                continue
+            if not os.path.exists(keep):       # the terrain before any slot test (the 1 km test kept its own copy)
+                first = os.path.join(a.staging, SLOT_BACKUP, rel)
+                os.makedirs(os.path.dirname(keep), exist_ok=True)
+                shutil.copy2(first if os.path.exists(first) else p, keep)
+            with open(keep, "rb") as fh:
+                t = btd.read(fh.read())
+            try:
+                new, changed = slots_patch(t, src_to_slot)
+            except ValueError as e:
+                sys.exit(f"{rel}: {e}")
+            data = btd.write(new)
+            back = btd.read(data)
+            if not (np.array_equal(back.weights, t.weights) and np.array_equal(back.heights_raw, t.heights_raw)
+                    and np.array_equal(back.quad_map, new.quad_map)):
+                sys.exit(f"{rel}: check failed; file left as it was")
+            with open(p, "wb") as fh:
+                fh.write(data)
+            print(f"{rel}: table {len(t.ltex)} -> {len(new.ltex)}, byte 6 = 0 everywhere; alphas and heights "
+                  f"unchanged (checked)")
+            for fid, n in changed.items():
+                print(f"  {name_of[fid]:26s} {fid:08X} -> {grassslots.SLOT_NAMES[want[name_of[fid]]]:9s} placeholder "
+                      f"{src_to_slot[fid]:08X}: {n:,} layer bytes")
+        if a.cmd == "slots-restore" and os.path.isdir(sbak):
+            shutil.rmtree(sbak)
+        return 0
     if a.cmd in ("slot", "slot-restore"):
         sbak = os.path.join(a.staging, SLOT_BACKUP)
         slot_edid = slot_fid = None

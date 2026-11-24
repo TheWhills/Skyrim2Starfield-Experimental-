@@ -122,8 +122,11 @@ The overlay's terrain is sampled from **its own BTD** (`Data\Terrain\<world>.btd
 2. **Biome slots.** `FUN_140796a40(palette, biome)`: a biome has 7 slots {LTEX at +0x88+16i, GCVR at +0x90+16i,
    material at +0xf8+16i}, i = slot. Each slot becomes a palette entry for that biome (`FUN_1407947b0`), keyed like the
    base placeholder of the same slot. An empty LTEX falls back to the placeholder. **verified**. How BIOM LNAM
-   {mask, LTEX, GCVR} fills the 7 slots (and which entry wins when several share a mask) was not traced:
-   **unresolved**. The owner's tests give LNAM mask 0 = Base, 1 = FlatIn, 2 = FlatOut (verified in game, 2026-11-24).
+   {mask, LTEX, GCVR} fills the 7 slots (traced 2026-11-24, evening): the BIOM loader (vtable 0x144b6de68,
+   `FUN_1409df850`) reads LNAM into biome+0x88 and ANAM into biome+0xF8 through `FUN_1409e14f0`; an entry fills
+   slot = mask (0..6), and records with form version < 0x1C9 use 5 - mask. **verified** (disassembly). In game the
+   mask's ANAM texture gives the ground's look and the mask's first LNAM gives the GCVR (**verified**, runs 3-16).
+   An earlier note here read the owner's tests as "mask 1 = FlatIn": wrong, FlatIn is slot 3 (corrected).
 3. **Overlay merge.** `FUN_140795110` rebuilds the palette: base, then the biomes on the planet (`+0x2c` = position in
    the biome's list), then **each overlay** (`BGSPlanet::Overlays`, lambda -> `FUN_140795410`):
    * `FUN_1409a9570(terrain, out, ..., anchorCell)` turns the overlay BTD's LTEX table into entries {LTEX, GCVR = 0,
@@ -179,6 +182,11 @@ them). Assumption to check per spot: ground_at's alpha order = bit order.
    placeholder whose slot should fill gaps.
 5. **GCVR threshold** low (about 0.1..0.2): weights are blend fractions, and 0.44 drops most of Skyrim's blends.
 6. **No density maps** (remove `--density-maps`).
+
+Built for the whole staged Tamriel on 2026-11-24 (`tools\owner\grass_tamriel.ps1`; `btd_cover.py slots`,
+`skyrim_grass_native.py --slot-map default`, the map in `fo4sf.grassslots`): LFieldGrass02 = 0 Base, LPineForest02 =
+1 Flow, LRocks01 = 2 FlatOuter, LGrassSnow01 = 3 FlatInner, LFieldGrass01 = 4 Talus, LTundra01 = 5 Solid,
+LFallForestGrass01NoFern = 6 Path; byte 6 cleared world-wide. Offline checks only; in-game result pending.
 
 Limits: 7 (texture, cover) pairs for the whole world. Other grassy Skyrim textures must share a slot (they then render
 as that slot's texture) or stay bare. The biome is shared with Nirn's procedural ground that uses it. The palette must

@@ -711,6 +711,10 @@ def main(argv=None):
                     help="test (2026-11-24): our grasses get no water clamps (both FLT_MAX, as the vanilla moss mounds "
                          "that grew across the slot-test field); the hellebore template's above-water clamp 0.5 is "
                          "the one difference left between that control and our grass")
+    ap.add_argument("--slot-map", default="", metavar="EDID=MASK,...",
+                    help="route A for several textures (2026-11-24, fo4sf.grassslots): each listed Skyrim texture "
+                         "gets its cover and is written into the biome's own first LNAM and ANAM of its mask (0..6); "
+                         "'default' = DEFAULT_SLOT_MAP (7 land textures). Pair with btd_cover.py slots (same map)")
     ap.add_argument("--slot-alt", action="store_true",
                     help="with --slot-first: also the biome's first ANAM of each mask names that slot's texture "
                          "(2026-11-24: rewriting the LNAM alone left the placeholder drawing pale sand)")
@@ -727,6 +731,16 @@ def main(argv=None):
                          "Materials\\Landscape\\Grass (e.g. forestgrass,fieldgrass=Bladed\\GrassCityShort01); "
                          "repeatable")
     a = ap.parse_args(argv)
+    from fo4sf import grassslots
+    slot_map = {}
+    if a.slot_map:
+        try:
+            slot_map = grassslots.parse_slot_map(grassslots.DEFAULT_SLOT_MAP if a.slot_map == "default"
+                                                 else a.slot_map)
+        except ValueError as e:
+            sys.exit(str(e))
+        if not a.only_ltex:
+            a.only_ltex = ",".join(slot_map)
     try:
         fam_mats = parse_family_materials(a.family_material)
         model_from = parse_model_from(a.model_from)
@@ -1011,7 +1025,24 @@ def main(argv=None):
               f"their re-skin copied from {os.path.basename(terr_p)}")
         if not changed:
             print(f"  (no slot changed: terrain plugin {terr_p or '?'} not found or no re-skin there)")
-    if a.slot_first and target is not None:
+    if slot_map and target is not None:   # route A, every slot (fo4sf.grassslots): the biome's own entries
+        sky_name = {int(o["form_id"]): o["skyrim"].lower() for o in overrides}
+        subs = target[2]
+        placed_slots = {}
+        for slot_fid, gc in covers:
+            m = slot_map.get(sky_name.get(slot_fid, ""))
+            if m is None:
+                continue
+            subs = sfgrass.biome_with_slot(subs, m, slot_fid, gc, alt=True)
+            placed_slots[str(m)] = {"skyrim": sky_name[slot_fid], "ltex": f"{slot_fid:08X}", "gcvr": f"{gc:08X}"}
+            print(f"  mask {m} ({grassslots.SLOT_NAMES[m]}): {sky_name[slot_fid]} {slot_fid:08X}, cover {gc:08X}")
+        recs.append((b"BIOM", target[1], subs, target[3]))
+        report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "slots": placed_slots,
+                           "entries_added": 0}
+        missing = sorted(set(slot_map) - {v["skyrim"] for v in placed_slots.values()})
+        if missing:
+            print(f"  no cover for: {', '.join(missing)} (no grass, or a vanilla Starfield texture)")
+    elif a.slot_first and target is not None:
         slots = sorted({s for s, _c in covers})
         if len(slots) != 1:
             sys.exit(f"--slot-first needs exactly one covered texture (--only-ltex), got {len(slots)}")

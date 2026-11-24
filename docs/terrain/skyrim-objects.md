@@ -824,6 +824,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   ground texture under the grass by world position - our field-grass ground is full of dark specks and white flowers.
   Supported hypothesis; terrain tint is now off for converted Skyrim grass (`--terrain-tint` keeps it; Skyrim's
   grass had no such tint). Seventeenth run: same command.
+* **All of Tamriel (2026-11-24, to test in game)**: `tools\owner\grass_tamriel.ps1`. The 7 grassiest Skyrim land
+  textures of the staged terrain (layer strength over 73 x 73 cells; underwater beds left out) each take one biome
+  slot (fo4sf.grassslots.DEFAULT_SLOT_MAP): LFieldGrass02 Base, LPineForest02 Flow, LRocks01 FlatOuter, LGrassSnow01
+  FlatInner, LFieldGrass01 Talus, LTundra01 Solid, LFallForestGrass01NoFern Path. `btd_cover.py slots` paints their
+  layers as the slot placeholders world-wide with the same alphas (layer bytes on the owner's terrain: 245 / 927 /
+  2,068 / 1,318 / 779 / 539 / 424; table 56 -> 62) and clears byte 6; `skyrim_grass_native.py --slot-map default`
+  puts {texture, its Skyrim grass} in each mask's first LNAM / ANAM of Nirn's ocean biome. Every other grassy texture
+  keeps its look and grows nothing (7 slots per world without the SFSE hook, route B). `-Restore` undoes the terrain.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
