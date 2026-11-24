@@ -155,6 +155,13 @@ struct ControllerConfig {
     std::array<std::string, 8> dodge_events{"MeleeAttack01", "", "MeleeAttack04", "", "MeleeAttack02", "", "MeleeAttack03", ""};
     bool cancel_queued_power = true;
     double queued_power_window = 3.0;
+    // The same in every stance without any V press (owner's run 2026-11-23, iLogKeys 400): when the combo stops, the
+    // game starts one more attack about 1.2 s after the last AttackStateNextAttack, 1.8-2.0 s after the last click and
+    // with nothing sent by the plugin; every real attack started within ~0.7 s of its click. An AttackStart with no
+    // attack / power key press within unpressed_attack_gap seconds before it (checked 50 ms later, as above) and not
+    // sent by the plugin gets cancel_event too.
+    bool cancel_unpressed_attacks = true;
+    double unpressed_attack_gap = 1.4;
     std::string cancel_event = "ActionInterrupt";
 };
 
@@ -334,7 +341,8 @@ private:
     bool consumed_last_ = false, power_key_consumed_ = false;
     double reequip_due_ = -1.0; // when to unequip after a stance change (< 0: none pending)
     int queued_powers_ = 0;     // power key presses the game may still play as standing power attacks
-    double queued_until_ = -1.0, last_send_at_ = -1.0, last_attack_press_at_ = -1.0;
+    double queued_until_ = -1.0, last_send_at_ = -1.0, last_attack_press_at_ = -1.0, last_power_press_at_ = -1.0;
+    bool cancel_unpressed_ = false;   // the candidate is an unpressed attack (not a queued power one)
     double cancel_check_at_ = -1.0, cancel_candidate_at_ = -1.0;   // an AttackStart that may be a queued one
     double equip_due_ = -1.0;   // when to equip again at the latest (< 0: not waiting for an unequip)
     bool block_held_ = false, parried_ = false;   // parried_: this block press already parried once

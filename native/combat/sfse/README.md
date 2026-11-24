@@ -100,6 +100,151 @@ It switches itself off when S2SCombat.dll is loaded (both would send the dodge e
   is declared in `dodge/OsfSettings.h` (ABI 1.0 slot order) instead of including the GPL SDK header.
 
 
+## Left-hand copy test (2026-11-23)
+First test of the runtime left-hand copy (docs/ai/decisions.md 2026-11-23; addresses, slots and Address Library IDs in
+docs/re/findings.md on branch `claude/re-findings-ni-attach`). Code: `s2s/left_copy.h` (when to make / drop, the
+NiCloningProcess bytes; tested in tests/test_left_copy.cpp) and `game::MakeLeftCopy` / `DropLeftCopy` in Game.cpp.
+
+What a press of `iLeftCopyKey` (default 43, the `\` key) does with a weapon drawn, on the main thread:
+1. finds `sLeftCopyWeaponNode` ("Weapon") in the player's 3D and picks the drawn weapon's model among its children:
+   `sLeftCopyModel` if set, else the first child not in `sLeftCopySkip` (the hand IK helpers R_HandIk / L_HandIk;
+   first run 2026-11-23 copied R_HandIk: attach and detach worked, nothing visible). The log line lists the node's
+   subtree;
+2. finds the first of `sLeftCopyNodes` ("WeaponLeft", then "L_Wrist"; found: WeaponLeft) in the same walk;
+3. checks that the left node's vtable slots 84 / 87 are NiNode's AttachChild / DetachChild (Address Library 147173 /
+   147177); if not, it stops there and logs both addresses;
+4. clones the model as the engine does (a 0x38-byte NiCloningProcess, CreateClone slot 41, ProcessClone slot 47),
+   frees the cloning process the engine's way, and attaches the copy with AttachChild(copy, true).
+The same key, a sheathe, an unequip, or the loading screen opening takes the copy off again (DetachChild, slot 87).
+Every step logs a `left copy:` line (node names, flags, child counts, timings).
+
+What to look for: does a second weapon show at the left hand; does it follow the hand while moving and attacking;
+does it vanish on the second press / sheathe; any crash (the last `left copy:` line tells where). Skinned weapon parts
+may stay at the right hand (their bones were bound to the right-hand weapon; findings.md section 3, step 7).
+
+Owner's run 2026-11-23 (second build, screenshots + log), **verified**: the copy works. The weapon node's subtree is
+`Weapon > R_HandIk, L_HandIk, Weapon > Cutlass > Cutlass:0, ProjectileNode, Cutlass_Decals:0`; the test copied the
+inner `Weapon` (the model root) and the whole cutlass, glow included, showed in the left hand and moved with it.
+Sheathing dropped it by itself; three make / drop pairs, no crash. A press before the weapon is in the hand fails
+cleanly ("no model child"). Open: the copy flips between the right angle and pointing outward (it keeps the right
+weapon's local transform under WeaponLeft, and the one-handed clips do not pose the left hand or WeaponLeft for a
+weapon); the left hand does not grip (no dual moveset: S2SWeapons.esm not loaded); the lookup costs 550-590 ms (a
+memory check per node in the walk).
+
+Third build (2026-11-23): while a copy is on the dual moveset switches on (`bLeftCopyDual`, the same S2S_StanceDual
+keyword as the worn left blade; no S2SWeapons.esm needed) and back off when it goes. The copy's orientation:
+`iLeftCopyTurn` (one of the 24 right-angle orientations, s2s/left_copy.h turn()) then `sLeftCopyRotation` (x y z
+degrees), written into the copy's local transform after the attach; `iLeftCopyTurnKey` (39 = ;) steps through the 24
+live and logs the number. The weapon node and the left node are remembered per player 3D (checked before use), so
+only the first press walks the 3D.
+
+Owner's run 2026-11-23 (third build): the dual stance came on with the copy (verified: `dual wield: left blade worn
+(left-hand copy) -> stance S2S_StanceDual`), but under WeaponLeft the copy faced outward in turns (the vanilla turn /
+idle clips leave WeaponLeft away from the hand, as with the worn blade on 2026-10-26). Fourth build: the copy hangs
+under L_Wrist (`sLeftCopyNodes = L_Wrist, WeaponLeft`) held at WeaponLeft's rest grip (`sLeftCopyGripNode`,
+s2s left_grip() = skyrimweapon.left_grip_metres(), tests/test_left_copy_grip.py), so it stays in the hand in every
+clip, as the worn blade. Also fixed: an attack-key release whose press came in a menu (inventory / console clicks) was
+taken as a minutes-long hold and sent MeleeAttackPowerStart into the graph (the same log: 3 sends with menus open).
+
+Owner's run 2026-11-23 (fourth build): the copy hung under L_Wrist at the grip, dual stance on, cached lookup 11 ms,
+no power attack sent from menus. But the right weapon stopped showing, the copy floated away from the hand, and the
+turn key changed nothing visible (the HUD showed "Left copy turn 5"). Supported hypothesis: the copy's root was named
+"Weapon" like the skeleton bone, and the stance re-equip right after each copy found the attach node by name (`Prn`)
+and hung the real cutlass into the copy. Fifth build: every node of the copy is renamed `S2SL_<name>` before the
+attach, and every 2 s while a copy is on the log has a `left copy where:` line (the copy's world against its parent's
+world times our local: shows whether our local drives it). The "power attack when you stop" is the graph's own: an
+AttackStart 0.45 s after AttackStateNextAttack with no click and nothing sent by the plugin (its only events in that
+log were MeleeAttack02, the back dodge).
+
+Owner's run 2026-11-23 (fifth build): right weapon back (the rename worked), copy 0.079 m from L_Wrist (= the grip
+offset: our translation is used) but at the wrong angle in every clip, and the `left copy where:` rotation never matched
+our compose(). Ghidra (NiAVObject world update 0x142bd5000 -> 0x140316a50): world = local * parent in the row-vector
+convention, i.e. the stored rows are our columns; the grip rotation had been written transposed (its inverse). Under
+WeaponLeft in builds 2-3 this did not show (the local was the identity, and the dual clips pose WeaponLeft as the left
+weapon's frame; only the vanilla turns, which leave WeaponLeft at rest, went wrong). Sixth build: ReadXform /
+WriteXform go through xform store_engine / load_engine (tested against the engine's own compose).
+
+Owner's run 2026-11-23 (sixth build): **the left copy's angle is right** (verified, owner), held at the grip under
+L_Wrist. Same run (iLogKeys 400): in every stance the game starts one more attack ~1.2 s after the last
+AttackStateNextAttack when a combo stops (1.8-2.0 s after the last click, no V press, nothing sent by the plugin);
+`bCancelUnpressedAttacks` / `fUnpressedAttackGap` (1.4 s) now cancel such an attack with sQueuedPowerCancelEvent.
+
+## Native left-hand equip test (2026-11-24)
+Owner: a real left-hand weapon (equipped as far as the game knows, one of two identical swords per hand) rather than a
+copy. Starfield.esm's EQUP records (read 2026-11-24): RightHand 00013F42, LeftHand 00013F43, EitherHand 00013F44
+(parents Right + Left), BothHands 00013F45; the combat robots equip crModelA_CombatRightGun_Auto in RightHand and
+crModelA_CombatLeftGun_Auto in LeftHand; player melee weapons are BothHands. `iLeftEquipKey` (53 = /) calls
+ActorEquipManager::EquipObject with the LeftHand slot (S2SCombat passed no slot before) on `sLeftEquipWeapon` or the
+right-hand weapon; `bLeftEquipEitherHand` switches the weapon's slot to EitherHand in memory first; the second press
+unequips and restores. Logged 1.5 s later: GetEquippedWeapon(0..2), copies carried, the 3D under WeaponLeft / Weapon.
+Questions: does the right weapon stay, does a stack of two give one per hand, does the model hang under WeaponLeft.
+
+Owner's run 2026-11-24 (first native test, bLeftEquipEitherHand = 0), **verified**: EquipObject into LeftHand is
+accepted and the game hangs the weapon's model under WeaponLeft itself (`WeaponLeft > Weapon > Cutlass ...`);
+GetEquippedWeapon(1) = the left weapon, (0) = the right one. But the right weapon was bumped every time
+(GetEquippedWeapon(0) = none; no attacks or sheathing until the left one came off): a melee weapon's slot is BothHands
+(RightHand + LeftHand). UnequipObject answered NO yet took it off; the right hand then held fists (000001F4). The ~1 s
+freeze was the report's two 3D walks. Second build: EitherHand mode is the default (both weapons' slot set to
+EitherHand in memory, the right one re-equipped into RightHand, then the left one into LeftHand); the unequip restores
+the slots and re-equips the right weapon; one cached 3D walk; fists are refused as the "right weapon".
+
+Owner's runs 2026-11-24 (EitherHand mode), **verified**: a *different* weapon in LeftHand (Rescue Axe 0004F760 next to
+the cutlass) shows in the left hand, and the game sheathes, draws and removes it with the second press. The *same*
+weapon in both hands (two cutlasses, two axes) is equipped twice (GetEquippedWeapon 0 and 1) but gets no left model.
+Under WeaponLeft the axe swung outward in idles (only the dual clips pose WeaponLeft). Next build: `bLeftEquipGrip`
+moves the game's left model from WeaponLeft to L_Wrist at the grip every tick (let go of when the game releases it,
+on a redraw, or when the left weapon is off: s2s follow_step, tested); the dual stance comes on with a native left
+weapon (`bLeftCopyDual`); `bLeftEquipSameCopy` shows the clone for a same-weapon pair, a second after the equip.
+
+Owner's run 2026-11-24 (grip-follow build): the dual stance switched on and off with the left weapon (verified), but
+the axe only showed for a moment: the dual stance's re-equip of the right weapon (no slot; the cutlass was EitherHand
+by then) pushed the axe out of LeftHand (GetEquippedWeapon(1) = none right after "stance re-equip: equip ... done").
+The follower's moves worked meanwhile ("moved ... ok", then "the game took the left model off" as it went). Fix: while
+a native left weapon is on, the stance re-equip unequips / equips the right weapon in the RightHand slot.
+
+Owner's run 2026-11-24 (RightHand re-equip build): both stayed equipped (GetEquippedWeapon 0 = cutlass, 1 = axe), but
+both models sat in the left hand and nothing hung under the "Weapon" bone: with both records EitherHand the right
+weapon's model was attached under WeaponLeft too (the attach node follows the weapon's own slot; only the right-hand
+slot maps to "Weapon"), and the follower kept moving whichever model sat there. Fix (`bLeftEquipHandSlots`, formerly
+bLeftEquipEitherHand): the right weapon's record RightHand, the left one's LeftHand (s2s hand_slots, tested).
+
+Owner's run 2026-11-24 (hand-slots build): still both in the left hand, the "Weapon" bone empty, though the records were
+RightHand / LeftHand now. Supported hypothesis: the follower had moved the axe's model root, named "Weapon", onto
+L_Wrist; the right weapon's re-equip right after finds its attach node by name and hung the cutlass into the axe (as
+the copy did before it was renamed). Fix: the moved model's root is renamed S2SL_Weapon.
+
+Owner's run 2026-11-24 (root-rename build), **verified**: a weapon in each hand, the left one held at the grip on
+L_Wrist (grip correct, owner), the right-hand bone no longer taken over. But the hands were swapped (cutlass left,
+axe right). The one run without the swap (the first axe run) had no right-weapon re-equip after the left equip; every
+later run had the dual stance's re-equip right after it, which rebuilt both models (the follower's "taken off / moved"
+churn). Next build: the key asks for the dual stance first and does the left equip 1.2 s later (no re-equip after the
+left equip); the move log names the model (its first child).
+
+Owner's run 2026-11-24 (renamed-root build), **verified**: a real left-hand weapon works. Cutlass (0026D8A5) in the
+right hand, Rescue Axe (0004F760) in the game's LeftHand slot, held at the grip on L_Wrist (looked right, owner), dual
+moveset on, attacks / sheathe / draw work, the second press restores everything (records back to BothHands, the right
+weapon re-equipped, normal stance). The game rebuilds the left model on every re-equip and draw (13 re-moves in the
+log: "the game took the left model off", then moved again within a frame or so). Untested: two of the same weapon
+(bLeftEquipSameCopy), save / load with both on, left-hand damage.
+
+Owner's save / load test 2026-11-24 (load in the same session): the game restored the equipped state
+(GetEquippedWeapon 0 = cutlass, 1 = axe; the axe record still LeftHand in memory) but built neither model (WeaponLeft
+and the Weapon bone empty; sheathe / draw did not help). Fix: 2 s after a load the plugin asks GetEquippedWeapon(1);
+a weapon there is taken off (LeftRestorePrepare: the whole sequence undone if still in memory, else the saved weapon
+off LeftHand) and the normal sequence runs again on it (dual stance, then the RightHand / LeftHand equips).
+Untested: a load after a restart.
+
+Owner's save / load test 2026-11-24 (restore build), **verified**: after a load the left weapon came back by itself
+about 3 s after the loading screen (the plugin took it off and ran the sequence again). Owner: copy how the game
+restores the normal weapon. The game saves which weapon is in which hand (GetEquippedWeapon(1) = the axe right after
+the load) and rebuilds the hands while loading; only our record changes (memory only) were missing. Now the last pair
+is kept in `S2SCombat_LeftHand.txt` beside the INI (SFSE 1.16 offers plugins no save hook; MO2 puts the file in
+Overwrite), its records are set when a loading screen *opens*, and 0.3 s after the load s2s after_load (tested)
+decides: keep (the game built both hands), redo (unequip / re-equip both, soon enough to finish before the player
+draws), or undo the records (the save has no left weapon). Owner's runs 2026-11-24: the game builds no weapon model
+after a load with a left weapon in the save (sheathed or drawn; AttachWeapon vE8 is only called by equips, attach log
+bLogWeaponAttach), so a saved left weapon is always redone.
+
 ## S2SGrass (ground cover on every converted Skyrim texture, 2026-11-24)
 Not part of the combat plugins; it lives here to share the CommonLibSF build. `grass/main.cpp` + the tested core
 `../include/s2s/grass_covers.h` (`xmake build test_grass_covers`, `xmake run test_grass_covers`; also in CMake).

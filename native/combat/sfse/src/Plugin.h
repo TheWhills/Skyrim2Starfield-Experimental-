@@ -4,6 +4,7 @@
 #include "ClashApi.h"
 #include "s2s/controller.h"
 #include "s2s/left_blade.h"
+#include "s2s/left_copy.h"
 
 namespace s2s::sfse {
 
@@ -17,6 +18,7 @@ struct Settings {
     int log_hits = 30;              // first N hits on the player written to the log (attacker, weapon, attack event)
     int log_commands = 60;          // first N actions carried out (event sent, keyword set, lock) with their result
     int perf_seconds = 60;          // for this long after loading, the plugin's own time per frame / event every 10 s
+                                    // (and the frame times); -1 = all session
     bool probe_layout = false;      // find BSAnimationGraphEvent's layout again (after a game update moved it)
     // Timed-block feedback: an impact effect (ImpactDataSet EditorID; "" = the best spark set found by the list),
     // played from this node of the player toward the attacker, and a camera shake (strength, seconds; 0 = none).
@@ -36,6 +38,25 @@ struct Settings {
     std::string left_hand_node;                     // off by default: the game draws the weapon from its own copy
     bool dual_debug = false;                        // the 3D listing / bone search when dual turns on (slow: ~1 s)
     std::string left_hand_bone = "L_Wrist";
+    // Left-hand copy test (s2s/left_copy.h): the key (0 = off), the right weapon node, the left nodes to try.
+    std::uint32_t left_copy_key = 0;
+    std::string left_copy_weapon_node = "Weapon";
+    std::string left_copy_nodes = "L_Wrist, WeaponLeft";
+    std::string left_copy_model;                                  // "" = first child not in left_copy_skip
+    std::string left_copy_skip = "R_HandIk, L_HandIk";
+    bool left_copy_dual = true;                    // the dual moveset while a copy is on
+    std::string left_copy_grip_node = "L_Wrist";   // under this node the copy is held at the left grip ("" = never)
+    int left_copy_turn = 0;                        // 0..23: s2s/left_copy.h turn()
+    float left_copy_rotation[3] = {0, 0, 0};       // degrees about x, y, z, after the turn
+    std::uint32_t left_copy_turn_key = 0;          // steps through the 24 turns while a copy is on (0 = off)
+    // Native left-hand equip test: the key (0 = off), the weapon (0 = the one in the right hand), and whether its
+    // BothHands slot is switched to EitherHand in memory first.
+    std::uint32_t left_equip_key = 0;
+    std::uint32_t left_equip_weapon = 0;
+    bool left_equip_either_hand = true;
+    bool left_equip_grip = true;                   // the game's left model moved to L_Wrist at the grip
+    bool left_equip_same_copy = true;              // same weapon in both hands: the clone shows the left one
+    bool log_weapon_attach = false;                // log the player's weapon attach / detach calls (Hooks.cpp)
 };
 
 class Plugin {
@@ -44,6 +65,9 @@ public:
 
     void LoadSettings(const std::string& ini_path);
     const Settings& settings() const { return settings_; }
+    // for the timing report (Hooks.cpp): the native left weapon on, a menu open
+    bool left_weapon_on() const { return left_equipped_.load(); }
+    bool menu_open() const { return menus_.blocked(); }
 
     // Game callbacks (Hooks.cpp). Input and tick come on the main thread; animation events may not.
     // true: hide this key event from the game (Controller::last_key_consumed)
@@ -76,6 +100,8 @@ public:
 
 private:
     void Run(std::vector<combat::Command> commands);     // carried out on the main thread
+    void DoLeftCopy(combat::LeftCopy::Action a);          // queued on the main thread; reports back to left_copy_
+    void StartLeftEquip();                                // the native left equip (Papyrus right weapon, then a task)
     combat::PlayerState State();
 
     std::mutex lock_;
@@ -105,6 +131,29 @@ private:
     // the left blade put away while sheathed (left_blade_ under lock_). A poll answer counts only if no equip /
     // unequip of the blade happened since it was asked (poll_gen_): an older one says what was worn before.
     combat::LeftBlade left_blade_;
+    combat::LeftCopy left_copy_;                  // the left-hand copy test (under lock_)
+    int left_copy_turn_now_ = 0;                  // the turn in use (the turn key changes it; main thread)
+    int dual_polled_ = -1;                        // the worn-keyword poll's last answer (-1 none yet)
+    bool copy_dual_prev_ = false;
+    std::atomic_bool left_equipped_{false};       // the native left-hand equip test put a weapon on (main thread)
+    std::atomic_bool left_wanted_{false};         // the key asked for a native left weapon (dual stance from here)
+    std::atomic<double> left_equip_due_{-1.0};    // when to equip it (after the dual stance's re-equip)
+    std::atomic<double> left_restore_at_{-1.0};   // after a load: when to check the LeftHand weapon
+    std::atomic<std::uint32_t> left_restore_id_{0};   // the saved left weapon, equipped again by StartLeftEquip
+    // the last right / left pair (s2s HandPair), kept in S2SCombat_LeftHand.txt beside the INI; its records are set
+    // when a loading screen opens (records_set_), and the after-load check expects expected_left_ in LeftHand
+    std::string left_pair_path_;
+    std::atomic_bool records_set_{false};
+    std::atomic<std::uint32_t> expected_left_{0};
+    std::optional<combat::HandPair> ReadHandPair() const;
+    void WriteHandPair(const combat::HandPair* p) const;     // nullptr: clear it
+    std::atomic<double> left_report_at_{-1.0};    // when to log what is equipped (1.5 s after the equip / unequip)
+    std::atomic<std::uint32_t> left_report_id_{0};
+    bool left_follow_holding_ = false;            // LeftWeaponFollow still holds a moved model (main thread)
+    std::atomic_bool left_same_copy_{false};      // the clone was made for a same-weapon pair (main thread)
+    std::atomic<double> left_same_copy_at_{-1.0}; // when to make it (a second after the equip: the right re-equip)
+    double copy_report_at_ = 0.0;                 // LeftCopyReport every 2 s while a copy is on (first 40)
+    int copy_reports_ = 0;                 // a left-hand copy was on at the last Tick (bLeftCopyDual)
     std::atomic_int poll_gen_{0}, worn_gen_{0};
     std::atomic_int left_action_{0};              // a LeftBlade::Action from the animation events, done in Tick
     std::atomic_int drawn_answer_{-1};            // Papyrus IsWeaponDrawn, asked once when the blade is first worn

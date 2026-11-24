@@ -33,7 +33,38 @@ static Xform yaw(float deg, float x, float y, float z, float s = 1.0f) {
     return o;
 }
 
+// The engine's own compose (Starfield 1.16.244, 0x140316a50) on the stored floats: out rows = local rows * parent rows,
+// out t = local t * parent rows * parent scale + parent t, out scale = local scale * parent scale (the lane after t).
+static void engine_compose(const float p[16], const float l[16], float o[16]) {
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 4; ++j)
+            o[4 * i + j] = l[4 * i + 0] * p[0 + j] + l[4 * i + 1] * p[4 + j] + l[4 * i + 2] * p[8 + j];
+    for (int j = 0; j < 3; ++j) o[12 + j] = (l[12] * p[j] + l[13] * p[4 + j] + l[14] * p[8 + j]) * p[15] + p[12 + j];
+    o[15] = l[15] * p[15];
+}
+
+static void engine_layout() {
+    const Xform parent = yaw(35, 1, 2, 3, 1.5f);
+    Xform child = yaw(-80, 0.068f, -0.011f, -0.038f);
+    child.r = compose(child, yaw(0, 0, 0, 0)).r;                    // a non-symmetric rotation
+    float p[16], l[16], o[16];
+    store_engine(parent, p);
+    store_engine(child, l);
+    engine_compose(p, l, o);
+    CHECK(near(load_engine(o), compose(parent, child)));            // our math == the engine's on stored floats
+    CHECK(near(load_engine(p), parent));                            // round trip
+    CHECK(p[1] == parent.r[1][0] && p[4] == parent.r[0][1]);        // stored rows are our columns
+    // the mistake of the 2026-11-23 build: rows stored as ours, untransposed, do not compose to compose()
+    float wrong[16];
+    store_engine(child, wrong);
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) wrong[4 * i + j] = child.r[i][j];
+    engine_compose(p, wrong, o);
+    CHECK(!near(load_engine(o), compose(parent, child)));
+}
+
 int main() {
+    engine_layout();
     // the owner's dump: the player's root at (-796.98, 1515.3, -161.5), rows (0.768, 0.640, 0) (-0.640, 0.768, 0)
     Xform root;
     root.r = {{{0.7684f, 0.6399f, 0}, {-0.6399f, 0.7684f, 0}, {0, 0, 1}}};

@@ -7,6 +7,7 @@ ControllerConfig dodge_only(ControllerConfig c) {
     c.power_key = 0;
     c.power_in_combo = false;
     c.cancel_queued_power = false;
+    c.cancel_unpressed_attacks = false;
     c.stance_reequip = false;
     c.stance_refresh_events.clear();
     c.dual_worn_keyword.clear();

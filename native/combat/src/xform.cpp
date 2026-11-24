@@ -12,6 +12,24 @@ Xform compose(const Xform& a, const Xform& b) {
     return o;
 }
 
+void store_engine(const Xform& x, float out[16]) {
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) out[4 * i + j] = x.r[j][i];
+        out[4 * i + 3] = 0.0f;
+    }
+    for (int i = 0; i < 3; ++i) out[12 + i] = x.t[i];
+    out[15] = x.s;
+}
+
+Xform load_engine(const float in[16]) {
+    Xform x;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) x.r[j][i] = in[4 * i + j];
+    for (int i = 0; i < 3; ++i) x.t[i] = in[12 + i];
+    x.s = in[15];
+    return x;
+}
+
 Xform inverse(const Xform& a) {
     Xform o;
     const float s = a.s == 0.0f ? 1.0f : a.s;

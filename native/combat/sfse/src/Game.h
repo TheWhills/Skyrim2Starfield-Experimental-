@@ -9,6 +9,15 @@ namespace s2s::sfse::game {
 double Now();
 bool Readable(const void* ptr, std::size_t bytes);   // committed, readable memory (VirtualQuery)                                    // seconds, steady clock
 RE::PlayerCharacter* Player();
+// The hand nodes the left weapon uses (WeaponLeft, Weapon, L_Wrist) are kept between frames: look at the player's 3D
+// again soon (a menu, equip or draw), or forget them (a loading screen opening: the 3D is rebuilt). Main thread.
+void RecheckHandNodes();
+void DropHandNodes();
+std::string TakeHandNodeTimes();   // "player 3D lookups N (T us)" since the last call (the timing report)
+// A raw argument of a game function, for the attach log (bLogWeaponAttach): "player", a weapon record "WEAP 0004F760"
+// (also one pointer hop away: "->WEAP ..."), an equip slot "slot LeftHand 00013F43", a small integer, or hex. Forms
+// are told apart by their vtable (that of the live UnarmedHuman / RightHand records), so nothing is assumed.
+std::string DescribeArg(std::uint64_t v);
 // True while the plugin itself sends a graph event on this thread (SendEvent / SendActorEvents): the clash's event
 // filter (Hooks.cpp) lets those through.
 bool SendingOwnEvent();
@@ -42,6 +51,56 @@ std::string DumpBoneSearch();
 int FollowBone(std::string_view node_name, std::string_view bone_name);
 void InvalidateBoneFollow();                     // the 3D may be rebuilt (equip, menu, load): look the nodes up again
 std::string BoneFollowReport();                  // read-backs and time since the last report
+// Left-hand copy test (s2s/left_copy.h, docs/re/findings.md): MakeLeftCopy clones the first child of the node
+// `right_node` (the drawn weapon's model under "Weapon"; see model_name) with the engine's CreateClone / ProcessClone and attaches the
+// copy with NiNode::AttachChild under the first node of `left_nodes` (comma separated) that exists. DropLeftCopy
+// detaches it and lets it go. Main thread. ok = whether a copy is now on (Make) / was taken off (Drop); the text is
+// for the log.
+struct LeftCopyResult { bool ok = false; std::string text; };
+// model: the weapon node's child to copy ("" = the first child not in skip, comma separated). turn / degrees: the
+// copy's orientation under the left node (s2s/left_copy.h oriented()).
+struct LeftCopyOptions {
+    std::string right_node, left_nodes, model, skip;
+    std::string grip_node = "L_Wrist";    // under this node the copy is held at the left grip (s2s left_grip())
+    int turn = 0;
+    float degrees[3] = {0, 0, 0};
+};
+LeftCopyResult MakeLeftCopy(const LeftCopyOptions& o);
+LeftCopyResult DropLeftCopy();
+// Turns the copy that is on (its local rotation from the one it was cloned with). Main thread.
+LeftCopyResult TurnLeftCopy(int turn, const float degrees[3]);
+// Where the copy is (its world transform) against where its parent's world and our local put it: "" when none is on.
+// Owner's run 2026-11-23: the copy floated away from the hand and the turn key changed nothing visible.
+std::string LeftCopyReport();
+// Native left-hand equip test (s2s/left_copy.h kSlot*): LeftEquip equips the weapon into the LeftHand equip slot
+// (either_hand: its BothHands slot set to EitherHand in memory first); LeftUnequip takes it off and restores the slot.
+// Main thread. RightWeaponId: Papyrus GetEquippedWeapon(0)'s FormID (0 none), on the VM thread. LeftEquipReport (main
+// thread; Papyrus parts answer later): GetEquippedWeapon(0..2), copies carried, the 3D under WeaponLeft and Weapon.
+// left_id / right_id: the left and right weapons (the same FormID for two of one sword; right 0 = none).
+std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either_hand);
+std::string LeftUnequip();
+bool RightWeaponId(std::function<void(std::uint32_t)> result);
+// After a load (owner's save / load test 2026-11-24: both weapons equipped, neither model built): LeftWeaponId is
+// Papyrus GetEquippedWeapon(1) (the LeftHand weapon; 0 none) on the VM thread; LeftRestorePrepare (main thread) undoes
+// the plugin's sequence if it is still in memory, else takes the saved left weapon off LeftHand, so the normal
+// sequence can run again and build both models.
+bool LeftWeaponId(std::function<void(std::uint32_t)> result);
+// Set the two weapons' records to their hands ahead of a load (s2s hand_slots; owner, 2026-11-24: the game saves which
+// weapon is in which hand and rebuilds the hands while loading, but with the records back at BothHands it built no
+// model); UndoHandSlots puts them back when the save has no left weapon. HandModelsNow: whether a model hangs on each
+// hand (right: under the "Weapon" bone, the IK helpers aside; left: under WeaponLeft or moved to L_Wrist).
+std::string ApplyHandSlots(std::uint32_t left_id, std::uint32_t right_id);
+std::string UndoHandSlots();
+struct HandModels { bool right = false, left = false; };
+HandModels HandModelsNow();
+std::string LeftRestorePrepare(std::uint32_t left_id);
+void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log);
+// The game's own left-hand model (a LeftHand-slot weapon, hung under WeaponLeft) moved onto L_Wrist at the left grip
+// (s2s left_grip(), then turn / degrees), every tick while `active`; let go of when the game releases it or when not
+// active. Owner's run 2026-11-24: under WeaponLeft the axe swung outward in idles (only the dual clips pose WeaponLeft).
+// Main thread. log: "" unless something changed; holding: a moved model is still on the wrist (call again).
+struct LeftFollowResult { std::string log; bool holding = false; };
+LeftFollowResult LeftWeaponFollow(bool active, int turn, const float degrees[3]);
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
 // ObjectReference.GetItemCount on the player, result on the VM thread. EquipForm: the native equip / unequip of a base

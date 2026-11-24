@@ -2843,6 +2843,18 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - First step: the Ghidra + ReVa setup (docs/re/ghidra-ai-setup.md, versions updated: ReVa 7.3.1 for Ghidra 12.1.3,
   JDK 21) and the first session's targets (NiObject clone virtual, NiNode attach, what the equip path calls after
   attaching a weapon so it is drawn). Owner has not installed Ghidra yet.
+- 2026-11-23 first in-game copy (S2SCombat left-copy test, branch claude/left-hand-copy-test; findings.md on
+  claude/re-findings-ni-attach): the drawn cutlass cloned with the engine's CreateClone / ProcessClone and attached
+  with NiNode::AttachChild under WeaponLeft shows in the left hand and follows it (verified, owner's screenshots).
+  The runtime-copy route works; what is left is posing (dual moveset, left grip, an orientation offset) and the
+  hotkey / damage steps of the plan.
+- 2026-11-24 owner: a real left-hand weapon rather than a copy. Starfield.esm has RightHand / LeftHand / EitherHand /
+  BothHands equip slots (the combat robots hold a gun per hand); melee weapons are BothHands. Verified in game
+  (S2SCombat left-equip test, branch claude/left-hand-copy-test): ActorEquipManager::EquipObject into LeftHand, with the
+  weapons' records set in memory to RightHand / LeftHand (BothHands bumped the right weapon; EitherHand sent both models
+  to WeaponLeft), the stance re-equip kept to RightHand, and the game's left model moved to L_Wrist at the grip with its
+  root renamed (a root named "Weapon" took the right weapon's attach). Two of the same weapon get no left model from the
+  game: the clone covers that case (untested). Decision: the native equip is the route; the clone is the fallback.
 
 
 ## 2026-11-24 — Ground cover on SKY_Tamriel: drop density maps; grass through LDefault slots or an SFSE palette hook (Claude, proposed)

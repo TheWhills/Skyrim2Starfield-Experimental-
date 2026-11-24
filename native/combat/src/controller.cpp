@@ -465,6 +465,11 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         else if (k == "scombopowerevent") c.combo_power_event = v;
         else if (k == "squeuedpowercancelevent") c.cancel_event = v;
         else if (k == "fqueuedpowerwindow") ok = read_double(v, c.queued_power_window);
+        else if (k == "funpressedattackgap") ok = read_double(v, c.unpressed_attack_gap);
+        else if (k == "bcancelunpressedattacks") {
+            ok = v == "0" || v == "1";
+            if (ok) c.cancel_unpressed_attacks = v == "1";
+        }
         else if (k == "bcancelqueuedpower") {
             ok = v == "0" || v == "1";
             if (ok) c.cancel_queued_power = v == "1";
@@ -602,11 +607,15 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
     for (std::size_t i = 0; i < move_held_.size(); ++i)
         if (key == cfg_.move_keys[i]) move_held_[i] = down;
     if (key == cfg_.attack_key && down) last_attack_press_at_ = t;
+    if (cfg_.power_key && key == cfg_.power_key && down) last_power_press_at_ = t;
 
     if (key == cfg_.attack_key && cfg_.buffer_attacks) {
         if (down) {
             buffer_.press(t);
-        } else {
+        } else if (buffer_.holding()) {
+            // (a release without a press seen: the press came in a menu, where the game side drops presses but
+            // lets releases through. Owner's run 2026-11-23: such a click in the inventory measured its hold from
+            // the press before, minutes earlier, and sent the combo power attack into the graph.)
             AttackKind kind = buffer_.release(t);
             if (kind == AttackKind::Power && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
                 buffer_.clear();
@@ -713,7 +722,16 @@ std::vector<Command> Controller::on_anim_event(std::string_view tag, std::string
         } else if (t - last_send_at_ > kOwnSendWindow && cancel_check_at_ < 0.0) {
             cancel_candidate_at_ = t;
             cancel_check_at_ = t + 0.05;
+            cancel_unpressed_ = false;
         }
+    }
+    // An attack nobody pressed for (the game's extra attack when a combo stops)
+    if (cfg_.cancel_unpressed_attacks && cancel_check_at_ < 0.0 && is(tag, "AttackStart") &&
+        t - last_attack_press_at_ > cfg_.unpressed_attack_gap && t - last_power_press_at_ > cfg_.unpressed_attack_gap &&
+        t - last_send_at_ > kOwnSendWindow) {
+        cancel_candidate_at_ = t;
+        cancel_check_at_ = t + 0.05;
+        cancel_unpressed_ = true;
     }
 
     if (is(name, "TKDR_DodgeStart")) {
@@ -887,12 +905,21 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
     }
     if (cancel_check_at_ >= 0.0 && t >= cancel_check_at_) {
         cancel_check_at_ = -1.0;
-        if (last_attack_press_at_ < cancel_candidate_at_ - 0.25 &&
-            last_send_at_ < cancel_candidate_at_ - kOwnSendWindow) {
+        const bool pressed_near = cancel_unpressed_
+                                      ? last_attack_press_at_ >= cancel_candidate_at_ - cfg_.unpressed_attack_gap ||
+                                            last_power_press_at_ >= cancel_candidate_at_ - cfg_.unpressed_attack_gap
+                                      : last_attack_press_at_ >= cancel_candidate_at_ - 0.25;
+        if (!pressed_near && last_send_at_ < cancel_candidate_at_ - kOwnSendWindow) {
             out.push_back(event(cfg_.cancel_event));
-            out.push_back(log("queued standing power attack cancelled (the game's, from a mid-combo power key press)"));
-            --queued_powers_;
-            queued_until_ = t + cfg_.queued_power_window;
+            if (cancel_unpressed_) {
+                out.push_back(log(std::format("unpressed attack cancelled (the game's, {:.2f} s after the last attack "
+                                              "press)",
+                                              cancel_candidate_at_ - std::max(last_attack_press_at_, last_power_press_at_))));
+            } else {
+                out.push_back(log("queued standing power attack cancelled (the game's, from a mid-combo power key press)"));
+                --queued_powers_;
+                queued_until_ = t + cfg_.queued_power_window;
+            }
         }
     }
     (void)s;                                // stamina regeneration etc. stay with the game

@@ -53,7 +53,24 @@ Plugin& Plugin::Get() {
     return instance;
 }
 
+std::optional<combat::HandPair> Plugin::ReadHandPair() const {
+    if (left_pair_path_.empty()) return std::nullopt;
+    std::ifstream f(left_pair_path_);
+    if (!f) return std::nullopt;
+    std::stringstream buf;
+    buf << f.rdbuf();
+    return combat::parse_hand_pair(buf.str());
+}
+
+void Plugin::WriteHandPair(const combat::HandPair* p) const {
+    if (left_pair_path_.empty()) return;
+    std::ofstream f(left_pair_path_, std::ios::trunc);
+    if (f && p) f << combat::format_hand_pair(*p);
+}
+
 void Plugin::LoadSettings(const std::string& ini_path) {
+    if (const auto slash = ini_path.find_last_of("\\/"); slash != std::string::npos)
+        left_pair_path_ = ini_path.substr(0, slash + 1) + "S2SCombat_LeftHand.txt";
     std::ifstream in(ini_path);
     if (!in) {
         REX::WARN("{} not found: defaults used (see sfse/S2SCombat.ini in the repo)", ini_path);
@@ -97,6 +114,31 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     if (auto it = plugin.find("slefthandnode"); it != plugin.end()) settings_.left_hand_node = it->second;
     if (auto it = plugin.find("slefthandbone"); it != plugin.end()) settings_.left_hand_bone = it->second;
     settings_.dual_debug = to_int(plugin, "bdualdebug", 0) != 0;
+    settings_.left_copy_key = static_cast<std::uint32_t>(to_int(plugin, "ileftcopykey", 0));
+    if (auto it = plugin.find("sleftcopyweaponnode"); it != plugin.end() && !it->second.empty())
+        settings_.left_copy_weapon_node = it->second;
+    if (auto it = plugin.find("sleftcopynodes"); it != plugin.end() && !it->second.empty())
+        settings_.left_copy_nodes = it->second;
+    if (auto it = plugin.find("sleftcopymodel"); it != plugin.end()) settings_.left_copy_model = it->second;
+    if (auto it = plugin.find("sleftcopyskip"); it != plugin.end()) settings_.left_copy_skip = it->second;
+    settings_.left_copy_dual = to_int(plugin, "bleftcopydual", 1) != 0;
+    if (auto it = plugin.find("sleftcopygripnode"); it != plugin.end()) settings_.left_copy_grip_node = it->second;
+    settings_.left_copy_turn = ((to_int(plugin, "ileftcopyturn", 0) % 24) + 24) % 24;
+    left_copy_turn_now_ = settings_.left_copy_turn;
+    settings_.left_copy_turn_key = static_cast<std::uint32_t>(to_int(plugin, "ileftcopyturnkey", 0));
+    settings_.left_equip_key = static_cast<std::uint32_t>(to_int(plugin, "ileftequipkey", 0));
+    if (auto it = plugin.find("sleftequipweapon"); it != plugin.end())
+        settings_.left_equip_weapon = combat::parse_form_id(it->second).value_or(0);
+    // bLeftEquipHandSlots (named bLeftEquipEitherHand in the first builds of 2026-11-24)
+    settings_.left_equip_either_hand =
+        to_int(plugin, "bleftequiphandslots", to_int(plugin, "bleftequipeitherhand", 1)) != 0;
+    settings_.left_equip_grip = to_int(plugin, "bleftequipgrip", 1) != 0;
+    settings_.left_equip_same_copy = to_int(plugin, "bleftequipsamecopy", 1) != 0;
+    settings_.log_weapon_attach = to_int(plugin, "blogweaponattach", 0) != 0;
+    if (auto it = plugin.find("sleftcopyrotation"); it != plugin.end() && !it->second.empty() &&
+        !combat::parse_degrees(it->second, settings_.left_copy_rotation))
+        REX::WARN("[Plugin] sLeftCopyRotation = {}: not three numbers (x y z degrees)", it->second);
+    left_copy_ = combat::LeftCopy(settings_.left_copy_key != 0);
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -204,6 +246,50 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         }
         return true;                                   // the preview keys do nothing else
     }
+    if (down && key == settings_.left_copy_key) {
+        combat::LeftCopy::Action a;
+        {
+            std::scoped_lock l(lock_);
+            a = left_copy_.on_key();
+        }
+        DoLeftCopy(a);
+        return true;                                   // the test key does nothing else
+    }
+    if (down && key == settings_.left_equip_key) {
+        if (!left_wanted_.load()) {
+            // the dual stance first (its re-equip of the right weapon), the left equip after it (owner's runs
+            // 2026-11-24: the stance re-equip after the left equip rebuilt both models, once swapped between the hands)
+            left_wanted_ = true;
+            const bool stance_first = settings_.left_copy_dual && dual_applied_ != 1;
+            left_equip_due_ = game::Now() + (stance_first ? 1.2 : 0.0);
+            REX::INFO("left equip: asked{}", stance_first ? " (dual stance first, the equip in 1.2 s)" : "");
+        } else {
+            left_wanted_ = false;
+            left_equip_due_ = -1.0;
+            WriteHandPair(nullptr);                                // no left weapon to restore at the next load
+            if (left_equipped_.load()) {
+                SFSE::GetTaskInterface()->AddTask([this]() {
+                    REX::INFO("left equip: {}", game::LeftUnequip());
+                    left_equipped_ = false;
+                    left_same_copy_at_ = -1.0;
+                    if (left_same_copy_.exchange(false)) DoLeftCopy(combat::LeftCopy::Action::Drop);
+                    left_report_at_ = game::Now() + 1.5;
+                });
+            }
+        }
+        return true;
+    }
+    if (down && key == settings_.left_copy_turn_key) {
+        left_copy_turn_now_ = (left_copy_turn_now_ + 1) % 24;
+        float deg[3] = {settings_.left_copy_rotation[0], settings_.left_copy_rotation[1], settings_.left_copy_rotation[2]};
+        SFSE::GetTaskInterface()->AddTask([t = left_copy_turn_now_, d0 = deg[0], d1 = deg[1], d2 = deg[2]]() {
+            const float d[3] = {d0, d1, d2};
+            const auto r = game::TurnLeftCopy(t, d);
+            REX::INFO("left copy: {}", r.text);
+            if (r.ok) game::Notify(std::format("Left copy turn {}", t));
+        });
+        return true;
+    }
     // the weapon clash add-on takes the keys while a clash runs (the attack key pushes its meter)
     if (auto* c = clash_.load(); c && c->on_button(key, down, std::string(user_event).c_str())) return true;
     auto state = State();
@@ -229,10 +315,38 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
     }
     menus_.on_menu(name, opening);
+    {
+        combat::LeftCopy::Action a;
+        {
+            std::scoped_lock l(lock_);
+            a = left_copy_.on_menu(name, opening);
+        }
+        DoLeftCopy(a);
+    }
     follow_invalid_ = true;                            // equips happen in menus; loads rebuild the 3D
+    game::RecheckHandNodes();
+    if (name == "LoadingMenu" && opening) game::DropHandNodes();
+    // after a load, what the game restored in each hand (owner's save / load test of the native left weapon, 2026-11-24)
+    // a loading screen opens: set the remembered pair's records now, so the game builds both hands itself while loading
+    if (name == "LoadingMenu" && opening && settings_.left_equip_key && settings_.left_equip_either_hand) {
+        if (const auto pair = ReadHandPair()) {
+            REX::INFO("left equip: loading: records for right {:08X} / left {:08X}: {}", pair->right, pair->left,
+                      game::ApplyHandSlots(pair->left, pair->right));
+            records_set_ = true;
+            expected_left_ = pair->left;
+        }
+    }
+    if (name == "LoadingMenu" && !opening && settings_.left_equip_key) {
+        left_report_id_ = settings_.left_equip_weapon;
+        left_report_at_ = game::Now() + 3.0;
+        REX::INFO("left equip: a save loaded; the plugin's left weapon state: {} (reported in 3 s)",
+                  left_equipped_.load() ? "on (from before the load)" : "off");
+        left_restore_at_ = game::Now() + 0.3;            // then keep, redo or undo (s2s after_load)
+    }
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
         left_blade_.reset();
+        dual_polled_ = -1;
         restore_ = 1;
         dual_worn_ = -1;
         ++poll_gen_;
@@ -315,6 +429,7 @@ void Plugin::DisableAnimEvents(std::string_view why) {
 void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
     if (!settings_.enabled || !anim_events_) return;
     std::vector<combat::Command> cmds;
+    auto left_copy_action = combat::LeftCopy::Action::None;
     {
         std::scoped_lock l(lock_);
         if (logged_events_ < settings_.log_events) {
@@ -327,11 +442,84 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
         cmds = controller_.on_anim_event(tag, payload, game::Now());
         if (tag == "weaponDraw" || tag == "weaponSheathe" || tag == "UnequipComplete" || tag == "BeginWeaponDraw")
             follow_invalid_ = true;                   // the weapon's 3D may be rebuilt
+        if (tag == "weaponDraw" || tag == "weaponSheathe" || tag == "UnequipComplete" || tag == "BeginWeaponDraw")
+            game::RecheckHandNodes();
+        left_copy_action = left_copy_.on_event(tag);
         if (armor_blade_on_.load() || left_blade_.parked())          // a worn blade (not the pair weapon)
             if (const auto a = left_blade_.on_event(tag); a != combat::LeftBlade::Action::None)
                 left_action_ = static_cast<int>(a);   // done in Tick (main thread)
     }
+    DoLeftCopy(left_copy_action);
     Run(std::move(cmds));
+}
+
+void Plugin::StartLeftEquip() {
+    const bool either = settings_.left_equip_either_hand;
+    // the right-hand weapon (Papyrus) first: the left one is sLeftEquipWeapon, or a second copy of it
+    // after a load the saved left weapon, else sLeftEquipWeapon
+    const std::uint32_t restore = left_restore_id_.exchange(0);
+    auto equip = [this, either, restore, chosen = restore ? restore : settings_.left_equip_weapon](std::uint32_t right_id) {
+        SFSE::GetTaskInterface()->AddTask([this, right_id, either, restore, chosen]() {
+            const std::uint32_t id = chosen ? chosen : right_id;
+            // 000001F4 = UnarmedHuman (owner's run 2026-11-24: after a left equip bumped the sword, the fists
+            // were the "right weapon" and went into LeftHand next)
+            if (!chosen && right_id == 0x1F4u) {
+                REX::INFO("left equip: the right hand holds fists (000001F4): draw a melee weapon first");
+                return;
+            }
+            if (!id) {
+                REX::INFO("left equip: no weapon in the right hand (set sLeftEquipWeapon or draw one)");
+                return;
+            }
+            // fists in the right hand (000001F4, also a WEAP record): no right weapon, its record left alone
+            const auto r = game::LeftEquip(id, right_id == 0x1F4u ? 0u : right_id, either);
+            REX::INFO("left equip: {}", r);
+            // the same weapon in both hands gets no left model from the game (owner's runs 2026-11-24: two
+            // cutlasses, two axes): the clone shows it
+            if (id == right_id && settings_.left_equip_same_copy) {
+                bool make = false;
+                {
+                    std::scoped_lock l(lock_);
+                    make = !left_copy_.attached() && !left_copy_.busy();
+                }
+                if (make) {
+                    left_same_copy_ = true;
+                    left_same_copy_at_ = game::Now() + 1.0;   // after the right weapon's re-equip
+                    REX::INFO("left equip: same weapon in both hands: the clone will show the left one");
+                }
+            }
+            if (!restore) game::Notify("Left equip: see S2SCombat.log");   // quiet when a load puts it back
+            if (right_id && right_id != 0x1F4u) {                 // for the next load (also after a restart)
+                const combat::HandPair pair{right_id, id};
+                WriteHandPair(&pair);
+            }
+            left_equipped_ = true;
+            left_report_id_ = id;
+            left_report_at_ = game::Now() + 1.5;
+        });
+    };
+    if (!game::RightWeaponId(equip)) REX::INFO("left equip: GetEquippedWeapon not dispatched");
+}
+
+void Plugin::DoLeftCopy(combat::LeftCopy::Action a) {
+    using A = combat::LeftCopy::Action;
+    if (a == A::None) return;
+    REX::INFO("left copy: {} asked", a == A::Make ? "make" : "drop");
+    game::LeftCopyOptions o;
+    o.right_node = settings_.left_copy_weapon_node;
+    o.left_nodes = settings_.left_copy_nodes;
+    o.model = settings_.left_copy_model;
+    o.skip = settings_.left_copy_skip;
+    o.grip_node = settings_.left_copy_grip_node;
+    o.turn = left_copy_turn_now_;
+    for (int i = 0; i < 3; ++i) o.degrees[i] = settings_.left_copy_rotation[i];
+    SFSE::GetTaskInterface()->AddTask([this, a, o]() {
+        const auto r = a == A::Make ? game::MakeLeftCopy(o) : game::DropLeftCopy();
+        REX::INFO("left copy: {} {}: {}", a == A::Make ? "make" : "drop", r.ok ? "ok" : "FAILED", r.text);
+        if (a == A::Make) game::Notify(r.ok ? "Left copy on" : "Left copy failed (see S2SCombat.log)");
+        std::scoped_lock l(lock_);
+        left_copy_.on_result(a, r.ok);
+    });
 }
 
 void Plugin::Tick() {
@@ -430,11 +618,86 @@ void Plugin::Tick() {
     }
     // the poll's fresh answer -> worn (or put away by us) -> the stance group
     if (const int g = worn_gen_.exchange(0); g > 0 && restore_ == 0) {
-        bool effective = false;
-        {
-            std::scoped_lock l(lock_);
-            effective = left_blade_.on_worn(dual_worn_.load() == 1);
+        std::scoped_lock l(lock_);
+        dual_polled_ = left_blade_.on_worn(dual_worn_.load() == 1) ? 1 : 0;
+    }
+    // ... or a left-hand copy on (bLeftCopyDual): it needs the dual moveset's left grip, and works without
+    // S2SWeapons.esm (owner's run 2026-11-23: keyword S2S_LeftBlade not found, the poll never answers)
+    bool copy_on = false;
+    if (settings_.left_copy_dual) {
+        std::scoped_lock l(lock_);
+        copy_on = left_copy_.attached();
+    }
+    copy_on = copy_on || (settings_.left_copy_dual && left_wanted_.load());     // a native left weapon too (asked)
+    // the game's own left model onto L_Wrist at the grip (bLeftEquipGrip), and let go of again
+    if (settings_.left_equip_grip && (left_equipped_.load() || left_follow_holding_)) {
+        const auto r = game::LeftWeaponFollow(left_equipped_.load(), left_copy_turn_now_, settings_.left_copy_rotation);
+        left_follow_holding_ = r.holding;
+        if (!r.log.empty()) REX::INFO("left equip: {}", r.log);
+    }
+    // after a load: a weapon in LeftHand (saved with it) gets the whole sequence again, so both models are built
+    if (const double due = left_restore_at_.load(); due >= 0.0 && now >= due) {
+        left_restore_at_ = -1.0;
+        // drawn is only logged: whether the re-equip of a sheathed save draws the weapons
+        game::LeftWeaponId([this](std::uint32_t left_id) {
+            const bool asked = game::IsWeaponDrawn([this, left_id](bool drawn) {
+              SFSE::GetTaskInterface()->AddTask([this, left_id, drawn]() {
+                using A = combat::AfterLoad;
+                const auto models = game::HandModelsNow();
+                const bool records = records_set_.exchange(false);
+                const auto step = combat::after_load(records, expected_left_.load(), left_id, models.left, models.right);
+                const char* what = step == A::Keep ? "keep" : step == A::Redo ? "redo" : step == A::UndoRecords ? "undo records"
+                                                                                                             : "nothing";
+                REX::INFO("left equip: after the load: LeftHand {:08X}, drawn {}, models right {} left {}, "
+                          "records set {} -> {}", left_id, drawn, models.right, models.left, records, what);
+                if (step == A::UndoRecords) {
+                    REX::INFO("left equip: {}", game::UndoHandSlots());
+                    left_wanted_ = false;
+                    left_equipped_ = false;
+                } else if (step == A::Keep) {               // the game built both hands itself
+                    left_equipped_ = true;
+                    left_wanted_ = true;
+                    left_report_id_ = left_id;
+                    left_report_at_ = game::Now() + 1.0;
+                } else if (step == A::Redo) {
+                    REX::INFO("left equip: {:08X} equipped again; {}", left_id, game::LeftRestorePrepare(left_id));
+                    left_equipped_ = false;
+                    left_restore_id_ = left_id;
+                    left_wanted_ = true;                   // the dual stance (if off), then StartLeftEquip
+                    // soon, so it is done before the player draws (owner's 14:17 run: drawn 1 s after the load)
+                    left_equip_due_ = game::Now() + (dual_applied_ == 1 ? 0.5 : 1.2);
+                }
+              });
+            });
+            if (!asked) REX::INFO("left equip: after the load: IsWeaponDrawn not dispatched");
+        });
+    }
+    if (const double due = left_equip_due_.load(); due >= 0.0 && now >= due) {
+        left_equip_due_ = -1.0;
+        if (left_wanted_.load() && !left_equipped_.load()) StartLeftEquip();
+    }
+    if (const double due = left_same_copy_at_.load(); due >= 0.0 && now >= due) {
+        left_same_copy_at_ = -1.0;
+        if (left_equipped_.load()) DoLeftCopy(combat::LeftCopy::Action::Make);
+    }
+    if (const double due = left_report_at_.load(); due >= 0.0 && now >= due) {
+        left_report_at_ = -1.0;
+        game::LeftEquipReport(left_report_id_.load(), [](const std::string& s) { REX::INFO("left equip: {}", s); });
+    }
+    if (copy_on && now >= copy_report_at_ && copy_reports_ < 40) {
+        copy_report_at_ = now + 2.0;
+        if (const auto r = game::LeftCopyReport(); !r.empty()) {
+            ++copy_reports_;
+            REX::INFO("left copy where: {}", r);
         }
+    }
+    // the poll counts once the after-load restore is done (as before); the copy counts at once, and its going off is
+    // applied too (without S2SWeapons.esm the restore never finishes)
+    const bool poll_ready = restore_ == 0 && dual_polled_ >= 0;
+    const bool copy_changed = copy_on != copy_dual_prev_;
+    copy_dual_prev_ = copy_on;
+    if (poll_ready || copy_on || copy_changed) {
+        const bool effective = (poll_ready && dual_polled_ == 1) || copy_on;
         if (const int worn = effective ? 1 : 0; worn != dual_applied_) {
             dual_applied_ = worn;
             std::vector<combat::Command> more;
@@ -443,7 +706,8 @@ void Plugin::Tick() {
                 more = controller_.on_dual_worn(worn == 1, now);
             }
             if (!more.empty()) REX::INFO("dual wield: left blade {}{} -> stance {}", worn ? "worn" : "off",
-                                         weapon_dual_.load() == 1 ? " (the weapon's keyword)" : "",
+                                         copy_on ? " (left-hand weapon)"
+                                                 : weapon_dual_.load() == 1 ? " (the weapon's keyword)" : "",
                                          worn ? controller_.config().dual_stance_keyword : "before");
             if (worn && settings_.dual_debug && dumps_ < 3) {   // the player's 3D (a ~1 s hitch: debug only)
                 ++dumps_;

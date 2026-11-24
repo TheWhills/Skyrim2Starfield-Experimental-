@@ -3,6 +3,7 @@
 #include <cmath>
 #include <set>
 #include "s2s/controller.h"
+#include "s2s/left_copy.h"
 #include "s2s/xform.h"
 
 namespace s2s::sfse::game {
@@ -74,15 +75,37 @@ bool CallOnPlayer(const char* script, const char* function, Args... args) {
 
 // Reads memory only after VirtualQuery says it is committed and readable: for layouts CommonLibSF may not match on the
 // running game version. A system call per check: fine for rare paths (a key press), not per frame.
+std::atomic<std::uint64_t> g_vq_us{0}, g_vq_calls{0}, g_readable_calls{0};
+
+// Readable regions VirtualQuery found are kept for 10 s per thread (64 of them). Owner's run 2026-11-24 15:34: the left weapon
+// follower took ~5 ms per frame and each Player3D ~19 ms with only a few checks each; VirtualQuery measures the whole
+// region (the game's memory pools are large). Verified 15:41: 199 VirtualQuery calls took 381 ms (~2 ms each); with
+// 16 regions for 2 s the follower fell to ~0.4 ms per frame, the twice-a-second root check still took ~12 ms.
 bool Readable(const void* a_ptr, std::size_t a_len) {
     if (!a_ptr) return false;
+    ++g_readable_calls;
+    const auto a = reinterpret_cast<std::uintptr_t>(a_ptr);
+    struct Region { std::uintptr_t start = 0, end = 0; double until = 0.0; };
+    thread_local std::array<Region, 64> cache{};
+    thread_local std::size_t next = 0;
+    const double now = Now();
+    for (const auto& r : cache)
+        if (a >= r.start && a + a_len <= r.end && now < r.until) return true;
+    const auto t0 = std::chrono::steady_clock::now();
     REX::W32::MEMORY_BASIC_INFORMATION mbi{};
-    if (!REX::W32::VirtualQuery(a_ptr, &mbi, sizeof(mbi)) || mbi.state != REX::W32::MEM_COMMIT) return false;
+    const auto got = REX::W32::VirtualQuery(a_ptr, &mbi, sizeof(mbi));
+    g_vq_us += static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+    ++g_vq_calls;
+    if (!got || mbi.state != REX::W32::MEM_COMMIT) return false;
     if (mbi.protect & (REX::W32::PAGE_NOACCESS | 0x100u)) return false;            // no access / guard page
     const auto ok = mbi.protect & (REX::W32::PAGE_READONLY | REX::W32::PAGE_READWRITE | REX::W32::PAGE_WRITECOPY |
                                    REX::W32::PAGE_EXECUTE_READ | REX::W32::PAGE_EXECUTE_READWRITE | 0x80u);
-    const auto end = reinterpret_cast<std::uintptr_t>(mbi.baseAddress) + mbi.regionSize;
-    return ok && reinterpret_cast<std::uintptr_t>(a_ptr) + a_len <= end;
+    const auto start = reinterpret_cast<std::uintptr_t>(mbi.baseAddress), end = start + mbi.regionSize;
+    if (!ok || a + a_len > end) return false;
+    cache[next] = {start, end, now + 10.0};
+    next = (next + 1) % cache.size();
+    return true;
 }
 
 double Now() {
@@ -92,6 +115,7 @@ double Now() {
 }
 
 RE::PlayerCharacter* Player() { return RE::PlayerCharacter::GetSingleton(); }
+
 
 namespace {
 thread_local bool g_own_event = false;      // a graph event the plugin itself is sending (the clash filter lets it pass)
@@ -374,20 +398,19 @@ std::string DumpBoneSearch() {
 namespace {
 // NiAVObject transforms on 1.16 (owner's dump 2026-10-27: local at +0x40, world at +0x80; each 3 rows of 16 bytes,
 // translation +0x30, scale +0x3C; the root's world translation was the player's position)
+// (stored in the engine's row-vector layout: combat::load_engine / store_engine)
 combat::Xform ReadXform(const void* node, std::ptrdiff_t at) {
-    const auto* b = reinterpret_cast<const std::byte*>(node) + at;
-    combat::Xform x;
-    for (int i = 0; i < 3; ++i) std::memcpy(x.r[i].data(), b + 0x10 * i, 12);
-    std::memcpy(x.t.data(), b + 0x30, 12);
-    std::memcpy(&x.s, b + 0x3C, 4);
-    return x;
+    float f[16];
+    std::memcpy(f, reinterpret_cast<const std::byte*>(node) + at, sizeof(f));
+    return combat::load_engine(f);
 }
 
 void WriteXform(void* node, std::ptrdiff_t at, const combat::Xform& x) {
+    float f[16];
+    combat::store_engine(x, f);
     auto* b = reinterpret_cast<std::byte*>(node) + at;
-    for (int i = 0; i < 3; ++i) std::memcpy(b + 0x10 * i, x.r[i].data(), 12);
-    std::memcpy(b + 0x30, x.t.data(), 12);
-    std::memcpy(b + 0x3C, &x.s, 4);
+    for (int i = 0; i < 3; ++i) std::memcpy(b + 0x10 * i, f + 4 * i, 12);   // the rows' 4th lane is left as it is
+    std::memcpy(b + 0x30, f + 12, 16);
 }
 
 bool NameIs(const RE::NiAVObject* o, std::string_view want) {
@@ -433,6 +456,256 @@ std::string BoneFollowReport() {
     f.frames = f.local_kept = f.world_ours = 0;
     f.us_total = f.us_max = 0.0;
     return out;
+}
+
+// ---- Left-hand copy test (s2s/left_copy.h; addresses and slots: docs/re/findings.md, Starfield 1.16.244) ----
+namespace {
+// Address Library IDs (v22 table, 1.16.244.0)
+constexpr std::uint64_t kIdAttachChild = 147173;      // NiNode vtable slot 84 AttachChild(child, bool firstAvailable)
+constexpr std::uint64_t kIdDetachChild = 147177;      // NiNode vtable slot 87 DetachChild(child)
+constexpr std::uint64_t kIdCopyType = 884304;         // u32 default NiCloningProcess copy type
+constexpr std::uint64_t kIdCloneMapFreeNode = 38088;  // (map, node): frees a clone-map subtree
+constexpr std::uint64_t kIdFreeSized = 35771;         // (ptr, size): the engine's sized free
+constexpr int kSlotCreateClone = 41, kSlotProcessClone = 47, kSlotAttachChild = 84, kSlotDetachChild = 87;
+
+struct LeftCopyState {
+    RE::NiAVObject* copy = nullptr;       // one reference of ours (IncRefCount at the clone)
+    RE::NiAVObject* parent = nullptr;     // the node it hangs under
+    combat::Xform original;               // the copy's local transform as cloned (the right weapon's)
+} g_left_copy;
+
+// The weapon node and the left node, found once per player 3D (owner's run 2026-11-23: the walk cost 550-590 ms per
+// press, a memory check per node). Checked before use: same root, still readable, same name.
+struct LeftCopyLookup {
+    RE::NiAVObject* root = nullptr;
+    RE::NiAVObject* weapon = nullptr;
+    RE::NiAVObject* left = nullptr;
+    std::string weapon_name, left_name;
+} g_left_lookup;
+
+bool StillNamed(RE::NiAVObject* o, std::string_view name) {
+    if (!o || !Readable(o, 0x150)) return false;
+    const char* n = o->name.c_str();
+    return n && name == n;
+}
+
+std::uintptr_t VSlot(const void* obj, int slot) {
+    std::uintptr_t vtbl = 0;
+    std::memcpy(&vtbl, obj, 8);
+    if (!Readable(reinterpret_cast<const void*>(vtbl + 8 * slot), 8)) return 0;
+    return reinterpret_cast<const std::uintptr_t*>(vtbl)[slot];
+}
+
+RE::NiAVObject* ParentOf(const RE::NiAVObject* o) {
+    RE::NiAVObject* p = nullptr;
+    std::memcpy(&p, reinterpret_cast<const std::byte*>(o) + 0x38, 8);
+    return p;
+}
+
+std::string Describe(const RE::NiAVObject* o) {
+    const char* n = o->name.c_str();
+    std::uintptr_t vtbl = 0;
+    std::memcpy(&vtbl, o, 8);
+    const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
+    return std::format("'{}' (vtable +0x{:X}, flags 0x{:X}: hidden {} selective {} transforms {} controllers {})",
+                       n ? n : "", vtbl - base, o->flags, o->flags & 1, (o->flags >> 1) & 1, (o->flags >> 2) & 1,
+                       (o->flags >> 3) & 1);
+}
+
+// The engine's cleanup after a clone (findings.md section 2, "Cleanup").
+void FreeCloningProcess(std::uint8_t* cp) {
+    using L = combat::CloningProcessLayout;
+    std::uint64_t count = 0;
+    void* root = nullptr;
+    void* spare = nullptr;
+    std::memcpy(&count, cp + L::kMapCount, 8);
+    std::memcpy(&root, cp + L::kMapRoot, 8);
+    if (count != 0 && root) {
+        reinterpret_cast<void (*)(void*, void*)>(REL::ID(kIdCloneMapFreeNode).address())(cp, root);
+        std::memset(cp, 0, 0x18);
+    }
+    std::memcpy(&spare, cp + L::kMapSpare, 8);
+    if (spare) reinterpret_cast<void (*)(void*, std::size_t)>(REL::ID(kIdFreeSized).address())(spare, L::kNodeSize);
+}
+}  // namespace
+
+LeftCopyResult MakeLeftCopy(const LeftCopyOptions& opt) {
+    const std::string_view right_node = opt.right_node, model_name = opt.model, skip_names = opt.skip;
+    if (g_left_copy.copy) return {true, "a copy is already on"};
+    auto* root = Player3D();
+    if (!root) return {false, "no player 3D"};
+    if (g_children.offset < 0) {
+        if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return {false, "no child list found"};
+    }
+    const double t0 = Now();
+    const auto left_names = combat::split_names(opt.left_nodes);
+    auto& lk = g_left_lookup;
+    bool cached = lk.root == root && lk.weapon_name == right_node && StillNamed(lk.weapon, right_node) &&
+                  StillNamed(lk.left, lk.left_name) &&
+                  std::find(left_names.begin(), left_names.end(), std::string_view(lk.left_name)) != left_names.end();
+    RE::NiAVObject* weapon_node = cached ? lk.weapon : nullptr;
+    RE::NiAVObject* left = cached ? lk.left : nullptr;
+    std::string tried;
+    if (!cached) {
+        // one walk for every name (owner's run 2026-11-23: a walk per name cost ~250 ms)
+        std::vector<RE::NiAVObject*> left_hits(left_names.size(), nullptr);
+        int budget = 4000;
+        Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+            const char* n = o->name.c_str();
+            if (!n || !*n) return;
+            if (!weapon_node && right_node == n) weapon_node = o;
+            for (std::size_t i = 0; i < left_names.size(); ++i)
+                if (!left_hits[i] && left_names[i] == n) left_hits[i] = o;
+        });
+        for (std::size_t i = 0; i < left_names.size() && !left; ++i) {
+            tried += std::format(" '{}'", left_names[i]);
+            if ((left = left_hits[i])) lk.left_name = std::string(left_names[i]);
+        }
+        if (weapon_node && left) {
+            lk.root = root;
+            lk.weapon = weapon_node;
+            lk.left = left;
+            lk.weapon_name = std::string(right_node);
+        }
+    }
+    if (!weapon_node) return {false, std::format("no node '{}' in the player's 3D (weapon drawn?)", right_node)};
+    // the weapon node's subtree (names, depth), for the log: shows where the drawn model hangs
+    std::string subtree;
+    {
+        int budget = 40;
+        Walk(weapon_node, 0, budget, [&](RE::NiAVObject* o, int depth) {
+            const char* n = o->name.c_str();
+            subtree += std::format(" {}{}", std::string(static_cast<std::size_t>(depth), '>'), n ? n : "");
+        });
+    }
+    // the drawn weapon's model: a child of the weapon node (pick_model: the override, else the first not skipped)
+    RE::NiAVObject** data = nullptr;
+    std::uint32_t size = 0;
+    std::vector<RE::NiAVObject*> kids;
+    std::vector<std::string_view> kid_names;
+    if (ReadChildren(weapon_node, g_children, data, size)) {
+        for (std::uint32_t i = 0; i < size; ++i) {
+            auto* c = data[i];
+            if (!c || !Readable(c, 0x150) || ParentOf(c) != weapon_node) continue;
+            const char* n = c->name.c_str();
+            kids.push_back(c);
+            kid_names.emplace_back(n ? n : "");
+        }
+    }
+    const int pick = combat::pick_model(kid_names, model_name, combat::split_names(skip_names));
+    if (pick < 0)
+        return {false, std::format("no model child under '{}' (model '{}', skipped '{}'); subtree:{}", right_node,
+                                   model_name, skip_names, subtree)};
+    auto* model = kids[static_cast<std::size_t>(pick)];
+    if (!left) return {false, std::format("none of the left nodes found:{}", tried)};
+    const double t_find = Now() - t0;
+    // AttachChild / DetachChild must be NiNode's own (verified slots); a class that overrides them is not tried
+    const auto attach = VSlot(left, kSlotAttachChild), detach = VSlot(left, kSlotDetachChild);
+    const auto want_attach = REL::ID(kIdAttachChild).address(), want_detach = REL::ID(kIdDetachChild).address();
+    if (attach != want_attach || detach != want_detach)
+        return {false, std::format("left node {} slots 84 / 87 are not NiNode's (0x{:X} / 0x{:X}, expected 0x{:X} / "
+                                   "0x{:X}): not attached",
+                                   Describe(left), attach, detach, want_attach, want_detach)};
+    const auto create = VSlot(model, kSlotCreateClone), process = VSlot(model, kSlotProcessClone);
+    if (!create || !process) return {false, "model's vtable not readable"};
+
+    // clone as the engine does: CreateClone, then ProcessClone, then free the cloning process
+    std::uint32_t copy_type = 0;
+    std::memcpy(&copy_type, reinterpret_cast<const void*>(REL::ID(kIdCopyType).address()), 4);
+    alignas(16) auto cp = combat::cloning_process_bytes(copy_type);
+    auto* copy = reinterpret_cast<RE::NiAVObject* (*)(void*, void*)>(create)(model, cp.data());
+    if (copy) {
+        copy->IncRefCount();                                  // ours, until DropLeftCopy
+        reinterpret_cast<void (*)(void*, void*)>(process)(model, cp.data());
+    }
+    FreeCloningProcess(cp.data());
+    if (!copy) return {false, std::format("CreateClone returned nothing for {}", Describe(model))};
+    // rename the copy's nodes before it joins the player's 3D, so no lookup by name ("Weapon", "ProjectileNode") finds
+    // it instead of the game's own
+    int renamed = 0;
+    {
+        int budget = 400;
+        Walk(copy, 0, budget, [&](RE::NiAVObject* o, int) {
+            const char* n = o->name.c_str();
+            if (!n || !*n) return;
+            const auto name = combat::copy_node_name(n);
+            if (name == n) return;
+            o->name = RE::BSFixedString(name.c_str());
+            ++renamed;
+        });
+    }
+
+    std::uint32_t left_before = 0, left_after = 0;
+    if (ReadChildren(left, g_children, data, size)) left_before = size;
+    reinterpret_cast<void (*)(void*, void*, bool)>(attach)(left, copy, true);
+    if (ReadChildren(left, g_children, data, size)) left_after = size;
+    const bool hung = ParentOf(copy) == left;
+    // under the grip node (L_Wrist) the copy is held at WeaponLeft's rest grip, as the worn blade; elsewhere it keeps
+    // the right weapon's local transform
+    const bool at_grip = !opt.grip_node.empty() && lk.left_name == opt.grip_node;
+    const auto original = at_grip ? combat::left_grip() : ReadXform(copy, 0x40);
+    WriteXform(copy, 0x40, combat::oriented(original, opt.turn, opt.degrees));
+    g_left_copy = {copy, left, original};
+    const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
+    return {hung, std::format("weapon node '{}' subtree:{}; model {} cloned ({} at 0x{:X}, CreateClone +0x{:X}); copy "
+                              "{} attached under {} (children {} -> {}, parent {}){}; {} node(s) renamed {}*; turn {}, rotation {} {} {}; local t ({:.2f} {:.2f} {:.2f}) "
+                              "scale {:.2f}; lookup {:.1f} ms{}, copy {:.1f} ms",
+                              right_node, subtree, Describe(model), copy == model ? "SAME OBJECT" : "new object",
+                              reinterpret_cast<std::uintptr_t>(copy), create - base, Describe(copy), Describe(left),
+                              left_before, left_after, hung ? "set" : "NOT SET", at_grip ? " at the left grip" : "",
+                              renamed, combat::kCopyNamePrefix,
+                              opt.turn, opt.degrees[0],
+                              opt.degrees[1], opt.degrees[2], original.t[0], original.t[1], original.t[2], original.s,
+                              t_find * 1000.0, cached ? " (cached)" : "",
+                              (Now() - t0 - t_find) * 1000.0)};
+}
+
+LeftCopyResult DropLeftCopy() {
+    auto* copy = g_left_copy.copy;
+    auto* parent = g_left_copy.parent;
+    if (!copy) return {true, "no copy on"};
+    g_left_copy = {};
+    std::string how;
+    if (parent && Readable(parent, 0x150) && Readable(copy, 0x150) && ParentOf(copy) == parent) {
+        const auto detach = VSlot(parent, kSlotDetachChild);
+        if (detach == REL::ID(kIdDetachChild).address()) {
+            reinterpret_cast<void (*)(void*, void*)>(detach)(parent, copy);
+            how = ParentOf(copy) ? "detached, but its parent is still set" : "detached";
+        } else {
+            how = "NOT detached (left node's slot 87 changed)";
+        }
+    } else {
+        how = "not under the left node any more (nothing detached)";
+    }
+    copy->DecRefCount();                                       // our reference: the copy goes when the last one does
+    return {true, how};
+}
+
+std::string LeftCopyReport() {
+    const auto& c = g_left_copy;
+    if (!c.copy || !Readable(c.copy, 0x150) || !c.parent || !Readable(c.parent, 0x150)) return {};
+    const auto local = ReadXform(c.copy, 0x40), world = ReadXform(c.copy, 0x80), pw = ReadXform(c.parent, 0x80);
+    const auto expect = combat::compose(pw, local);
+    auto dist = [](const std::array<float, 3>& a, const std::array<float, 3>& b) {
+        return std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
+    };
+    float rot = 0;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) rot = std::max(rot, std::fabs(world.r[i][j] - expect.r[i][j]));
+    const char* pn = c.parent->name.c_str();
+    return std::format("world t ({:.3f} {:.3f} {:.3f}), parent '{}' world * our local gives ({:.3f} {:.3f} {:.3f}): {:.3f} "
+                       "apart, rotation off by up to {:.3f}; {:.3f} from the parent's origin; our local t ({:.3f} {:.3f} "
+                       "{:.3f}) scale {:.2f}",
+                       world.t[0], world.t[1], world.t[2], pn ? pn : "", expect.t[0], expect.t[1], expect.t[2],
+                       dist(world.t, expect.t), rot, dist(world.t, pw.t), local.t[0], local.t[1], local.t[2], local.s);
+}
+
+LeftCopyResult TurnLeftCopy(int turn, const float degrees[3]) {
+    auto& c = g_left_copy;
+    if (!c.copy || !Readable(c.copy, 0x150) || ParentOf(c.copy) != c.parent) return {false, "no copy on"};
+    WriteXform(c.copy, 0x40, combat::oriented(c.original, turn, degrees));
+    return {true, std::format("turn {} (iLeftCopyTurn = {}), rotation {} {} {}", turn, turn, degrees[0], degrees[1],
+                              degrees[2])};
 }
 
 int FollowBone(std::string_view node_name, std::string_view bone_name) {
@@ -525,6 +798,10 @@ int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result)
 
 namespace {
 std::atomic<std::uint32_t> g_weapon_id{0};   // FormID of the weapon UnequipWeapon took off (0: none)
+// While the native left-hand equip test has a weapon in LeftHand, the right weapon's re-equips go through the RightHand
+// slot: owner's run 2026-11-24, the dual stance's re-equip (no slot) of the then EitherHand cutlass pushed the axe out
+// of LeftHand (GetEquippedWeapon(1) = none right after "stance re-equip: equip ... done").
+std::atomic_bool g_right_hand_only{false};
 
 // Native equip / unequip through ActorEquipManager (mapped on 1.16: Singleton, EquipObject, UnequipObject,
 // BGSObjectInstance ctor), base form without instance data, as the console's equipitem / unequipitem do (owner,
@@ -535,8 +812,9 @@ bool EquipNative(std::uint32_t form_id, bool equip) {
     auto* form = form_id ? RE::TESForm::LookupByID(form_id) : nullptr;
     if (!player || !mgr || !form) return false;
     RE::BGSObjectInstance item(form, nullptr);
-    return equip ? mgr->EquipObject(player, item, nullptr, false, false, true, true, false)
-                 : mgr->UnequipObject(player, item, nullptr, false, false, true, true, nullptr);
+    auto* slot = g_right_hand_only.load() ? RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotRightHand) : nullptr;
+    return equip ? mgr->EquipObject(player, item, slot, false, false, true, true, false)
+                 : mgr->UnequipObject(player, item, slot, false, false, true, true, nullptr);
 }
 }  // namespace
 
@@ -633,7 +911,8 @@ bool UnequipWeapon(std::function<void(const std::string&)> report) {
             g_weapon_id = id;
             SFSE::GetTaskInterface()->AddTask([id, report]() {
                 const bool ok = EquipNative(id, false);
-                if (report) report(std::format("unequip {:08X}: {}", id, ok ? "done" : "refused"));
+                if (report) report(std::format("unequip {:08X}{}: {}", id, g_right_hand_only.load() ? " (RightHand)" : "",
+                                               ok ? "done" : "refused"));
             });
         });
 }
@@ -645,8 +924,437 @@ bool EquipWeapon(std::function<void(const std::string&)> report) {
         return false;
     }
     const bool ok = EquipNative(id, true);         // already on the main thread (Plugin::Run's task)
-    if (report) report(std::format("equip {:08X}: {}", id, ok ? "done" : "refused"));
+    if (report) report(std::format("equip {:08X}{}: {}", id, g_right_hand_only.load() ? " (RightHand)" : "",
+                                   ok ? "done" : "refused"));
     return ok;
+}
+
+// ---- Native left-hand equip test (s2s/left_copy.h kSlot*) ----
+// Owner's run 2026-11-24: equipping into LeftHand works (the model hangs under WeaponLeft by itself,
+// GetEquippedWeapon(1) = the weapon), but the right-hand weapon went away: a melee weapon's own slot is BothHands
+// (RightHand + LeftHand), so anything in LeftHand bumps it. EitherHand mode switches the weapons to EitherHand and
+// re-equips the right one into RightHand before the left one goes into LeftHand.
+namespace {
+struct LeftEquipState {
+    std::uint32_t left = 0, right = 0;        // the weapons of the test (the same FormID for two of one sword)
+    bool equipped = false;                    // the game said yes to the LeftHand equip
+    std::vector<std::pair<RE::TESObjectWEAP*, RE::BGSEquipSlot*>> changed;   // slots switched to EitherHand
+} g_left_equip;
+
+std::string SlotName(const RE::BGSEquipSlot* s) {
+    if (!s) return "none";
+    const auto id = s->GetFormID();
+    const char* n = id == combat::kSlotRightHand  ? "RightHand"
+                    : id == combat::kSlotLeftHand ? "LeftHand"
+                    : id == combat::kSlotEitherHand ? "EitherHand"
+                    : id == combat::kSlotBothHands  ? "BothHands"
+                                                    : "other";
+    return std::format("{} {:08X}", n, id);
+}
+
+std::atomic_bool g_hand_recheck{true}, g_hand_drop{false};
+std::atomic<std::uint64_t> g_player3d_us{0}, g_player3d_calls{0}, g_follow_us{0}, g_follow_calls{0};
+
+// WeaponLeft and Weapon, found in one walk per player 3D (owner's run: two walks per report froze the game ~1 s)
+struct HandNodes {
+    RE::NiAVObject* root = nullptr;
+    RE::NiAVObject* left = nullptr;     // WeaponLeft
+    RE::NiAVObject* right = nullptr;    // Weapon (the bone)
+    RE::NiAVObject* wrist = nullptr;    // L_Wrist
+} g_hand_nodes;
+
+std::string Subtree(RE::NiAVObject* node) {
+    std::string out;
+    int budget = 40;
+    Walk(node, 0, budget, [&](RE::NiAVObject* o, int depth) {
+        const char* n = o->name.c_str();
+        out += std::format(" {}{}", std::string(static_cast<std::size_t>(depth), '>'), n ? n : "");
+    });
+    return out;
+}
+
+// WeaponLeft, Weapon and L_Wrist of the player's 3D, looked up once per 3D and checked before use. "" = ok.
+std::string FindHandNodes() {
+    auto& h = g_hand_nodes;
+    if (g_hand_drop.exchange(false)) h = {};
+    auto same = [](RE::NiAVObject* o, std::string_view n) { return !o || StillNamed(o, n); };
+    static double s_walked_at = -1.0, s_root_at = -1.0;
+    static int s_missing_logged = 0;
+    const double now = Now();
+    const bool missing = !h.left || !h.right || !h.wrist;
+    // Player3D takes the read lock on the player's 3D, and the follower calls this every frame (owner's run 2026-11-24
+    // 15:10: with the left weapon on the plugin took 2 ms, then 58 ms per frame). The found nodes are used without it;
+    // the root is checked every 2 s, after a menu / equip / draw (RecheckHandNodes) and after a load (DropHandNodes).
+    if (h.root && !g_hand_recheck.load() && now - s_root_at < 2.0 && !(missing && now - s_walked_at >= 2.0) &&
+        same(h.left, "WeaponLeft") && same(h.right, "Weapon") && same(h.wrist, "L_Wrist"))
+        return {};
+    g_hand_recheck = false;
+    s_root_at = now;
+    const auto t0 = std::chrono::steady_clock::now();
+    auto* root = Player3D();
+    g_player3d_us += static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+    ++g_player3d_calls;
+    if (!root) return "no player 3D";
+    if (g_children.offset < 0) {
+        if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return "no child list found";
+    }
+    // the found nodes stand while the 3D is the same and each one still has its name. A node not found is searched
+    // for at most every 2 s (owner's run 2026-11-24 14:55: 20-40 ms per frame, supported hypothesis: the walk)
+    const bool kept = h.root == root && same(h.left, "WeaponLeft") && same(h.right, "Weapon") && same(h.wrist, "L_Wrist");
+    if (!kept || (missing && now - s_walked_at >= 2.0)) {
+        s_walked_at = now;
+        h = {root, nullptr, nullptr, nullptr};
+        int budget = 4000;
+        Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+            const char* n = o->name.c_str();
+            if (!n) return;
+            if (!h.left && std::string_view(n) == "WeaponLeft") h.left = o;
+            if (!h.wrist && std::string_view(n) == "L_Wrist") h.wrist = o;
+            if (!h.right && std::string_view(n) == "Weapon") {
+                // the bone, not a weapon model's root (also "Weapon") hanging under WeaponLeft
+                auto* p = ParentOf(o);
+                const char* pn = p && Readable(p, 0x40) ? p->name.c_str() : nullptr;
+                if (!pn || std::string_view(pn) != "WeaponLeft") h.right = o;
+            }
+        });
+        if ((!h.left || !h.right || !h.wrist) && s_missing_logged < 5) {
+            ++s_missing_logged;
+            REX::INFO("hand nodes: not found in the player's 3D:{}{}{} (searched again at most every 2 s)",
+                      h.left ? "" : " WeaponLeft", h.right ? "" : " Weapon", h.wrist ? "" : " L_Wrist");
+        }
+    }
+    return {};
+}
+
+std::string HandNodesReport() {
+    if (auto err = FindHandNodes(); !err.empty()) return err;
+    const auto& h = g_hand_nodes;
+    return std::format("under WeaponLeft:{}; under Weapon:{}", h.left ? Subtree(h.left) : " (not found)",
+                       h.right ? Subtree(h.right) : " (not found)");
+}
+
+bool HasChild(RE::NiAVObject* parent, RE::NiAVObject* child) {
+    RE::NiAVObject** data = nullptr;
+    std::uint32_t size = 0;
+    if (!parent || !ReadChildren(parent, g_children, data, size)) return false;
+    for (std::uint32_t i = 0; i < size; ++i)
+        if (data[i] == child) return true;
+    return false;
+}
+
+// The game's left-hand model, moved from WeaponLeft to L_Wrist by LeftWeaponFollow (not owned by us: no reference
+// kept; only touched while it is still one of L_Wrist's children)
+struct LeftFollow {
+    RE::NiAVObject* node = nullptr;
+    long refs_at_move = 0;              // its reference count right after the move (the game's + L_Wrist's)
+} g_left_follow;
+}  // namespace
+
+namespace {
+// Each weapon's record to its own hand (s2s hand_slots): RightHand attaches to "Weapon", LeftHand to WeaponLeft. The
+// original slots go into g_left_equip.changed once (LeftUnequip / UndoHandSlots put them back).
+std::string SetHandRecords(std::uint32_t left_id, std::uint32_t right_id) {
+    auto* weap_l = RE::TESForm::LookupByID<RE::TESObjectWEAP>(left_id);
+    auto* weap_r = right_id ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(right_id) : nullptr;
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    auto* right = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotRightHand);
+    if (!weap_l || !left || !right) return "records: weapon or slot not found; ";
+    auto& st = g_left_equip;
+    std::string out;
+    const auto hs = combat::hand_slots(left_id, weap_r ? right_id : 0);
+    for (auto [w, slot_id] : {std::pair{weap_r, hs.right_weapon}, std::pair{weap_l, hs.left_weapon}}) {
+        if (!w || !slot_id) continue;
+        auto* slot = slot_id == combat::kSlotRightHand ? right : left;
+        auto* type = static_cast<RE::BGSEquipType*>(w);
+        if (type->equipSlot == slot) continue;
+        out += std::format("{:08X} slot {} -> {} (in memory); ", w->GetFormID(), SlotName(type->equipSlot),
+                           SlotName(slot));
+        const bool listed = std::any_of(st.changed.begin(), st.changed.end(), [w](const auto& c) { return c.first == w; });
+        if (!listed) st.changed.emplace_back(w, type->equipSlot);
+        type->equipSlot = slot;
+    }
+    return out;
+}
+}  // namespace
+
+std::string ApplyHandSlots(std::uint32_t left_id, std::uint32_t right_id) {
+    auto out = SetHandRecords(left_id, right_id);
+    g_right_hand_only = true;                               // the stance re-equips keep to RightHand
+    return out.empty() ? "records already set" : out;
+}
+
+std::string UndoHandSlots() {
+    auto& st = g_left_equip;
+    std::string out;
+    for (auto& [w, slot] : st.changed) {
+        static_cast<RE::BGSEquipType*>(w)->equipSlot = slot;
+        out += std::format("{:08X} slot back to {}; ", w->GetFormID(), SlotName(slot));
+    }
+    st = {};
+    g_right_hand_only = false;
+    return out.empty() ? "no records were changed" : out;
+}
+
+void RecheckHandNodes() { g_hand_recheck = true; }
+void DropHandNodes() {
+    g_hand_drop = true;
+    g_hand_recheck = true;
+}
+std::string TakeHandNodeTimes() {
+    const auto us = g_player3d_us.exchange(0), n = g_player3d_calls.exchange(0);
+    const auto fus = g_follow_us.exchange(0), fn = g_follow_calls.exchange(0);
+    const auto vus = g_vq_us.exchange(0), vn = g_vq_calls.exchange(0), rn = g_readable_calls.exchange(0);
+    return std::format("left follower {} calls ({} us), player 3D lookups {} ({} us), memory checks {} ({} VirtualQuery, "
+                       "{} us)", fn, fus, n, us, rn, vn, vus);
+}
+
+HandModels HandModelsNow() {
+    HandModels m;
+    if (!FindHandNodes().empty()) return m;
+    const auto& h = g_hand_nodes;
+    auto any_child = [](RE::NiAVObject* node, bool skip_ik) {
+        RE::NiAVObject** data = nullptr;
+        std::uint32_t size = 0;
+        if (!node || !ReadChildren(node, g_children, data, size)) return false;
+        for (std::uint32_t i = 0; i < size; ++i) {
+            auto* c = data[i];
+            if (!c || !Readable(c, 0x150) || ParentOf(c) != node) continue;
+            const char* n = c->name.c_str();
+            const std::string_view name(n ? n : "");
+            if (skip_ik && (name == "R_HandIk" || name == "L_HandIk")) continue;
+            return true;
+        }
+        return false;
+    };
+    m.right = any_child(h.right, true);
+    m.left = any_child(h.left, false) || (g_left_follow.node && HasChild(h.wrist, g_left_follow.node));
+    return m;
+}
+
+std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either_hand) {
+    auto* player = Player();
+    auto* mgr = RE::ActorEquipManager::GetSingleton();
+    auto* weap_l = RE::TESForm::LookupByID<RE::TESObjectWEAP>(left_id);
+    auto* weap_r = right_id ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(right_id) : nullptr;
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    auto* right = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotRightHand);
+    auto* either = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotEitherHand);
+    if (!player || !mgr) return "no player / ActorEquipManager";
+    if (!weap_l) return std::format("{:08X} is not a weapon", left_id);
+    if (!left || !right || !either) return "RightHand / LeftHand / EitherHand slot form not found";
+    auto& st = g_left_equip;
+    auto keep = std::move(st.changed);                       // records already set (at a loading screen) stay listed
+    st = {};
+    st.changed = std::move(keep);
+    st.left = left_id;
+    st.right = weap_r ? right_id : 0;
+    std::string out;
+    if (either_hand) {
+        out += SetHandRecords(left_id, weap_r ? right_id : 0);
+        if (weap_r) {   // the right one again, into RightHand only, so LeftHand is free
+            RE::BGSObjectInstance item_r(weap_r, nullptr);
+            const bool ok = mgr->EquipObject(player, item_r, right, false, false, false, true, false);
+            out += std::format("{:08X} re-equipped into RightHand: {}; ", right_id, ok ? "yes" : "NO");
+        }
+    }
+    // Starfield 1.16 (CommonLibSF): EquipObject(actor, instance, slot, queue, force, sounds, applyNow, locked)
+    RE::BGSObjectInstance item(weap_l, nullptr);
+    st.equipped = mgr->EquipObject(player, item, left, false, false, true, true, false);
+    g_right_hand_only = st.equipped && either_hand;          // the stance re-equips keep to RightHand from now on
+    out += std::format("{:08X} into LeftHand: {} (its slot now {})", left_id, st.equipped ? "yes" : "NO",
+                       SlotName(static_cast<RE::BGSEquipType*>(weap_l)->equipSlot));
+    return out;
+}
+
+std::string LeftUnequip() {
+    auto& st = g_left_equip;
+    auto* player = Player();
+    auto* mgr = RE::ActorEquipManager::GetSingleton();
+    auto* weap_l = st.left ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(st.left) : nullptr;
+    auto* weap_r = st.right ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(st.right) : nullptr;
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    std::string out;
+    if (player && mgr && weap_l && left && st.equipped) {
+        RE::BGSObjectInstance item(weap_l, nullptr);
+        // (owner's run 2026-11-24: answered NO and still took it off, as the stance re-equip's unequip)
+        const bool ok = mgr->UnequipObject(player, item, left, false, false, true, true, nullptr);
+        out += std::format("unequip {:08X} from LeftHand: {}; ", st.left, ok ? "yes" : "NO (may still be off)");
+    }
+    g_right_hand_only = false;
+    for (auto& [w, slot] : st.changed) {
+        static_cast<RE::BGSEquipType*>(w)->equipSlot = slot;
+        out += std::format("{:08X} slot back to {}; ", w->GetFormID(), SlotName(slot));
+    }
+    // the right weapon back in its own (restored) slot: the run without EitherHand ended with fists in the right hand
+    if (player && mgr && weap_r) {
+        RE::BGSObjectInstance item_r(weap_r, nullptr);
+        const bool ok = mgr->EquipObject(player, item_r, nullptr, false, false, false, true, false);
+        out += std::format("{:08X} equipped again (right): {}", st.right, ok ? "yes" : "NO");
+    }
+    st = {};
+    return out.empty() ? "nothing equipped by the test" : out;
+}
+
+std::string LeftRestorePrepare(std::uint32_t left_id) {
+    // the plugin still has the sequence from before the load (same session): undo it fully (left off, records back,
+    // the right weapon equipped again); else (a restart) only take the saved left weapon off LeftHand
+    if (g_left_equip.left) return LeftUnequip();
+    auto* player = Player();
+    auto* mgr = RE::ActorEquipManager::GetSingleton();
+    auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(left_id);
+    auto* left = RE::TESForm::LookupByID<RE::BGSEquipSlot>(combat::kSlotLeftHand);
+    if (!player || !mgr || !weap || !left) return std::format("{:08X}: nothing to take off", left_id);
+    RE::BGSObjectInstance item(weap, nullptr);
+    const bool ok = mgr->UnequipObject(player, item, left, false, false, false, true, nullptr);
+    return std::format("unequip saved {:08X} from LeftHand: {}", left_id, ok ? "yes" : "NO (may still be off)");
+}
+
+bool LeftWeaponId(std::function<void(std::uint32_t)> result) {
+    return Dispatch("Actor", "GetEquippedWeapon",
+        [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+            out.resize(1);
+            RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(1));     // 1 = the LeftHand weapon
+        },
+        [result](const RE::BSScript::Variable& weapon) {
+            auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+            if (result) result(obj ? static_cast<std::uint32_t>(obj->GetHandle() & 0xFFFFFFFFull) : 0u);
+        });
+}
+
+bool RightWeaponId(std::function<void(std::uint32_t)> result) {
+    return Dispatch("Actor", "GetEquippedWeapon",
+        [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+            out.resize(1);
+            RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(0));
+        },
+        [result](const RE::BSScript::Variable& weapon) {
+            auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+            if (result) result(obj ? static_cast<std::uint32_t>(obj->GetHandle() & 0xFFFFFFFFull) : 0u);
+        });
+}
+
+void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log) {
+    if (!log) return;
+    // Papyrus Actor.GetEquippedWeapon(i) (owner's run 2026-11-24: 1 = the LeftHand weapon, 0 = the right one)
+    for (int i = 0; i < 2; ++i)
+        Dispatch("Actor", "GetEquippedWeapon",
+            [i](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                out.resize(1);
+                RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(i));
+            },
+            [i, log](const RE::BSScript::Variable& weapon) {
+                auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+                log(obj ? std::format("GetEquippedWeapon({}) = {:08X}", i, obj->GetHandle() & 0xFFFFFFFFull)
+                        : std::format("GetEquippedWeapon({}) = none", i));
+            });
+    if (auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(form_id))
+        log(std::format("{:08X} record's slot: {}", form_id, SlotName(static_cast<RE::BGSEquipType*>(weap)->equipSlot)));
+    if (auto* weap = RE::TESForm::LookupByID<RE::TESObjectWEAP>(form_id))
+        Dispatch("ObjectReference", "GetItemCount",
+            [weap](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                out.resize(1);
+                RE::BSScript::PackVariable(out[0], static_cast<RE::TESForm*>(weap));
+            },
+            [form_id, log](const RE::BSScript::Variable& v) {
+                log(v.is<std::int32_t>() ? std::format("copies of {:08X} carried: {}", form_id,
+                                                       RE::BSScript::get<std::int32_t>(v))
+                                         : std::format("copies of {:08X} carried: (no answer)", form_id));
+            });
+    log("3D " + HandNodesReport());
+}
+
+LeftFollowResult LeftWeaponFollow(bool active, int turn, const float degrees[3]) {
+    struct Timer {
+        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        ~Timer() {
+            g_follow_us += static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+            ++g_follow_calls;
+        }
+    } timer;
+    LeftFollowResult r;
+    auto& f = g_left_follow;
+    if (auto err = FindHandNodes(); !err.empty()) {
+        r.holding = f.node != nullptr;
+        return r;
+    }
+    const auto& h = g_hand_nodes;
+    if (!h.left || !h.wrist) return r;
+    const auto attach = REL::ID(kIdAttachChild).address(), detach = REL::ID(kIdDetachChild).address();
+    if (VSlot(h.left, kSlotAttachChild) != attach || VSlot(h.left, kSlotDetachChild) != detach ||
+        VSlot(h.wrist, kSlotAttachChild) != attach || VSlot(h.wrist, kSlotDetachChild) != detach) {
+        r.log = "WeaponLeft / L_Wrist slots 84 / 87 are not NiNode's: not moved";
+        return r;
+    }
+    // a model the game (newly) hung under WeaponLeft
+    RE::NiAVObject* model = nullptr;
+    {
+        RE::NiAVObject** data = nullptr;
+        std::uint32_t size = 0;
+        if (ReadChildren(h.left, g_children, data, size))
+            for (std::uint32_t i = 0; i < size && !model; ++i)
+                if (data[i] && Readable(data[i], 0x150) && ParentOf(data[i]) == h.left) model = data[i];
+    }
+    // the node we moved: still on the wrist? Let go of it when the game released its own reference (unequipped,
+    // sheathed), when the left weapon is off, or when the game hung a new model under WeaponLeft (a redraw)
+    if (f.node) {
+        const bool on_wrist = HasChild(h.wrist, f.node);
+        const long refs = on_wrist ? static_cast<long>(f.node->refCount) : 0;
+        const auto step = combat::follow_step(on_wrist, active, refs, f.refs_at_move, model && model != f.node);
+        if (step == combat::FollowStep::Forget) {
+            r.log = "the game took the left model off L_Wrist itself";
+            f = {};
+        } else {
+            if (step == combat::FollowStep::LetGo) {
+                r.log = std::format("left model let go (references {} -> {}{}{})", f.refs_at_move, refs,
+                                    active ? "" : ", left weapon off", model ? ", a new one under WeaponLeft" : "");
+                reinterpret_cast<void (*)(void*, void*)>(detach)(h.wrist, f.node);
+                f = {};
+            }
+        }
+    }
+    r.holding = f.node != nullptr;
+    if (!active || !model || f.node) return r;
+    // onto the wrist at the left grip (as the copy, which stays in the hand in every clip; under WeaponLeft it swung
+    // outward in idles, owner's run 2026-11-24)
+    model->IncRefCount();                                   // alive between the detach and the attach
+    reinterpret_cast<void (*)(void*, void*)>(detach)(h.left, model);
+    reinterpret_cast<void (*)(void*, void*, bool)>(attach)(h.wrist, model, true);
+    WriteXform(model, 0x40, combat::oriented(combat::left_grip(), turn, degrees));
+    // its root is named "Weapon" like the right-hand bone, and the game finds attach nodes by name: under L_Wrist it is
+    // found first, and the right weapon's re-equip hung the cutlass into the axe (owner's run 2026-11-24, both in the
+    // left hand); renamed as the copy is (S2SL_*)
+    std::string renamed;
+    if (const char* n0 = model->name.c_str(); n0 && *n0) {
+        const auto name = combat::copy_node_name(n0);
+        if (name != n0) {
+            renamed = std::format(", root renamed '{}' -> '{}'", n0, name);
+            model->name = RE::BSFixedString(name.c_str());
+        }
+    }
+    model->DecRefCount();
+    const bool on_wrist = ParentOf(model) == h.wrist;
+    f.node = on_wrist ? model : nullptr;
+    f.refs_at_move = model->refCount;
+    const char* n = model->name.c_str();
+    // which weapon it is (its first child: "Cutlass", "RescueAxe_Fixed"): owner's run 2026-11-24 had them swapped
+    std::string inner;
+    {
+        RE::NiAVObject** kids = nullptr;
+        std::uint32_t nk = 0;
+        if (ReadChildren(model, g_children, kids, nk))
+            for (std::uint32_t i = 0; i < nk && inner.empty(); ++i)
+                if (kids[i] && Readable(kids[i], 0x40)) {
+                    const char* kn = kids[i]->name.c_str();
+                    inner = kn ? kn : "";
+                }
+    }
+    r.log += std::format("{}left model '{}' ({}) moved from WeaponLeft to L_Wrist at the grip: {} (references {}){}",
+                         r.log.empty() ? "" : "; ", n ? n : "", inner, on_wrist ? "ok" : "FAILED", f.refs_at_move,
+                         renamed);
+    r.holding = f.node != nullptr;
+    return r;
 }
 
 float ActorValue(std::string_view editor_id) {
@@ -1040,6 +1748,29 @@ bool SetActorVariable(std::uint32_t form_id, const combat::VariableSet& v) {
         else if (v.type == combat::VariableSet::Type::Int) RE::BSScript::PackVariable(out[1], static_cast<std::int32_t>(v.value));
         else RE::BSScript::PackVariable(out[1], static_cast<float>(v.value));
     });
+}
+
+std::string DescribeArg(std::uint64_t v) {
+    if (v < 0x10000) return std::format("{}", v);
+    const auto* p = reinterpret_cast<const void*>(v);
+    if (p == Player()) return "player";
+    static const std::uintptr_t weap_vt = [] {
+        auto* w = RE::TESForm::LookupByID(0x1F4);   // UnarmedHuman, a WEAP record in Starfield.esm
+        return w ? *reinterpret_cast<const std::uintptr_t*>(w) : 0;
+    }();
+    static const std::uintptr_t slot_vt = [] {
+        auto* s = RE::TESForm::LookupByID(combat::kSlotRightHand);
+        return s ? *reinterpret_cast<const std::uintptr_t*>(s) : 0;
+    }();
+    if (!Readable(p, 8)) return std::format("{:X}", v);
+    const auto vt = *reinterpret_cast<const std::uintptr_t*>(p);
+    if (weap_vt && vt == weap_vt)
+        return std::format("WEAP {:08X}", static_cast<const RE::TESForm*>(p)->GetFormID());
+    if (slot_vt && vt == slot_vt) return "slot " + SlotName(static_cast<const RE::BGSEquipSlot*>(p));
+    const auto* q = reinterpret_cast<const void*>(vt);
+    if (vt > 0x10000 && Readable(q, 8) && weap_vt && *reinterpret_cast<const std::uintptr_t*>(q) == weap_vt)
+        return std::format("{:X}->WEAP {:08X}", v, static_cast<const RE::TESForm*>(q)->GetFormID());
+    return std::format("{:X}", v);
 }
 
 }  // namespace s2s::sfse::game

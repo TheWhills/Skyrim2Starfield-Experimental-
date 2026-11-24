@@ -28,6 +28,31 @@ struct Perf {
     }
 };
 Perf g_perf_frame, g_perf_event;
+// The time from one frame to the next (the game's whole frame, not only ours): owner's run 2026-11-24, menus felt less
+// smooth with the native left weapon on. Labelled with that state, to compare on / off.
+struct FrameGaps {
+    std::chrono::steady_clock::time_point last{};
+    std::uint64_t n = 0, total_us = 0, max_us = 0, slow = 0;   // slow: over 25 ms
+    void add(std::chrono::steady_clock::time_point t) {
+        if (last.time_since_epoch().count() != 0) {
+            const auto us = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t - last).count());
+            if (us < 1'000'000) {                               // a loading screen or alt-tab: not a frame
+                ++n;
+                total_us += us;
+                max_us = std::max(max_us, us);
+                if (us > 25'000) ++slow;
+            }
+        }
+        last = t;
+    }
+    std::string take() {
+        const auto s = std::format("{} frames, avg {:.1f} ms, max {:.1f} ms, over 25 ms {}", n,
+                                   n ? total_us / 1000.0 / static_cast<double>(n) : 0.0, max_us / 1000.0, slow);
+        n = total_us = max_us = slow = 0;
+        return s;
+    }
+};
+FrameGaps g_frame_gaps;
 std::chrono::steady_clock::time_point g_perf_start, g_perf_last;
 
 // ------------------------------------------------------------------------------------------------ input
@@ -87,11 +112,14 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
     // attacks or i-frames that never end, move Tick to a per-frame hook (e.g. the player's update).
     plugin.Tick();
     g_perf_frame.add(t0);
-    const auto limit = std::chrono::seconds(plugin.settings().perf_seconds);
-    if (t0 - g_perf_start < limit + std::chrono::seconds(1) && t0 - g_perf_last >= std::chrono::seconds(10)) {
+    g_frame_gaps.add(t0);
+    const int secs = plugin.settings().perf_seconds;
+    const auto limit = std::chrono::seconds(secs);
+    if ((secs < 0 || t0 - g_perf_start < limit + std::chrono::seconds(1)) && t0 - g_perf_last >= std::chrono::seconds(10)) {
         g_perf_last = t0;
-        REX::INFO("timing (the plugin's own work): per frame {}; per animation event {}", g_perf_frame.take(),
-                  g_perf_event.take());
+        REX::INFO("timing (the plugin's own work): per frame {}; per animation event {}; {}; game frames {} (left weapon "
+                  "{}, menu {})", g_perf_frame.take(), g_perf_event.take(), game::TakeHandNodeTimes(), g_frame_gaps.take(),
+                  plugin.left_weapon_on() ? "on" : "off", plugin.menu_open() ? "open" : "closed");
     }
     g_input_original(a_this, a_head);
 }
@@ -427,6 +455,50 @@ public:
 };
 MenuSink g_menu_sink;
 
+// ------------------------------------------------------------------------------------------------ weapon attach log
+// bLogWeaponAttach (owner's question 2026-11-24: why does a left weapon need a re-equip after a load, when a normal
+// weapon does not?). Logs the player's calls of the draw / sheathe path (docs/re/findings.md section 3): the animation
+// handlers WeaponAttachHandler / WeaponDetachHandler (slot 1 of vtables 453937 / 453939) and the Actor virtuals
+// AttachWeapon / DetachWeapon (slots 232 / 233 = 0xE8 / 0xE9, on the player's own vtable). Only watches: every call
+// goes to the original first, with all its arguments. The exact signatures are not known, so six integer arguments
+// are passed through (four registers and two stack slots; extra ones are ignored by the original) and the original's
+// rax is returned; nothing is logged before the call, so the float registers reach it untouched.
+using Pass6 = std::uint64_t(std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t);
+Pass6* g_attach_original[4] = {};
+constexpr const char* kAttachNames[4] = {"AttachWeapon vE8", "DetachWeapon vE9", "WeaponAttachHandler",
+                                         "WeaponDetachHandler"};
+std::atomic_int g_attach_logged{0};
+
+template <int K>
+std::uint64_t AttachLogged(std::uint64_t a, std::uint64_t b, std::uint64_t c, std::uint64_t d, std::uint64_t e,
+                           std::uint64_t f) {
+    const auto r = g_attach_original[K](a, b, c, d, e, f);
+    // the virtuals: this = the player (its own vtable); the handlers are shared by all actors: the actor is argument 2
+    const auto* player = game::Player();
+    const bool mine = K < 2 || reinterpret_cast<const void*>(b) == player;
+    if (mine && g_attach_logged.fetch_add(1) < 600)
+        REX::INFO("attach log: {} ({}, {}, {}, {}) -> {:X} at {:.3f} s, thread {}", kAttachNames[K], game::DescribeArg(b),
+                  game::DescribeArg(c), game::DescribeArg(d), game::DescribeArg(e), r, game::Now(),
+                  REX::W32::GetCurrentThreadId());
+    return r;
+}
+
+void InstallAttachLog(RE::PlayerCharacter* player) {
+    const auto base = reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));   // Starfield.exe
+    REL::Relocation<std::uintptr_t> pc_vtbl{*reinterpret_cast<std::uintptr_t*>(player)};
+    g_attach_original[0] = reinterpret_cast<Pass6*>(pc_vtbl.write_vfunc(0xE8, &AttachLogged<0>));
+    g_attach_original[1] = reinterpret_cast<Pass6*>(pc_vtbl.write_vfunc(0xE9, &AttachLogged<1>));
+    REL::Relocation<std::uintptr_t> attach_vtbl{REL::ID(453937)}, detach_vtbl{REL::ID(453939)};
+    g_attach_original[2] = reinterpret_cast<Pass6*>(attach_vtbl.write_vfunc(1, &AttachLogged<2>));
+    g_attach_original[3] = reinterpret_cast<Pass6*>(detach_vtbl.write_vfunc(1, &AttachLogged<3>));
+    // findings.md: vE8 0x140b41240, attach handler vtable 0x144cc5068 -> 0x141aebca0, detach 0x144cc5080 -> 0x141aebd20
+    auto rva = [base](auto v) { return static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(v)) - base; };
+    REX::INFO("attach log: on. player vtable +{:X}: vE8 +{:X}, vE9 +{:X}; attach handler vtable +{:X} -> +{:X}, detach "
+              "handler vtable +{:X} -> +{:X}", pc_vtbl.address() - base, rva(g_attach_original[0]),
+              rva(g_attach_original[1]), attach_vtbl.address() - base, rva(g_attach_original[2]),
+              detach_vtbl.address() - base, rva(g_attach_original[3]));
+}
+
 }  // namespace
 
 bool Install() {
@@ -449,6 +521,7 @@ bool Install() {
     g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
 
     InstallControls();
+    if (Plugin::Get().settings().log_weapon_attach) InstallAttachLog(player);
 
     ui->RegisterSink<RE::MenuOpenCloseEvent>(&g_menu_sink);
     // CommonLibSF (9d090c4, its latest as of 2026-10-21) has no Address Library ID for this on Starfield 1.16: ID 0, and

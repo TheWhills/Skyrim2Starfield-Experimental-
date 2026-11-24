@@ -137,3 +137,31 @@ moving it would change textures.py again and cost one more full reconvert.
 - Owner's terrain_blend.ps1: 8.2 min (one pass) -> 14.7 min (two passes, raster slot plan). The map-wide slot plan
   adds about 32 s per 144 x 144-quadrant tile (synthetic, measured here); owner's run: 15.5 min (from 14.7).
 - terrain_blend.ps1 -Blend smooth: 4.7 min on the owner's machine (noise 15.5 min, same input).
+
+## 2026-11-24: native left weapon, per-frame cost (S2SCombat timing report, iPerfSeconds = -1)
+- Before (owner's run 14:55-15:00, same save, menu closed): left weapon off: plugin 6-8 us per frame, game frames
+  10-13 ms; left weapon on: plugin **20-40 ms** per frame (avg 20132 / 40479 us), game frames **29-47 ms**. Cause
+  (supported hypothesis): FindHandNodes (sfse/src/Game.cpp) walked the player's 3D (up to 4000 nodes, a VirtualQuery
+  each) every frame while a hand node was missing; the follower (bLeftEquipGrip) calls it each frame.
+- Change: the found nodes stand for the same 3D; a missing one is searched for at most every 2 s (logged once).
+- After (owner's run 15:10, same test): **worse**, plugin 1.9 ms then **58 ms** per frame, game frames 67 ms; no
+  node was missing, so the walk was not it (hypothesis wrong). Next suspect: Player3D() takes the read lock on the
+  player's 3D every frame (FollowBone already limits it to twice a second for that reason). Change: the found nodes
+  are used without the lock, the root checked twice a second and after menus / equips / draws, dropped on a load;
+  the report now times the follower and the lookups separately.
+- After (owner's run 15:34): game frames back to **11-12 ms** (left off: 7.5 ms), no climb; the owner saw no big drop.
+  The follower still took **~5-6 ms per call** and each Player3D lookup **~19 ms** (21 lookups = 400 ms per 10 s).
+  Next suspect: Readable() = one VirtualQuery per check, which measures the whole region (large game pools).
+  Change: readable regions kept for 2 s per thread; the report counts the checks, VirtualQuery calls and their time.
+- After (owner's run 15:41, left weapon on): follower **~0.4 ms** per frame (346 ms / 787 calls; before ~5-6 ms),
+  plugin 0.2-0.4 ms per frame, game frames **~10 ms**, max 26-30 ms. Verified: 199 VirtualQuery calls took 381 ms
+  (~2 ms each). Left: the root check (twice a second) still ~12 ms each (cache misses). Change: 64 regions for 10 s,
+  root check every 2 s (menus / equips / draws / loads still check at once).
+- After (owner's run 15:53, left weapon on, two 10 s windows): follower **0.10-0.12 ms** per frame (102 ms / 678,
+  128 ms / 1047), plugin 106-129 us per frame, 44-46 VirtualQuery per 10 s (~3 ms each), Player3D 6-11 per 10 s
+  (~8-12 ms each, event-triggered); game frames **9.6-9.7 ms**, max 29 / 91 ms. Left weapon off in the same run:
+  7.3 ms. The remaining ~2.3 ms per frame is not the plugin's own time (unresolved: the game with a second weapon
+  model, or the moved model; bLeftEquipGrip = 0 would tell).
+- bLeftEquipGrip = 0 (owner's run 16:01, follower off): left weapon on **9.9 ms** per frame, plugin 43 us; left off
+  in the same run 6.1 ms. So the gap is not the follower (supported: one 10 s window each; frame times also vary
+  9.7-10.1 ms with the left weapon off in menus). The grip is back on (the axe swung outward again without it).
