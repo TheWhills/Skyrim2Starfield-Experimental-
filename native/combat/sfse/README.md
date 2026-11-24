@@ -179,3 +179,12 @@ right-hand weapon; `bLeftEquipEitherHand` switches the weapon's slot to EitherHa
 unequips and restores. Logged 1.5 s later: GetEquippedWeapon(0..2), copies carried, the 3D under WeaponLeft / Weapon.
 Questions: does the right weapon stay, does a stack of two give one per hand, does the model hang under WeaponLeft.
 
+Owner's run 2026-11-24 (first native test, bLeftEquipEitherHand = 0), **verified**: EquipObject into LeftHand is
+accepted and the game hangs the weapon's model under WeaponLeft itself (`WeaponLeft > Weapon > Cutlass ...`);
+GetEquippedWeapon(1) = the left weapon, (0) = the right one. But the right weapon was bumped every time
+(GetEquippedWeapon(0) = none; no attacks or sheathing until the left one came off): a melee weapon's slot is BothHands
+(RightHand + LeftHand). UnequipObject answered NO yet took it off; the right hand then held fists (000001F4). The ~1 s
+freeze was the report's two 3D walks. Second build: EitherHand mode is the default (both weapons' slot set to
+EitherHand in memory, the right one re-equipped into RightHand, then the left one into LeftHand); the unequip restores
+the slots and re-equips the right weapon; one cached 3D walk; fists are refused as the "right weapon".
+

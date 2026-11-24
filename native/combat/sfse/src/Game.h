@@ -67,7 +67,8 @@ std::string LeftCopyReport();
 // (either_hand: its BothHands slot set to EitherHand in memory first); LeftUnequip takes it off and restores the slot.
 // Main thread. RightWeaponId: Papyrus GetEquippedWeapon(0)'s FormID (0 none), on the VM thread. LeftEquipReport (main
 // thread; Papyrus parts answer later): GetEquippedWeapon(0..2), copies carried, the 3D under WeaponLeft and Weapon.
-std::string LeftEquip(std::uint32_t form_id, bool either_hand);
+// left_id / right_id: the left and right weapons (the same FormID for two of one sword; right 0 = none).
+std::string LeftEquip(std::uint32_t left_id, std::uint32_t right_id, bool either_hand);
 std::string LeftUnequip();
 bool RightWeaponId(std::function<void(std::uint32_t)> result);
 void LeftEquipReport(std::uint32_t form_id, std::function<void(const std::string&)> log);

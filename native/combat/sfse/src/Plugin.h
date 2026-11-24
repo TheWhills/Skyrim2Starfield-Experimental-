@@ -52,7 +52,7 @@ struct Settings {
     // BothHands slot is switched to EitherHand in memory first.
     std::uint32_t left_equip_key = 0;
     std::uint32_t left_equip_weapon = 0;
-    bool left_equip_either_hand = false;
+    bool left_equip_either_hand = true;
 };
 
 class Plugin {

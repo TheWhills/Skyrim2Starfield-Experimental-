@@ -112,7 +112,7 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.left_equip_key = static_cast<std::uint32_t>(to_int(plugin, "ileftequipkey", 0));
     if (auto it = plugin.find("sleftequipweapon"); it != plugin.end())
         settings_.left_equip_weapon = combat::parse_form_id(it->second).value_or(0);
-    settings_.left_equip_either_hand = to_int(plugin, "bleftequipeitherhand", 0) != 0;
+    settings_.left_equip_either_hand = to_int(plugin, "bleftequipeitherhand", 1) != 0;
     if (auto it = plugin.find("sleftcopyrotation"); it != plugin.end() && !it->second.empty() &&
         !combat::parse_degrees(it->second, settings_.left_copy_rotation))
         REX::WARN("[Plugin] sLeftCopyRotation = {}: not three numbers (x y z degrees)", it->second);
@@ -236,13 +236,21 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
     if (down && key == settings_.left_equip_key) {
         const bool either = settings_.left_equip_either_hand;
         if (!left_equipped_.load()) {
-            auto equip = [this, either](std::uint32_t id) {
-                SFSE::GetTaskInterface()->AddTask([this, id, either]() {
+            // the right-hand weapon (Papyrus) first: the left one is sLeftEquipWeapon, or a second copy of it
+            auto equip = [this, either, chosen = settings_.left_equip_weapon](std::uint32_t right_id) {
+                SFSE::GetTaskInterface()->AddTask([this, right_id, either, chosen]() {
+                    const std::uint32_t id = chosen ? chosen : right_id;
+                    // 000001F4 = UnarmedHuman (owner's run 2026-11-24: after a left equip bumped the sword, the fists
+                    // were the "right weapon" and went into LeftHand next)
+                    if (!chosen && right_id == 0x1F4u) {
+                        REX::INFO("left equip: the right hand holds fists (000001F4): draw a melee weapon first");
+                        return;
+                    }
                     if (!id) {
                         REX::INFO("left equip: no weapon in the right hand (set sLeftEquipWeapon or draw one)");
                         return;
                     }
-                    const auto r = game::LeftEquip(id, either);
+                    const auto r = game::LeftEquip(id, right_id, either);
                     REX::INFO("left equip: {}", r);
                     game::Notify("Left equip: see S2SCombat.log");
                     left_equipped_ = true;
@@ -250,8 +258,7 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
                     left_report_at_ = game::Now() + 1.5;
                 });
             };
-            if (settings_.left_equip_weapon) equip(settings_.left_equip_weapon);
-            else if (!game::RightWeaponId(equip)) REX::INFO("left equip: GetEquippedWeapon not dispatched");
+            if (!game::RightWeaponId(equip)) REX::INFO("left equip: GetEquippedWeapon not dispatched");
         } else {
             SFSE::GetTaskInterface()->AddTask([this]() {
                 REX::INFO("left equip: {}", game::LeftUnequip());
