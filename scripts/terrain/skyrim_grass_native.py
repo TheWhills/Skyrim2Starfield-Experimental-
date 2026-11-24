@@ -240,6 +240,24 @@ def norm_model(p: str) -> str:
     return p if p.startswith("meshes\\") else "meshes\\" + p
 
 
+GRASS_DIR = "meshes\\landscape\\grass\\"
+CELL_GRASS_SUBDIRS = ("rocks",)       # sCellGrassSubdirectories:Grass default "Rocks," (Starfield.exe 0x1459046d0)
+
+
+def grass_visible(path: str, subdirs=CELL_GRASS_SUBDIRS) -> bool:
+    """Whether the grass system can find a model at this path (docs/re/ground-cover-density.md, 2026-11-24): the
+    grass manager copies the file index entries of meshes\\landscape\\grass\\ (exactly that folder, not recursive) and
+    of each sCellGrassSubdirectories folder to meshes\\landscape\\cellgrass\\ once at start-up (FUN_140621660 ->
+    FUN_1427e19d0), and loads every grass model as meshes\\landscape\\cellgrass\\<path after landscape\\grass\\>
+    (FUN_140625d40). So only direct children of landscape\\grass\\ (or of a listed subfolder) are ever found."""
+    k = norm_model(path)
+    if not k.startswith(GRASS_DIR):
+        return False
+    rest = k[len(GRASS_DIR):]
+    parts = rest.split("\\")
+    return len(parts) == 1 or (len(parts) == 2 and parts[0] in subdirs)
+
+
 def unused_grass_paths(sf_data: str, plugins=None):
     """Grass NIF paths shipped in the game's mesh archives (meshes\\landscape\\grass\\) that no record of the
     game's own plugins names, sorted. 2026-11-23: the grass system loads a model only at a path the game already
@@ -264,7 +282,9 @@ def unused_grass_paths(sf_data: str, plugins=None):
             for sig, d in subs:
                 if sig == b"MODL":
                     used.add(norm_model(bytes(d).rstrip(b"\0").decode("latin-1", "replace")))
-    return sorted(shipped - used), len(shipped), len(used & shipped)
+    # 2026-11-24: only paths the grass system can see (grass_visible); the 6 nested free paths
+    # (grass\grasshellebore\...) were handed out first before, so the commonest Skyrim grasses never loaded
+    return sorted(p for p in shipped - used if grass_visible(p)), len(shipped), len(used & shipped)
 
 
 def template_nif(sf_data: str, model: str) -> bytes:
@@ -400,7 +420,7 @@ def without_vertex_colours(sh):
 
 
 def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
-                  keep_colours: bool = False) -> str:
+                  keep_colours: bool = False, flat: bool = False) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided, no vertex colours unless keep_colours); returns its path under meshes\\. info: a dict to fill with
     model_info."""
@@ -427,6 +447,8 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
     stem = re.sub(r"[^a-z0-9_]+", "_", os.path.splitext(name.lower().replace("\\", "/").split("meshes/", 1)[-1])[0])
     # 2026-11-23: under Landscape/Grass like every vanilla grass model (Starfield.exe names meshes/landscape/grass/)
     out_name = f"landscape/grass/{PREFIX}/{stem}"
+    if flat:                         # 2026-11-24: directly in landscape\grass\, where the grass system looks
+        out_name = f"landscape/grass/{PREFIX}_{stem.replace('/', '_')}"
     files = skyrimconvert.convert_static_sse(src, shapes, out_name, mats, None, {})
     if material:
         files = {rel: (with_material(d, material) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
@@ -533,6 +555,11 @@ def main(argv=None):
                     help="test (2026-11-24, docs/re/ground-cover-density.md route A): instead of appending entries, "
                          "rewrite the biome's own FIRST entry of each --biome-masks mask to {the one --only-ltex "
                          "slot, its cover}. An appended second mask-0 entry did not take the Base slot in game")
+    ap.add_argument("--flat-paths", action="store_true",
+                    help="put each converted grass model at a NEW path directly in landscape\\grass\\ "
+                         "(s2s_<name>.nif) instead of over a free vanilla path: the grass system only sees direct "
+                         "children of that folder (2026-11-24, Starfield.exe); whether it sees new files depends on "
+                         "them being in the file index when the grass manager starts (test)")
     ap.add_argument("--keep-vertex-colours", action="store_true",
                     help="keep Skyrim's grass vertex colours (before 2026-11-24 the default); now dropped like vanilla "
                          "grass meshes have none: their alpha (Skyrim's wind weight, 0 on most vertices) may hide the "
@@ -685,7 +712,8 @@ def main(argv=None):
         if a.vanilla_paths:
             free, n_shipped, n_used = unused_grass_paths(os.path.join(a.starfield, "Data"))
             report["vanilla_path_pool"] = {"shipped": n_shipped, "used_by_records": n_used, "free": len(free)}
-            print(f"vanilla grass models: {n_shipped} shipped, {n_used} named by the game's records, {len(free)} free")
+            print(f"vanilla grass models: {n_shipped} shipped, {n_used} named by the game's records, {len(free)} free "
+                  f"where the grass system looks (directly in landscape\\grass\\ or Rocks\\)")
         if a.copy_template_nif or a.replace_vanilla:
             tmodel = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
             copied = template_nif(os.path.join(a.starfield, "Data"), tmodel)
@@ -764,7 +792,7 @@ def main(argv=None):
                            else a.vanilla_material)
                     minfo = {}
                     model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo,
-                                          keep_colours=a.keep_vertex_colours)
+                                          keep_colours=a.keep_vertex_colours, flat=a.flat_paths)
                     report.setdefault("model_info", {})[r["edid"]] = minfo
                     if mat:
                         report.setdefault("materials", {})[r["edid"]] = mat

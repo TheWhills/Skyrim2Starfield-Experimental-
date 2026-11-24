@@ -352,6 +352,15 @@ class PlanetBiomeTests(unittest.TestCase):
         added = sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 4, 0x99, 0x77))
         self.assertEqual(added[-1], {"kind": "LNAM", "mask": 4, "ltex": 0x99, "gcvr": 0x77})
 
+    def test_grass_visible(self):
+        import skyrim_grass_native as N
+        self.assertTrue(N.grass_visible("Landscape\\Grass\\GrassSage02.nif"))
+        self.assertTrue(N.grass_visible("meshes\\landscape\\grass\\s2s_fieldgrass01.nif"))
+        self.assertTrue(N.grass_visible("meshes\\landscape\\grass\\Rocks\\RockMoss01.nif"))
+        self.assertFalse(N.grass_visible("meshes\\landscape\\grass\\grass\\grasshellebore\\grasshellebore01.nif"))
+        self.assertFalse(N.grass_visible("landscape\\grass\\s2s\\fieldgrass01.nif"))
+        self.assertFalse(N.grass_visible("meshes\\landscape\\plants\\fern01.nif"))
+
     def test_without_vertex_colours(self):
         import dataclasses
         import skyrim_grass_native as N
@@ -501,7 +510,8 @@ class PlanetBiomeTests(unittest.TestCase):
                 fh.write(sfplugin.build([(b"GRAS", h, [(b"EDID", b"G\0"), (b"MODL", b"Landscape\\Grass\\used01.nif\0")],
                                           0x10)], {"hedr_version": 0.96, "form_version": 555}, masters=()))
             free, shipped, used = N.unused_grass_paths(d)
-        self.assertEqual(free, ["meshes\\landscape\\grass\\grass\\spare01.nif", "meshes\\landscape\\grass\\spare02.nif"])
+        # 2026-11-24: grass\Spare01 is nested, which the grass system never sees: only the direct child is free
+        self.assertEqual(free, ["meshes\\landscape\\grass\\spare02.nif"])
         self.assertEqual((shipped, used), (3, 1))
 
     def test_vanilla_paths_build(self):

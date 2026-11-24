@@ -240,3 +240,29 @@ working files and are not committed (decompiled code).
 | 0x140796a40 / 0x1407947b0 | biome slots -> palette entries |
 | 0x140795110 / 0x140795410 / 0x1409a9570 | palette rebuild / add overlay / overlay LTEX table -> entries |
 | 0x1409a7d60 | renderer texture set from the palette |
+
+## Grass model paths: why only some paths load (2026-11-24, afternoon)
+
+Question (owner's 2026-11-23 tests): a grass model loads only at paths the game ships; our file over such a path
+loads, the same file at a new path does not (archive, loose, MO2). Answer (**verified** as code):
+
+* `FUN_140625d40` (grass model load) requires the GRAS model path to START with `landscape\grass\`
+  (`FUN_14032eb50`, case-insensitive), then requests **`meshes\landscape\cellgrass\` + the rest** from the normal
+  model database (`DAT_1461de600`; args at 0x1459046e8). `FUN_140626a90` preloads every cover's grasses the same way.
+* `cellgrass` exists in no archive. When the grass manager is built (`FUN_140621660`, BGSGrassManager), it calls
+  `FUN_1427e19d0(meshes\landscape\grass\, meshes\landscape\cellgrass\)`: that walks the game's file index and copies
+  every entry whose **directory hash equals** `meshes\landscape\grass` (exactly that folder, not subfolders) under
+  the `cellgrass` directory, keeping the entry's location. It repeats this for each folder in
+  **`sCellGrassSubdirectories:Grass` = `Rocks,`** (value 0x1459046d0, registered at 0x1459046c8).
+* So a grass model is found only if it is a **direct child of `landscape\grass\` (or `landscape\grass\Rocks\`)**
+  and its index entry existed when the grass manager was built (a one-time copy).
+* Consequences, checked against our builds: the "free" vanilla grass paths include six nested ones
+  (`grass\grasshellebore\...`) the grass system can never see, and `--vanilla-paths` handed those out first:
+  Skyrim's FieldGrass01 (runs 4-8 of the slot test) and on 2026-11-23 the commonest Skyrim families never loaded,
+  whatever their material. **The 2026-11-23 conclusion "our own .mat is refused by grass" is therefore unresolved
+  again** (those runs were confounded by invisible paths). Our `landscape\grass\s2s\...` paths were nested too.
+* Routes: (1) only direct children (fixed: `unused_grass_paths` now returns the 6 visible free paths);
+  (2) new files directly in `landscape\grass\` (`--flat-paths`, `s2s_<name>.nif`): works if our archive is in the
+  file index when BGSGrassManager is built (our file over a vanilla path was picked up, so plugin archives seem to be
+  there by then: supported hypothesis, to test); (3) `sCellGrassSubdirectories=Rocks,S2S` in StarfieldCustom.ini
+  [Grass] would alias our own subfolder (untested).

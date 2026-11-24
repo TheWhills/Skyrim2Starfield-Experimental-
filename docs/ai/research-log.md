@@ -3,6 +3,16 @@
 New findings go here (newest first). Each entry: question, method, evidence, **status**: verified /
 supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and docs/spikes/; link, don't copy.
 
+## 2026-11-24 Claude: which grass model paths Starfield loads
+- Question: why does a grass model load only at a path the game ships (owner's 2026-11-23 tests)?
+- Method: Starfield.exe in Ghidra (ghidra_query.py): FUN_140625d40 (grass model load), FUN_140621660
+  (BGSGrassManager construction), FUN_1427e19d0 (file index copy). Details: docs/re/ground-cover-density.md.
+- Evidence: models are requested as meshes\landscape\cellgrass\<path after landscape\grass\>; cellgrass is filled
+  once by copying the index entries of exactly meshes\landscape\grass\ and of sCellGrassSubdirectories ("Rocks,").
+- Status: the path rule **verified** (code); 6 of the 12 "free" vanilla paths are nested and invisible, which
+  explains slot-test runs 4-8 (bare) and confounds 2026-11-23's "our .mat is refused" (now **unresolved**); new flat
+  files being visible depends on index timing (**supported hypothesis**, in-game test pending).
+
 ## 2026-11-24 Claude: where Starfield grows ground cover on an overlay world
 - Question: why does ground cover on SKY_Tamriel grow in the same small patches whatever our BTD says, and do the
   ProcGen density maps decide it?

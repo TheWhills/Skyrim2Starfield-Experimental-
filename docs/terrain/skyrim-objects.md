@@ -739,6 +739,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   those cards mostly transparent (bigger Skyrim models, e.g. forest grass, showed on 2026-11-23). Showing Skyrim's
   grass as Skyrim draws it needs Skyrim's textures on grass: the open "why does the grass system refuse our .mat"
   question (Starfield.exe). Working fallback: vanilla Starfield grass models per Skyrim grass family with our records.
+  **Correction (Claude, 2026-11-24, Starfield.exe; docs/re/ground-cover-density.md "Grass model paths"):** the grass
+  system only finds models DIRECTLY in landscape\grass\ (or Rocks\): at start-up it copies the file index entries of
+  exactly that folder to meshes\landscape\cellgrass\ and loads every grass from there. FieldGrass01 sat on the nested
+  free path grass\grasshellebore\grasshellebore01.nif, so runs 4-8 never loaded it at all: they tested neither the
+  model, the material nor the vertex colours. 6 of the 12 free paths are nested; --vanilla-paths now hands out only the
+  6 visible ones. The 2026-11-23 finding "our own .mat is refused" was confounded the same way (the commonest families
+  got nested paths) and is unresolved again. Ninth run: `-GrassOnly` (FieldGrass01 on grasscityshort01_shape01.nif,
+  a visible path). Then `-GrassOnly -FlatPaths` (a new file directly in landscape\grass\): if that grows, the
+  12-path limit is gone, and our own .mat can be retried.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
