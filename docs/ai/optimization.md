@@ -157,4 +157,8 @@ moving it would change textures.py again and cost one more full reconvert.
   plugin 0.2-0.4 ms per frame, game frames **~10 ms**, max 26-30 ms. Verified: 199 VirtualQuery calls took 381 ms
   (~2 ms each). Left: the root check (twice a second) still ~12 ms each (cache misses). Change: 64 regions for 10 s,
   root check every 2 s (menus / equips / draws / loads still check at once).
-- After: pending.
+- After (owner's run 15:53, left weapon on, two 10 s windows): follower **0.10-0.12 ms** per frame (102 ms / 678,
+  128 ms / 1047), plugin 106-129 us per frame, 44-46 VirtualQuery per 10 s (~3 ms each), Player3D 6-11 per 10 s
+  (~8-12 ms each, event-triggered); game frames **9.6-9.7 ms**, max 29 / 91 ms. Left weapon off in the same run:
+  7.3 ms. The remaining ~2.3 ms per frame is not the plugin's own time (unresolved: the game with a second weapon
+  model, or the moved model; bLeftEquipGrip = 0 would tell).
