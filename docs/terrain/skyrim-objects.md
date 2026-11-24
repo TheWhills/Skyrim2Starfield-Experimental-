@@ -682,7 +682,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   flat (58, 76) every layer naming LFieldGrass02 (entry 14) names LDefault006Base (00010861, appended as entry 57)
   instead, same alphas, byte 6 = 0 there (offline dry run on a copy: 35 layer bytes in 35 quadrants, check passed);
   the grass mod gives the ocean biome one entry {mask 0, LFieldGrass02 slot, its cover}, threshold 0.1. Expected:
-  same look, grass across the field at the texture's strength. Not yet run in game.
+  same look, grass across the field at the texture's strength.
+  **First run (owner, 2026-11-24, verified in game): no grass anywhere, and the LFieldGrass02 places in the square
+  draw a pale wavy "snow" ground.** The built biome showed why: NirnOceanNoCoating has its own LNAM per mask 0..5 (mask
+  0 = LSandPacked05_Gray, no cover) and ours was APPENDED as a second mask-0 entry; the placeholder drew the first
+  one's ground (pale grey sand, as on the 2026-11-24 encoded-table hill). So the placeholder -> biome slot swap works
+  for rendering (verified), and the slot takes the biome's FIRST entry of that mask, at least for its ground
+  (supported hypothesis; whether it also took that entry's empty cover, or our grass model failed, is open: the mask
+  test's appended mask-0 cover did grow at edges). Next: `grass_slot_test.ps1 -GrassOnly` rewrites the biome's own
+  first mask-0 entry instead (skyrim_grass_native.py --slot-first); if the ground is field grass again but still
+  bare, `-GrassOnly -Control` (vanilla moss cover) separates our grass model from the route.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

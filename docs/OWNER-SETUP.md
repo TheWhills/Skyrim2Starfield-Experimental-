@@ -314,6 +314,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    reinstall; grass mod rebuilt with only that texture's grass in the biome's Base slot, threshold 0.1). In game
    (S2S Grass Native on, coc SKY_TamrielRiverwoodSpawn): does grass grow ACROSS that flat now, and does the ground
    still look the same? -Restore puts the terrain back.
+   Second run (after the first gave pale "snow" ground and no grass; terrain stays): add -GrassOnly. If the ground is
+   field grass again but bare: -GrassOnly -Control (a vanilla moss cover instead of the Skyrim grass).
 8j. (2026-11-22) Grass test, terrain byte 6 (Starfield closed): powershell -ExecutionPolicy Bypass -File
    tools\owner\terrain_byte6.ps1 -Mask FlatOut ; -Restore undoes it. With S2S Grass Native (--control) on.
 8i. (2026-11-22) Skyrim's grass as Starfield grass (wind, fade), through Nirn's own biome under Riverwood:

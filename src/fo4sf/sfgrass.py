@@ -107,6 +107,29 @@ def biome_with_entries(subs, entries: Iterable[Tuple[int, int, int]]):
     return out
 
 
+def biome_with_slot(subs, mask: int, ltex: int, gcvr: int):
+    """A BIOM's subrecords with the FIRST LNAM of `mask` set to {ltex, gcvr} (inserted after the last LNAM if the
+    biome has none for that mask). 2026-11-24 (owner, in game): a second mask-0 entry appended after NirnOceanNoCoating's
+    own did not take the Base slot: the placeholder drew the first entry's ground (LSandPacked05_Gray) and no grass
+    grew, so a slot is changed by changing the biome's own entry."""
+    subs = [(s, bytes(d)) for s, d in subs]
+    out, last, done = [], None, False
+    for s, d in subs:
+        if s == b"LNAM" and len(d) >= 12:
+            m = struct.unpack_from("<I", d)[0]
+            if m == mask and not done:
+                d = struct.pack("<3I", mask, ltex, gcvr) + d[12:]
+                done = True
+            out.append((s, d))
+            last = len(out)
+            continue
+        out.append((s, d))
+    if not done:
+        at = last if last is not None else next((i + 1 for i, (s, _d) in enumerate(out) if s == b"TNAM"), len(out))
+        out[at:at] = [(b"LNAM", struct.pack("<3I", mask, ltex, gcvr))]
+    return out
+
+
 def biome_terrain(subs) -> List[Dict]:
     """The LNAM / ANAM entries of a BIOM: [{"kind", "mask", "ltex", "gcvr"}]."""
     out = []

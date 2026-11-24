@@ -516,6 +516,10 @@ def main(argv=None):
     ap.add_argument("--only-ltex", default="", metavar="EDIDS",
                     help="test (2026-11-23): ground cover only on the slots of these Skyrim textures "
                          "(comma-separated, e.g. LFieldGrass02)")
+    ap.add_argument("--slot-first", action="store_true",
+                    help="test (2026-11-24, docs/re/ground-cover-density.md route A): instead of appending entries, "
+                         "rewrite the biome's own FIRST entry of each --biome-masks mask to {the one --only-ltex "
+                         "slot, its cover}. An appended second mask-0 entry did not take the Base slot in game")
     ap.add_argument("--ltex-kind-from", default="", metavar="EDITORID",
                     help="test (2026-11-23): give every covered slot's LTEX the material type (MNAM) and QNAM of this "
                          "vanilla LTEX (e.g. LDirtCracked02), overriding the terrain's re-skin in S2SGrass.esm; the "
@@ -624,6 +628,8 @@ def main(argv=None):
         if not gc:
             sys.exit(f"control: the world's land biome ({wb}) lists no ground cover")
         covers = [(int(o["form_id"]), gc) for o in overrides]
+        if a.only_ltex:                              # 2026-11-24: the slot test's control on the one texture
+            covers = [c for c in covers if c[0] in plan["slots"]]
         names = {r[3]: sfplugin.edid(r[2]) for r in sf if r[0] == b"GCVR"}
         report["control"] = {"gcvr": f"{gc:08X}", "edid": names.get(gc, "?"), "textures": len(covers)}
     else:
@@ -794,7 +800,19 @@ def main(argv=None):
               f"their re-skin copied from {os.path.basename(terr_p)}")
         if not changed:
             print(f"  (no slot changed: terrain plugin {terr_p or '?'} not found or no re-skin there)")
-    if a.mask_test and target is not None:
+    if a.slot_first and target is not None:
+        slots = sorted({s for s, _c in covers})
+        if len(slots) != 1:
+            sys.exit(f"--slot-first needs exactly one covered texture (--only-ltex), got {len(slots)}")
+        subs = target[2]
+        for m in masks:
+            subs = sfgrass.biome_with_slot(subs, m, slots[0], covers[0][1])
+        recs.append((b"BIOM", target[1], subs, target[3]))
+        report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "masks": masks,
+                           "entries_added": 0, "slot_first": {"ltex": f"{slots[0]:08X}", "gcvr": f"{covers[0][1]:08X}"}}
+        print(f"--slot-first: the biome's own first entry of mask(s) {', '.join(map(str, masks))} = "
+              f"{{{slots[0]:08X}, {covers[0][1]:08X}}}")
+    elif a.mask_test and target is not None:
         picks = mask_test_grasses([(r[3], r[2]) for r in sf if r[0] == b"GRAS"], masks)
         entries = []
         print("mask test (biome mask -> vanilla grass grown there on the covered slots):")

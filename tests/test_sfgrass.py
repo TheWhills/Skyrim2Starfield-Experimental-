@@ -338,6 +338,30 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x30, "gcvr": 0})   # its own entry kept
         self.assertIn("load S2SGrass.esm after them", log)
 
+    def test_biome_with_slot(self):
+        subs = [(b"EDID", b"B\0"), (b"TNAM", b"x"), (b"LNAM", struct.pack("<3I", 0, 0x30, 0)),
+                (b"ANAM", struct.pack("<3I", 0, 0x32, 0)), (b"LNAM", struct.pack("<3I", 0, 0x33, 0)),
+                (b"LNAM", struct.pack("<3I", 1, 0x34, 5))]
+        out = sfgrass.biome_with_slot(subs, 0, 0x99, 0x77)
+        terr = [(e["kind"], e["mask"], e["ltex"], e["gcvr"]) for e in sfgrass.biome_terrain(out)]
+        self.assertEqual(terr, [("LNAM", 0, 0x99, 0x77), ("ANAM", 0, 0x32, 0), ("LNAM", 0, 0x33, 0),
+                                ("LNAM", 1, 0x34, 5)])                    # only the first mask-0 LNAM changes
+        added = sfgrass.biome_terrain(sfgrass.biome_with_slot(subs, 4, 0x99, 0x77))
+        self.assertEqual(added[-1], {"kind": "LNAM", "mask": 4, "ltex": 0x99, "gcvr": 0x77})
+
+    def test_slot_first(self):
+        _raw, by, log = self._run(["--only-ltex", "LFernGround", "--slot-first"])
+        cover = by["S2S_Cover_00000031"]
+        terr = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])
+        self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x31, "gcvr": cover[3]})   # replaced
+        self.assertEqual(terr[1], {"kind": "LNAM", "mask": 4, "ltex": 0x31, "gcvr": cover[3]})   # none: added
+        self.assertEqual(len(terr), 2)
+        self.assertIn("--slot-first", log)
+        _raw, by, _log = self._run(["--control", "--only-ltex", "LFernGround", "--slot-first"])
+        first = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])[0]
+        self.assertEqual((first["mask"], first["ltex"]), (0, 0x31))
+        self.assertNotEqual(first["gcvr"], 0)
+
     def test_control_with_procgen(self):
         raw, _by, log = self._run(["--control", "--allow-procgen"])
         import skyrim_grass_native as N

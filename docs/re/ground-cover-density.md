@@ -200,7 +200,11 @@ placeholders and replace the vanilla slot defaults (`FUN_140794170` overwrites t
 
 ## Open
 
-* **unresolved**: BIOM LNAM -> 7 slots (loader not traced), and which of several same-mask entries wins.
+* **unresolved**: BIOM LNAM -> 7 slots (loader not traced), and which of several same-mask entries wins. In game
+  (owner, 2026-11-24, route A test): with a second mask-0 LNAM appended to NirnOceanNoCoating, the LDefault006Base
+  layers drew the biome's FIRST mask-0 entry's ground (LSandPacked05_Gray) and grew nothing: **supported hypothesis**
+  that the first LNAM per mask fills the slot. Route A therefore rewrites the biome's own first entry
+  (skyrim_grass_native.py --slot-first).
 * **unresolved**: the `textures\terrain\` root of density-map keys; what OverlayMasks and bAllowProcGenOnOverlays
   drive (procedural blocks / objects).
 * **supported hypothesis**: GCVR +0x88 = threshold; biome per overlay from the anchor cell.
