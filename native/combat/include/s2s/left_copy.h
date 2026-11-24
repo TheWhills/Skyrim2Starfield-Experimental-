@@ -92,16 +92,13 @@ std::optional<HandPair> parse_hand_pair(std::string_view text);
 // which hand but rebuilt no model with the records back at BothHands; with the records set while the loading screen
 // was up the game may build both itself.
 //   Nothing: no left weapon in the save and no records set. UndoRecords: records were set but the save has no left
-//   weapon (put them back). Keep: the expected left weapon is in LeftHand and, if the weapons are drawn, both models
-//   were built (sheathed weapons have no model in Starfield: owner's run 2026-11-24, a sheathed save went to Redo and
-//   the axe popped in a second after the draw). Wait: drawn, records set, the expected weapon in LeftHand, a model
-//   still missing, and less than kAfterLoadWait seconds since the first check (the same runs: 1 s after the loading
-//   screen closed no model was built yet, also in drawn saves, and every load went to Redo). Redo: anything else with
-//   a left weapon in hand.
-enum class AfterLoad { Nothing, UndoRecords, Keep, Wait, Redo };
-inline constexpr double kAfterLoadWait = 4.0;
-AfterLoad after_load(bool records_set, std::uint32_t expected_left, std::uint32_t left_in_hand, bool drawn,
-                     bool left_model, bool right_model, double waited = 0.0);
+//   weapon (put them back). Keep: the expected left weapon is in LeftHand and both models were built. Redo: anything
+//   else with a left weapon in hand, also a sheathed save: owner's run 2026-11-24 14:17, kept sheathed (no models), the
+//   draw built neither weapon (only R_HandIk / L_HandIk under "Weapon"); only the re-equip brings them back, so it
+//   runs right after the load, before the player draws.
+enum class AfterLoad { Nothing, UndoRecords, Keep, Redo };
+AfterLoad after_load(bool records_set, std::uint32_t expected_left, std::uint32_t left_in_hand, bool left_model,
+                     bool right_model);
 
 // A FormID from the INI: "0x0001234F", "0001234F", "1234f" (hex); "" or 0 or anything else -> nullopt.
 std::optional<std::uint32_t> parse_form_id(std::string_view text);

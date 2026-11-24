@@ -338,8 +338,7 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         left_report_at_ = game::Now() + 3.0;
         REX::INFO("left equip: a save loaded; the plugin's left weapon state: {} (reported in 3 s)",
                   left_equipped_.load() ? "on (from before the load)" : "off");
-        left_restore_first_ = -1.0;
-        left_restore_at_ = game::Now() + 1.0;            // then keep, wait, redo or undo (s2s after_load)
+        left_restore_at_ = game::Now() + 0.3;            // then keep, redo or undo (s2s after_load)
     }
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
@@ -634,26 +633,18 @@ void Plugin::Tick() {
     // after a load: a weapon in LeftHand (saved with it) gets the whole sequence again, so both models are built
     if (const double due = left_restore_at_.load(); due >= 0.0 && now >= due) {
         left_restore_at_ = -1.0;
-        if (left_restore_first_.load() < 0.0) left_restore_first_ = now;
-        const double waited = now - left_restore_first_.load();
-        // sheathed weapons have no model (owner's run 2026-11-24): asked first, so a sheathed save is kept as it is
-        game::LeftWeaponId([this, waited](std::uint32_t left_id) {
-            const bool asked = game::IsWeaponDrawn([this, waited, left_id](bool drawn) {
-              SFSE::GetTaskInterface()->AddTask([this, waited, left_id, drawn]() {
+        // drawn is only logged: whether the re-equip of a sheathed save draws the weapons
+        game::LeftWeaponId([this](std::uint32_t left_id) {
+            const bool asked = game::IsWeaponDrawn([this, left_id](bool drawn) {
+              SFSE::GetTaskInterface()->AddTask([this, left_id, drawn]() {
                 using A = combat::AfterLoad;
                 const auto models = game::HandModelsNow();
-                const bool records = records_set_.load();
-                const auto step = combat::after_load(records, expected_left_.load(), left_id, drawn, models.left,
-                                                     models.right, waited);
-                if (step == A::Wait) {                     // drawn, the 3D still loading: look again shortly
-                    left_restore_at_ = game::Now() + 0.5;
-                    return;
-                }
-                records_set_ = false;
+                const bool records = records_set_.exchange(false);
+                const auto step = combat::after_load(records, expected_left_.load(), left_id, models.left, models.right);
                 const char* what = step == A::Keep ? "keep" : step == A::Redo ? "redo" : step == A::UndoRecords ? "undo records"
                                                                                                              : "nothing";
-                REX::INFO("left equip: after the load ({:.1f} s): LeftHand {:08X}, drawn {}, models right {} left {}, "
-                          "records set {} -> {}", waited, left_id, drawn, models.right, models.left, records, what);
+                REX::INFO("left equip: after the load: LeftHand {:08X}, drawn {}, models right {} left {}, "
+                          "records set {} -> {}", left_id, drawn, models.right, models.left, records, what);
                 if (step == A::UndoRecords) {
                     REX::INFO("left equip: {}", game::UndoHandSlots());
                     left_wanted_ = false;
@@ -668,7 +659,8 @@ void Plugin::Tick() {
                     left_equipped_ = false;
                     left_restore_id_ = left_id;
                     left_wanted_ = true;                   // the dual stance (if off), then StartLeftEquip
-                    left_equip_due_ = game::Now() + 1.2;
+                    // soon, so it is done before the player draws (owner's 14:17 run: drawn 1 s after the load)
+                    left_equip_due_ = game::Now() + (dual_applied_ == 1 ? 0.5 : 1.2);
                 }
               });
             });
