@@ -308,6 +308,21 @@ def _plane_pair(dds: bytes, tmp: str, texconv_exe: str):
     return px[:, :, 0].copy(), px[:, :, 1].copy()
 
 
+def _alpha_plane(dds: bytes, tmp: str, texconv_exe: str):
+    """The alpha plane (uint8) of a DDS, decoded through texconv (top mip). BC4 / BC5 have none: 0."""
+    import numpy as np
+    h = textures.read_dds_header(dds)
+    if h["dxgi"] in (80, 81, 83, 84) or h["fourcc"] in (b"BC5U", b"ATI2", b"BC4U", b"ATI1"):
+        return np.zeros((4, 4), np.uint8)
+    src = os.path.join(tmp, "alpha_in.dds")
+    open(src, "wb").write(dds)
+    textures.texconv(texconv_exe, src, tmp, "R8G8B8A8_UNORM", ("-m", "1"))
+    out = open(src, "rb").read()
+    hh = textures.read_dds_header(out)
+    px = np.frombuffer(out[hh["data_offset"]:hh["data_offset"] + hh["width"] * hh["height"] * 4], dtype=np.uint8)
+    return px.reshape(hh["height"], hh["width"], 4)[:, :, 3].copy()
+
+
 class Converter:
     def __init__(self, src: Fo4Archives, staging: str, texconv_exe: str, content_resources: str,
                  collision_template: Optional[bytes] = None, prefix: str = "fo4port",
@@ -478,8 +493,10 @@ class Converter:
                              opacity_ramp: Optional[tuple] = None, strands: bool = False,
                              transpose: bool = False, orient: bool = False, look: Optional[str] = None,
                              coverage: float = 1.0, region=None, cutout: Optional[int] = None,
-                             vanilla_maps: bool = False) -> str:
+                             vanilla_maps: bool = False, skyrim_specular: Optional[dict] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
+        skyrim_specular: a Skyrim shape's specular (skyrimnif.specular): the roughness comes from it and the normal
+        map's alpha (textures.roughness_from_specular_mask) instead of the uniform 'fairly rough' value.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
         import numpy as np
@@ -596,7 +613,13 @@ class Converter:
                 ng = np.zeros((4, 4), dtype=np.int8)
             textures.write_rg8_snorm(os.path.join(tmp, "n_in.dds"), nr, ng)
             textures.texconv(self.texconv, os.path.join(tmp, "n_in.dds"), tmp, "BC5_SNORM")
-            if s is not None:
+            if skyrim_specular is not None:                # Skyrim: specular flag, glossiness, mask in the normal alpha
+                mask = (_alpha_plane(n, tmp, self.texconv) if (n is not None and skyrim_specular["on"])
+                        else np.zeros((4, 4), np.uint8))
+                rough = textures.roughness_from_specular_mask(textures.mean_pool(mask, 4),
+                                                              skyrim_specular["glossiness"],
+                                                              skyrim_specular["strength"])
+            elif s is not None:
                 _sr, sg = _plane_pair(s, tmp, self.texconv)
                 rough = textures.roughness_from_smoothness(sg, smoothness, spec_mult)
             else:                                          # no spec map: uniformly fairly rough

@@ -394,6 +394,9 @@ def cmd_convert(a):
                     conv.candle_exposure = a.candle_exposure
                 conv.sf_candle_mesh = candle_mesh
                 conv.split_spin = True                 # turning parts placed by stage / spin_parts.py
+                # roughness from each shape's Skyrim specular, not one 'fairly rough' value (2026-11-25: the road shone
+                # in the sun beside the matte terrain; Skyrim masks its specular to ~14 %)
+                conv.skyrim_specular = True
             job = jobs[name]
             r = conv.convert_nif(job["nif"], alt_textures=job["alt"])
             if flame_relevant(r):

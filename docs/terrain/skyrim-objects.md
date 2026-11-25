@@ -925,6 +925,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   by tools/owner/alt_textures.ps1 (in-place plugin patch; docs/ai/decisions.md). Not done: object LOD still shows
   the plain textures from far away; Skyrim's directional snow material (DNAM MATO, the snow on top of rocks) is a
   separate feature, not translated.
+* **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
+  ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
+  ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
+  wet sheen with the vanilla roughness). Skyrim's road shapes have specular on, glossiness 30, white, strength 1, but the
+  specular is masked by the normal map's alpha: Road01_n median 36 / 255 (p90 73), Dirt02_N 24, Road01Snow01_n 19,
+  Snow01_n 19; RockL01 has specular off. Fix (make_skyrim_objects convert): roughness = 1 - m (1 - r), m = mask x
+  strength x luminance of the specular colour, r = sqrt(sqrt(2 / (glossiness + 2))) (Blinn-Phong -> GGX; 30 -> 0.5);
+  specular off = 255. Converted: Road01 mean 234 (p10 219, p90 244), Dirt02 242, MountainSlab02 (rocks) 255; before
+  all 190. File names unchanged, so tools/owner/object_specular.ps1 copies the new maps over the staging. In game: pending.
+  Other Skyrim conversions (armour, weapons, hair, creatures, interiors) keep the uniform value for now
+  (SkyrimConverter.skyrim_specular, off by default).
 * **Alternate textures in game (owner, 2026-11-25, verified)**: the Hollyfrost road draws snowy. Coverage (offline):
   every placed reference whose base has alternate textures got its variant, 25,935 of 25,935; of Skyrim.esm's other
   references with such bases, 63 fail conversion as their plain model does and 82 are skipped by design (effects,

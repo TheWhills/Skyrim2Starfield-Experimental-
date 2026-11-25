@@ -401,6 +401,32 @@ def model_space_normals(n, shader_ref) -> bool:
     return bool(flags1 & SLSF1_MODEL_SPACE_NORMALS)
 
 
+SLSF1_SPECULAR = 0x1                  # Shader Flags 1 bit 0: specular lighting on (mask: the normal map's alpha)
+
+
+def specular(n, shader_ref) -> Optional[dict]:
+    """{"on", "glossiness", "strength"} of a BSLightingShaderProperty (SSE, BS 100: after the emissive colour and
+    multiple come texture clamp mode, alpha, refraction strength, glossiness, specular colour, specular strength).
+    strength = specular strength x the specular colour's luminance. Verified 2026-11-25: RoadChunkM01's shapes
+    specular on, glossiness 30, colour white, strength 1; RockL01 off (glossiness 187, colour 0.37, strength 1.04).
+    None for other shader types or a short block."""
+    if not (0 <= shader_ref < len(n.blocks)) or n.type_of(shader_ref) != "BSLightingShaderProperty":
+        return None
+    blk = n.blocks[shader_ref]
+    try:
+        n_extra, = struct.unpack_from("<I", blk, 8)
+        p = 12 + 4 * n_extra + 4
+        flags1, = struct.unpack_from("<I", blk, p)
+        p += 8 + 16 + 4 + 16                           # flags 1 / 2, UV offset + scale, texture set, emissive
+        _clamp, _alpha, _refr, gloss = struct.unpack_from("<Ifff", blk, p)
+        r, g, b, strength = struct.unpack_from("<4f", blk, p + 16)
+    except struct.error:
+        return None
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return {"on": bool(flags1 & SLSF1_SPECULAR), "glossiness": round(float(gloss), 3),
+            "strength": round(max(0.0, float(strength) * lum), 4)}
+
+
 def normal_map_as_diffuse(paths) -> bool:
     """A texture set whose diffuse slot holds a normal map ("..._n.dds"): a distortion surface, not a coloured one."""
     return bool(paths) and paths[0].lower().endswith("_n.dds")

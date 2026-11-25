@@ -368,6 +368,33 @@ def roughness_from_smoothness(g, smoothness: float = 1.0, spec_mult: float = 1.0
     return (255 - np.round(g.astype(np.float32) * k)).clip(0, 255).astype(np.uint8)
 
 
+def gloss_roughness(glossiness: float) -> float:
+    """Skyrim's Blinn-Phong glossiness (specular exponent) -> perceptual roughness 0..1: GGX alpha = sqrt(2 / (n + 2))
+    (the usual Blinn-Phong <-> GGX match), perceptual roughness = sqrt(alpha). Glossiness 30 -> 0.50."""
+    n = max(0.0, float(glossiness))
+    return float((2.0 / (n + 2.0)) ** 0.25)
+
+
+def roughness_from_specular_mask(mask, glossiness: float, strength: float):
+    """Skyrim specular (mask 0..255 = the normal map's alpha, glossiness, strength) -> Starfield roughness (255 = fully
+    rough). Starfield has no specular intensity, so a weak specular reads as a rougher surface: roughness = 1 - m (1 -
+    gloss_roughness), m = mask x strength (clamped to 0..1). No mask = fully rough (Skyrim drew no highlight there).
+    Skyrim's road: mask median 36 / 255, glossiness 30 -> about 0.93, nearly as matte as the terrain (2026-11-25)."""
+    r = gloss_roughness(glossiness)
+    m = np.clip(mask.astype(np.float32) / 255.0 * max(0.0, float(strength)), 0.0, 1.0)
+    return np.round(255.0 * (1.0 - m * (1.0 - r))).clip(0, 255).astype(np.uint8)
+
+
+def mean_pool(plane, k: int):
+    """Mean of k x k blocks (sides cropped to multiples of k); a result smaller than 4 x 4 (one BC block) is a 4 x 4
+    plane of the overall mean."""
+    h, w = plane.shape[0] // k, plane.shape[1] // k
+    if h < 4 or w < 4:
+        return np.full((4, 4), int(round(float(plane.mean()))), np.uint8)
+    p = plane[:h * k, :w * k].astype(np.float32).reshape(h, k, w, k).mean(axis=(1, 3))
+    return np.round(p).astype(np.uint8)
+
+
 def flip_green(g):
     return (255 - g.astype(np.int32)).astype(np.uint8)
 

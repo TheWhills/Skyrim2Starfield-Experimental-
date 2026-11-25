@@ -404,7 +404,11 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None,
-                        albedo_target: Optional[tuple] = None) -> Optional[str]:
+                        albedo_target: Optional[tuple] = None, specular: Optional[dict] = None) -> Optional[str]:
+        """specular: the shape's Skyrim specular (skyrimnif.specular), giving the roughness map (2026-11-25: every object
+        had a uniform 'fairly rough' sheen; Skyrim's road is masked to ~14 % and its rocks have none). Not part of the
+        material's name, so converted files keep their names: a second shape with the same textures but another
+        specular uses the first one's material (counted in stats["specular_conflicts"])."""
         kind = "decal" if blend and not test else "cutout" if test else "opaque"
         ident = "|".join([diffuse.replace("\\", "/").lower(), normal.replace("\\", "/").lower(), kind, str(ref)]
                          + ([",".join(f"{v:.3f}" for v in albedo_tint)] if albedo_tint else [])
@@ -414,12 +418,17 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
         if kind == "decal":
             stem = "decals/" + stem
         key = "sky:" + stem
+        spec_of = self.__dict__.setdefault("_specular_of", {})
+        if key in spec_of and spec_of[key] != specular:
+            self.stats["specular_conflicts"] = self.stats.get("specular_conflicts", 0) + 1
         if key not in self._materials:
+            spec_of[key] = specular
             try:
                 self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=test,
                                                                  alpha_ref=ref, decal=(kind == "decal"),
                                                                  flat_normal_ok=flat_normal_ok,
-                                                                 albedo_tint=albedo_tint, albedo_target=albedo_target)
+                                                                 albedo_tint=albedo_tint, albedo_target=albedo_target,
+                                                                 skyrim_specular=specular)
                 self.stats["materials_ok"] += 1
             except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
                 self._materials[key] = None
@@ -531,6 +540,8 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             return self.neutral
         mat = self.skyrim_material(paths[0], normal, test, blend, ref, flat_normal_ok=flat_normal_ok,
                                    albedo_tint=albedo_tint,
+                                   **({"specular": skyrimnif.specular(src, s.shader_ref)}
+                                      if getattr(self, "skyrim_specular", False) else {}),
                                    **({"albedo_target": albedo_target} if albedo_target is not None else {}))
         if mat is None and blend and not test:
             return None                               # an overlay we could not convert: leave it out, as FO4 does
