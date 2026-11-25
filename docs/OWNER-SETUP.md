@@ -52,6 +52,7 @@ Starfield must be closed while a script writes into the mods folders.
 | Beard matches (beard_match.json) | `C:\Modding\work\beards` |
 | Outfit debug meshes (fit_debug.zip per NPC) | `C:\Modding\work\debug_<npc>` (ralof, ysolda, nazeem, saadia) |
 | Exterior objects work folder (export / convert for skyrim_all, Oct 16) | `C:\Modding\work\sky_all` |
+| Alternate-texture variants of the exterior's objects (8n; its own convert) | `C:\Modding\work\sky_alt` |
 | Installed exterior (Tamriel on the planet; matches the game's SkyrimTerrainTamriel.esm, height offset 385 m) | `C:\Modding\staging\skyrim_all` |
 | Other exterior builds (older) | `C:\Modding\staging\skyrim_objects`, `C:\Modding\staging\skyrim_tamriel` |
 | Interior batches (checklist step 11, Oct 23) | `C:\Modding\work\s2s\interiors`, `C:\Modding\work\s2s\checklist` |
@@ -308,6 +309,13 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
+8n. (2026-11-25) Skyrim's snowy roads and ground-matched rock piles (alternate textures). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\alt_textures.ps1
+   (1,002 mesh + texture variants for 25,935 placed objects, converted in C:\Modding\work\sky_alt, added to the
+   staged exterior in place; reinstall. The exterior is now two archives: textures in
+   "SkyrimTerrainTamriel_Mars - Main.ba2"). Claude ran it on 2026-11-25. In game: the road at Hollyfrost Farm (snow on
+   the cobbles, snowy edges), snowy rock piles and drifts, mountain trims matching the ground. Missing textures
+   everywhere (purple / white) would mean the second archive did not load: say so.
 8m. (2026-11-24) Skyrim's grass on EVERY grassy texture (S2SGrass SFSE plugin, after 8l worked). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\grass_hook.ps1
    (builds S2SGrass.dll with xmake; terrain back to the converted textures; reinstall; grass mod with every texture's

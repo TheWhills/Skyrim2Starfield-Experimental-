@@ -909,8 +909,22 @@ Max Density; what a vanilla grass model needs. Two tools:
   Cause: the references use RoadChunkM01**Snow**, RoadChunkM02Snow, RoadCurve90R01Snow ... (17 bases): separate STAT
   records with the SAME mesh plus **MODS alternate textures** (per shape a snowy TXST; Update.esm replaces them with
   its own TXSTs and adds a DNAM flag). objects.json groups bases by model (make_skyrim_objects.py select), and nothing
-  in the pipeline reads MODS, so every snow road draws the plain Road01.dds cobbles. Fix (planned): export MODS and
-  their TXSTs as loaded, key models on (mesh, alternate textures), apply them per shape in convert.
+  in the pipeline reads MODS, so every snow road draws the plain Road01.dds cobbles.
+  MODS layout (verified, RoadChunkM01Snow 000B23F4 in Skyrim.esm): u32 count, then per entry u32 name length, the 3D
+  name without terminator, u32 TXST FormID, u32 3D index: 'RoadChunkM01:2' -> 00000891 index 1, 'RoadChunkM01:0' ->
+  00100618 (TextureSetRoad01Snow01: Road01Snow01.dds) index 0. The names are the model's two BSTriShapes, the index
+  their order. Update.esm's override points ':2' at its own 01002CA0 (Snow01Landscape.dds). (Correction: an earlier
+  note here read the first set as 00089132; that took the name's last byte ':2' as part of the FormID.)
+  **Fixed 2026-11-25 (offline checks; in game pending)**: skyrimrefs.alternate_textures reads MODS and TXST as
+  loaded (Skyrim, Update, DLC masters; an override without MODS removes the swaps); a reference's model is keyed on
+  (mesh, swaps); convert swaps the texture set of each named shape (skyrimconvert.alt_texture_blocks: by name, by index
+  when the name matches no shape). Tamriel: 2,021 bases have alternate textures; 25,935 of our placed objects use
+  1,081 of them, 1,002 mesh + texture variants: mostly rock piles, snow drifts, mountain trims and cliffs that Skyrim
+  retextures to the ground under them (RockPileM02Snow, MountainTrim01ReachGrass01, RockPileL01TundraRocks ...), and
+  the 17 snow road pieces. Converted in 263 s, none failed, no fallback material. The installed exterior got them
+  by tools/owner/alt_textures.ps1 (in-place plugin patch; docs/ai/decisions.md). Not done: object LOD still shows
+  the plain textures from far away; Skyrim's directional snow material (DNAM MATO, the snow on top of rocks) is a
+  separate feature, not translated.
 * **Snowy road (owner, first note)**: superseded by the entry above. Correction: LSnowCobble01 borrows LSnow01 (snow), so a brown cobbled road is
   probably not LSnowCobble01 (claimed above without the road's position); more likely LDirtPath01 / LDirtSnowPath01
   with their Tamriel-wide mean tint (Starfield has no per-vertex ground colour). Needs the road's position. LSnowCobble01 is one of the 13 Skyrim ground

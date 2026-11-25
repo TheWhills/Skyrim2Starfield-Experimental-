@@ -66,6 +66,35 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(os.listdir(data), [])
         self.assertEqual(open(self.pt, "rb").read(), b"# comment\r\n*FO4Port.esm\r\n")
 
+    def test_split_archives_over_the_limit(self):
+        """2026-11-25: over 4 GiB, textures go into the Mars plugin's own archive; uninstall removes both."""
+        os.makedirs(os.path.join(self.staging, "Data", "textures"))
+        open(os.path.join(self.staging, "Data", "textures", "t.dds"), "wb").write(bytes(100))
+        old = os.path.join(self.staging, "SkyrimTerrainTamriel_Mars - Main.ba2")
+        with mock.patch.object(d, "ARCHIVE_LIMIT", 101):          # textures 100 bytes + the BTD 3
+            out = self.run_main("install", "--staging", self.staging, "--starfield", self.game)
+        self.assertIn("SkyrimTerrainTamriel_Mars - Main.ba2: textures", out)
+        data = os.path.join(self.game, "Data")
+        self.assertEqual(sorted(f for f in os.listdir(data) if not f.endswith(".json")),
+                         ["SkyrimTerrainTamriel - Main.ba2", "SkyrimTerrainTamriel.esm",
+                          "SkyrimTerrainTamriel_Mars - Main.ba2", "SkyrimTerrainTamriel_Mars.esm"])
+        self.run_main("uninstall", "--starfield", self.game)
+        self.assertEqual(os.listdir(data), [])
+        # back under the limit: one archive again, the staged split archive is removed
+        self.run_main("install", "--staging", self.staging, "--starfield", self.game)
+        self.assertFalse(os.path.exists(old))
+        self.assertNotIn("SkyrimTerrainTamriel_Mars - Main.ba2", os.listdir(data))
+
+    def test_archive_plan(self):
+        p = ["A.esm", "A_Mars.esm"]
+        self.assertEqual(d.archive_plan(p, {"Terrain": 1, "textures": 2}, limit=10), [("A - Main.ba2", ["Terrain", "textures"])])
+        self.assertEqual(d.archive_plan(p, {"Terrain": 4, "meshes": 4, "textures": 8}, limit=10),
+                         [("A - Main.ba2", ["Terrain", "meshes"]), ("A_Mars - Main.ba2", ["textures"])])
+        with self.assertRaises(SystemExit):
+            d.archive_plan(p, {"Terrain": 4, "textures": 11}, limit=10)
+        with self.assertRaises(SystemExit):
+            d.archive_plan(p[:1], {"Terrain": 4, "textures": 8}, limit=10)
+
     def test_refuses_a_second_terrain_experiment_and_overwrites(self):
         open(os.path.join(self.game, "Data", "TerrainCore64_Mars.esm"), "wb").close()
         with self.assertRaises(SystemExit) as cm:

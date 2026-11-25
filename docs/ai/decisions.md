@@ -2896,3 +2896,23 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   to the end of the table fixed the same ground. Vanilla tables also start with these placeholders.
 - Alternatives: finding the exact rule in Starfield.exe first (the Ghidra project is in use; the fix is lossless and
   matches vanilla, so it goes first); skipping only the values seen failing (1..3; unknown which others fail).
+
+## 2026-11-25: Skyrim's alternate textures as their own models, patched into the staged exterior (Claude)
+- Decision: a base's MODS (alternate texture sets per shape) makes (mesh, swaps) a model of its own
+  (exterior.source_key(model, alt) = '<mesh>|alt:<id>'; skyrimrefs.alternate_textures reads Skyrim.esm, Update.esm
+  and the DLC masters as loaded). The installed exterior gets them by an in-place plugin patch
+  (scripts/terrain/alt_textures_patch.py, fo4sf.esm_patch: new STATs at the end of the STAT group, references' NAME
+  rewritten), not a restage. Over 4 GiB, deploy_skyrim_exterior.py packs textures into the Mars plugin's own
+  "- Main.ba2".
+- Why: the owner's snowy road at Hollyfrost Farm (RoadChunkM01Snow = the plain mesh + snow texture sets); the same
+  mechanism covers 25,935 placed objects (rock piles, drifts, mountain trims, cliffs matched to the ground). A
+  restage renumbers every FormID after the bases (TerrainOverlays allocates bases first), which FO4Port.esm's load
+  doors and reference overrides depend on, and would drop the same-size patches made to the staged plugin since.
+  The patch keeps every existing record's bytes (verified on the staged plugin: only the moved references' NAME
+  differs after the STAT group; the WRLD cell index counts from the WRLD record, so it stays valid). The variants
+  add 316 MB; the single archive had 51 MB left under 4 GiB.
+- Alternatives: restage + rebuild FO4Port.esm (long, and loses the in-place patches); --max-texture 1024 for the
+  variants only (still over 4 GiB, and blurrier than the plain models); reusing byte-identical textures (182 MB of
+  the 261 MB are identical to staged files: a later optimization, needs material rewrites); "- Textures.ba2"
+  (would need the DDS archive format; not tried).
+

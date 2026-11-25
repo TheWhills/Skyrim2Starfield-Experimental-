@@ -7,8 +7,16 @@ Static, TREE -> Tree, ...), base EditorID / FormKey / model (MODL; armour's worl
 (DATA, game units and radians), scale (XSCL), the raw record flags and the 0x800 initially-disabled mask, persistence
 (0x400 or the worldspace's persistent cell), the exterior cell (XCLC, or floor(position / 4096) for persistent refs)
 and the enable parent (XESP). Placed actors (ACHR) go to deferred_refs: NPCs are not translated.
+
+Alternate textures (2026-11-25, docs/terrain/skyrim-objects.md "Snowy roads"): a base's MODS swaps the texture set of
+named shapes of its model (RoadChunkM01Snow: the plain road mesh with snow textures). alternate_textures reads them as
+the game loads them (Skyrim.esm, then Update.esm and the DLC masters overriding records and adding texture sets);
+export_world puts them on each reference as "alt_textures".
 """
+import hashlib
+import json
 import math
+import os
 import struct
 
 from fo4sf import fo4land
@@ -29,8 +37,89 @@ PLACED = (b"REFR", b"ACHR", b"PGRE", b"PHZD", b"PMIS", b"PARW", b"PBEA", b"PFLA"
 DELETED, PERSISTENT, DISABLED = 0x20, 0x400, 0x800
 
 
+# the official masters in the game's load order: later records override earlier ones (alternate_textures)
+LOAD_ORDER = ("Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm")
+TXST_SLOTS = 8                                  # TX00..TX07 = BSShaderTextureSet slots 0..7 (diffuse, normal, ...)
+
+
 def formkey(fid: int, plugin: str = "Skyrim.esm") -> str:
     return f"{fid & 0xFFFFFF:06X}:{plugin}"
+
+
+def parse_mods(d: bytes) -> list:
+    """[(3D name, texture set FormID as stored, 3D index)] of a MODS field: u32 count, then per entry u32 name length,
+    the name (no terminator), u32 TXST FormID, u32 3D index (verified on RoadChunkM01Snow 000B23F4: 2 entries,
+    'RoadChunkM01:2' -> 00000891 index 1, 'RoadChunkM01:0' -> 00100618 index 0)."""
+    if len(d) < 4:
+        return []
+    n, p, out = struct.unpack_from("<I", d)[0], 4, []
+    for _ in range(n):
+        if p + 4 > len(d):
+            break
+        ln = struct.unpack_from("<I", d, p)[0]
+        if p + 4 + ln + 8 > len(d):
+            break
+        name = bytes(d[p + 4:p + 4 + ln]).split(b"\0", 1)[0].decode("cp1252", "replace")
+        fid, index = struct.unpack_from("<II", d, p + 4 + ln)
+        out.append((name, fid, index))
+        p += 4 + ln + 8
+    return out
+
+
+def _texture_path(t: str) -> str:
+    t = t.replace("/", "\\").lstrip("\\")
+    return t if not t or t.lower().startswith("textures\\") else "textures\\" + t
+
+
+def alternate_textures(data_dir: str, plugins=LOAD_ORDER, wanted_sigs=tuple(SIG_TYPES)) -> dict:
+    """{base formkey: [{"name", "index", "textures": [8 paths, '' = none]}]} for every base whose winning record (the
+    last plugin of `plugins` found in data_dir that has it) carries MODS; texture sets resolve the same way. FormIDs are
+    read through each plugin's master list. Entries whose texture set is missing are left out."""
+    want = {s.encode() for s in wanted_sigs if s != "TXST"}
+    present = [n for n in plugins if os.path.isfile(os.path.join(data_dir, n))]
+    mods, txst = {}, {}
+    for name in present:
+        with fo4land.Plugin(os.path.join(data_dir, name)) as p:
+            masters = [fo4land.zstring(d) for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, 0))
+                       if sig == b"MAST"]
+
+            def key(fid):
+                i = fid >> 24
+                return formkey(fid, masters[i] if i < len(masters) else name)
+
+            for item in fo4land.iter_items(p.buf, p.body, len(p.buf)):
+                if item[0] != "GRUP" or (item[3] not in want and item[3] != b"TXST"):
+                    continue
+                for typ, off, flags, fid in fo4land.iter_items(p.buf, item[1] + 24, item[2]):
+                    if typ == "GRUP":
+                        continue
+                    fields = [] if flags & DELETED else list(fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
+                    if typ == b"TXST":
+                        tex = [""] * TXST_SLOTS
+                        for sig, d in fields:
+                            if sig[:2] == b"TX" and sig[2:].isdigit() and int(sig[2:]) < TXST_SLOTS:
+                                tex[int(sig[2:])] = _texture_path(fo4land.zstring(d))
+                        txst[key(fid)] = tex
+                        continue
+                    entries = None                  # an override without MODS removes the earlier swaps
+                    for sig, d in fields:
+                        if sig == b"MODS":
+                            entries = [(n, key(t), i) for n, t, i in parse_mods(d)]
+                    mods[key(fid)] = entries
+    out = {}
+    for base, entries in mods.items():
+        got = [{"name": n, "index": i, "textures": list(txst[t])} for n, t, i in entries or () if t in txst]
+        if got:
+            out[base] = got
+    return out
+
+
+def alt_id(alt) -> str:
+    """Short stable identity of a list of alternate textures (8 hex digits; '' for none)."""
+    if not alt:
+        return ""
+    norm = sorted([e["name"].lower(), int(e["index"]), [t.lower() for t in e["textures"]]] for e in alt)
+    return hashlib.sha1(json.dumps(norm).encode()).hexdigest()[:8]
 
 
 def read_bases(p: fo4land.Plugin, wanted_sigs=tuple(SIG_TYPES)) -> dict:
@@ -78,9 +167,12 @@ def _parse_ref(data: bytes):
     return r
 
 
-def export_world(esm: str, world: str = "Tamriel", cells=None, plugin_name: str = "Skyrim.esm") -> dict:
+def export_world(esm: str, world: str = "Tamriel", cells=None, plugin_name: str = "Skyrim.esm",
+                 alt_plugins=LOAD_ORDER) -> dict:
     """The schema-v2 export of every placed reference in the worldspace (or only exterior cells inside the inclusive
-    rectangle cells = (x0, x1, y0, y1); persistent references are kept when their position lies inside it)."""
+    rectangle cells = (x0, x1, y0, y1); persistent references are kept when their position lies inside it).
+    alt_plugins: the plugins next to esm whose alternate textures apply (alternate_textures; () = none)."""
+    alts = alternate_textures(os.path.dirname(os.path.abspath(esm)), alt_plugins) if alt_plugins else {}
     def inside(xy):
         return cells is None or (cells[0] <= xy[0] <= cells[1] and cells[2] <= xy[1] <= cells[3])
 
@@ -141,6 +233,9 @@ def export_world(esm: str, world: str = "Tamriel", cells=None, plugin_name: str 
                          "exterior_cell": list(xy),
                          "enable_parent": None if r["xesp"] is None else
                          {"reference": formkey(r["xesp"][0], plugin_name), "flags": r["xesp"][1]}}
+                alt = alts.get(entry["base_formkey"]) if entry["base_formkey"] else None
+                if alt:
+                    entry["alt_textures"] = alt
                 if r["xtel"] is not None:
                     entry["teleport_destination"] = {"door": formkey(r["xtel"][0], plugin_name), "pos": r["xtel"][1],
                                                      "rot": r["xtel"][2], "flags": r["xtel"][3]}

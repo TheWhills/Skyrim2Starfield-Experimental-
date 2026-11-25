@@ -131,8 +131,10 @@ def cmd_select(a):
     cmin, cmax = ov["cell_min"], ov["cell_max"]
     by_model, outside = {}, 0
     for r in to_local(sub["refs"], ov):
-        by_model.setdefault(exterior.source_key(r["model"]), {"model": r["model"], "type": r["type"],
-                                                              "formkey": r["formkey"]})
+        entry = by_model.setdefault(exterior.source_key(r["model"], r.get("alt_textures")),
+                                    {"model": r["model"], "type": r["type"], "formkey": r["formkey"]})
+        if r.get("alt_textures") and "alt_textures" not in entry:   # the same mesh, other textures: its own model
+            entry.update(alt_textures=r["alt_textures"], base_editor_id=r.get("base_editor_id") or "")
         c = tg.sf_cell_of(r["pos"][0] / 70.0, r["pos"][1] / 70.0)
         outside += not (cmin <= c[0] <= cmax and cmin <= c[1] <= cmax)
     models = [by_model[k] for k in sorted(by_model)]
@@ -337,11 +339,28 @@ def stair_layer(a):
     return None if not v else int(v)
 
 
+def convert_jobs(models) -> dict:
+    """{source key as written in the manifest: {"nif", "alt", "edid_from"}} of convert_input.json's models: one per
+    mesh, and one per mesh + alternate textures (exterior.source_key; its EditorID from the Skyrim base's, e.g.
+    RoadChunkM01Snow, else the mesh's name + _Alt)."""
+    jobs = {}
+    for m in models:
+        nif = "meshes\\" + m["model"].replace("/", "\\").lstrip("\\")
+        alt = m.get("alt_textures") or None
+        key = nif + (exterior.ALT_SEP + exterior.alt_id(alt) if alt else "")
+        if key not in jobs:
+            stem = os.path.splitext(nif.rsplit("\\", 1)[-1])[0]
+            jobs[key] = {"nif": nif, "alt": alt,
+                         "edid_from": (m.get("base_editor_id") or stem + "_Alt") if alt else nif}
+    return jobs
+
+
 def cmd_convert(a):
     from fo4sf import bsa, checkpoints, convert_static, skyrimconvert
     t0 = time.time()
     models = load(os.path.join(a.work, "convert_input.json"))["refs"]
-    names = sorted({"meshes\\" + m["model"].replace("/", "\\").lstrip("\\") for m in models}, key=str.lower)
+    jobs = convert_jobs(models)
+    names = sorted(jobs, key=str.lower)
     staging = os.path.join(a.work, "convert")
     os.makedirs(staging, exist_ok=True)
     src = bsa.SkyrimArchives(a.skyrim_data)
@@ -375,7 +394,8 @@ def cmd_convert(a):
                     conv.candle_exposure = a.candle_exposure
                 conv.sf_candle_mesh = candle_mesh
                 conv.split_spin = True                 # turning parts placed by stage / spin_parts.py
-            r = conv.convert_nif(name)
+            job = jobs[name]
+            r = conv.convert_nif(job["nif"], alt_textures=job["alt"])
             if flame_relevant(r):
                 r["flame_key"] = fkey
             if cache:
@@ -388,7 +408,7 @@ def cmd_convert(a):
             continue
         key = name.lower()
         if key not in ids:
-            ids[key] = editor_id(name, taken)
+            ids[key] = editor_id(jobs[name]["edid_from"], taken)
         items.append({"editor_id": ids[key], "model": r["out_name"].replace("/", "\\") + ".nif", "source": name,
                       "shapes": r["shapes"], "fallback_materials": r["fallback_materials"],
                       "collision_report": r.get("collision_report") or {}})

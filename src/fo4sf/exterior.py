@@ -46,9 +46,25 @@ EFFECTS_RE = re.compile(r"^\\?effects[\\/]", re.I)
 WATER_RE = re.compile(r"^\\?water[\\/]", re.I)
 
 
-def source_key(model: str) -> str:
-    """convert_batch's identity of a model: 'meshes\\' + the model path, compared case-insensitively."""
-    return ("meshes\\" + model.replace("/", "\\").lstrip("\\")).lower()
+def source_key(model: str, alt=None) -> str:
+    """convert_batch's identity of a model: 'meshes\\' + the model path, compared case-insensitively. alt: the base's
+    alternate textures (skyrimrefs.alternate_textures): the same mesh with swapped textures is a model of its own,
+    keyed '<path>|alt:<skyrimrefs.alt_id>' (2026-11-25: Skyrim's snow roads and ground-matched rock piles)."""
+    key = ("meshes\\" + model.replace("/", "\\").lstrip("\\")).lower()
+    return key + ALT_SEP + alt_id(alt) if alt else key
+
+
+ALT_SEP = "|alt:"
+
+
+def alt_id(alt) -> str:
+    from .skyrimrefs import alt_id as ident
+    return ident(alt)
+
+
+def mesh_of(key: str) -> str:
+    """The mesh path of a source key (without its alternate-texture part)."""
+    return key.split(ALT_SEP, 1)[0]
 
 
 def classify(ref: dict, convert_types=CONVERT_TYPES) -> Tuple[str, Optional[str], str]:
@@ -182,7 +198,7 @@ def place(selected: dict, manifest: dict, cell_min: int, cell_max: int, edid_pre
     bases, base_index, placed, skipped = [], {}, [], []
     edids = set()
     for r in sorted(selected["refs"], key=lambda r: r["formkey"]):
-        key = source_key(r["model"])
+        key = source_key(r["model"], r.get("alt_textures"))
         item = items.get(key)
         if item is None:
             if key in failures:

@@ -21,7 +21,7 @@ import os
 import re
 from typing import Dict, List, Optional
 
-from . import convert_static, nif as nifmod, pipeline, sfcollision, sfmesh, sfnif, skyrimfire, skyrimnif
+from . import convert_static, nif as nifmod, pipeline, sfcollision, sfmesh, sfnif, skyrimfire, skyrimnif, skyrimrefs
 from .skyrimflames import FlameMixin
 
 UNIT = 1.0 / 70.0
@@ -195,6 +195,35 @@ def collision_boxes(src: nifmod.NifFile, template: bytes, report: dict, landscap
 
 
 MAX_VERTICES = 0xFFFF                 # Starfield .mesh triangle indices are u16
+
+
+def alt_texture_blocks(shapes, alt) -> Dict[int, list]:
+    """{shape block: texture paths} for a base's alternate textures (skyrimrefs.alternate_textures). An entry names its
+    shape (3D name, compared case-insensitively) and gives its index among the model's geometry; the name decides, the
+    index only for an entry whose name matches no shape. Verified on RoadChunkM01Snow: 'RoadChunkM01:0' index 0 and
+    'RoadChunkM01:2' index 1 are the model's two BSTriShapes in order."""
+    names = {}
+    for s in shapes:
+        names.setdefault((s.name or b"").decode("latin-1").lower(), s.block)
+    out = {}
+    for e in alt:
+        block = names.get(e["name"].lower())
+        if block is None and 0 <= int(e["index"]) < len(shapes):
+            block = shapes[int(e["index"])].block
+        if block is not None:
+            out[block] = list(e["textures"])
+    return out
+
+
+def swap_textures(paths: list, alt: Optional[list]) -> list:
+    """A shape's texture set with an alternate texture set applied: Skyrim replaces the whole set; a set without a
+    normal map keeps the shape's own normal map (the converter needs one; none seen in Skyrim's alternate sets)."""
+    if not alt or not alt[0]:
+        return paths
+    out = list(alt) + [""] * max(0, len(paths) - len(alt))
+    if not out[1] and len(paths) > 1:
+        out[1] = paths[1]
+    return out
 
 
 def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
@@ -485,7 +514,8 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             return self.skyrim_flame_material(src, s.shader_ref) if self.fire else None
         if skyrimnif.refraction(src, s.shader_ref):  # heat haze / refraction: not translated, like effect shaders
             return None
-        paths = skyrimnif.texture_set(src, s.shader_ref)
+        paths = swap_textures(skyrimnif.texture_set(src, s.shader_ref),
+                              getattr(self, "_alt_by_block", {}).get(getattr(s, "block", None)))
         if skyrimnif.normal_map_as_diffuse(paths):
             return None
         if not paths or not paths[0]:
@@ -530,16 +560,28 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                        "flipped": q != _TO_Y[spin["axis"]]}
         return files
 
-    def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
+    def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "",
+                    alt_textures: Optional[list] = None) -> dict:
         """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in
-        the bone's frame) instead of a static model; out_suffix is appended to the output name."""
+        the bone's frame) instead of a static model; out_suffix is appended to the output name. alt_textures: the
+        base's alternate textures (skyrimrefs.alternate_textures, matched to shapes by alt_texture_blocks): the model
+        is written as <name>_alt<id> with those shapes' texture sets swapped."""
         res = {"nif": nif_name, "ok": False}
+        self._alt_by_block = {}
+        spin_ok = not (skin_bone or out_suffix)
+        if alt_textures:
+            out_suffix += "_alt" + skyrimrefs.alt_id(alt_textures)
         try:
             raw = self.src.mesh(nif_name)
             if raw is None:
                 raise FileNotFoundError("mesh not in the Skyrim archives or loose files")
             src = nifmod.parse(raw)
             shapes = skyrimnif.trishapes(src)
+            if alt_textures:
+                self._alt_by_block = alt_texture_blocks(shapes, alt_textures)
+                res["alt_shapes"] = len(self._alt_by_block)
+                if not self._alt_by_block:
+                    raise ValueError("no shape of the model matches its alternate textures")
             hook_report = {}
             if self.shape_hook is not None:
                 shapes = self.shape_hook(src, shapes, hook_report)
@@ -553,8 +595,7 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             dropped = [f"{(s.name or b'').decode('latin-1')} ({w})" for s, w in zip(shapes, why) if w]
             editor_shapes = len(dropped)
             shapes = [s for s, w in zip(shapes, why) if not w]
-            spin, spin_shapes = (skyrimnif.spin_part(src) if self.split_spin and not (skin_bone or out_suffix)
-                                 else None), []
+            spin, spin_shapes = (skyrimnif.spin_part(src) if self.split_spin and spin_ok else None), []
             if spin is not None:                          # the turning part: a model of its own (below)
                 sub = skyrimnif.subtree(src, spin["block"])
                 spin_shapes = [s for s in shapes if s.block in sub]
@@ -618,4 +659,5 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"
             self.stats["failed"] += 1
+        self._alt_by_block = {}
         return res

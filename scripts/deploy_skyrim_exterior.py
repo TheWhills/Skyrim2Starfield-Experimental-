@@ -3,8 +3,8 @@
 The staging folder is make_skyrim_overlay.py build --out (terrain only) or make_skyrim_objects.py stage --out (terrain +
 objects), after dotnet/TerrainOverlays wrote its plugins there. Its overlays_params.json names them.
 
-install  : packs <staging>\\Data (Terrain, meshes, geometries, materials, textures, lodsettings) into "<plugin stem> - Main.ba2" with
-           the official Archive2 (Starfield Creation Kit) and -compression=None: the terrain BTD must be stored
+install  : packs <staging>\\Data (Terrain, meshes, geometries, materials, textures, lodsettings) into "<plugin stem> - Main.ba2"
+           (over 4 GiB: textures into the Mars plugin's own "<stem> - Main.ba2", archive_plan) with the official Archive2 (Starfield Creation Kit) and -compression=None: the terrain BTD must be stored
            uncompressed (experiment 2b read a packed BTD as flat ground). Copies the archive, the plugin and the Mars
            registration plugin into Starfield\\Data, activates both in Plugins.txt (plugin first), and records everything
            in Data\\SkyrimExterior.deploy.json. Refuses to overwrite files, or to install a second terrain experiment.
@@ -88,6 +88,38 @@ def other_terrain_plugins(data):
     return sorted(f for f in os.listdir(data) if f.lower().endswith("_mars.esm"))
 
 
+def dir_size(staging, d):
+    return sum(os.path.getsize(os.path.join(r, f)) for r, _ds, fs in os.walk(os.path.join(staging, "Data", d))
+               for f in fs)
+
+
+# Over one archive's 4 GiB (2026-11-25: Skyrim's alternate textures took the exterior to ~4.5 GB): textures go into the
+# second plugin's own archive (the Mars registration plugin's "<stem> - Main.ba2"); the game opens "<plugin> - Main.ba2"
+# for every active plugin, so both load. Everything else stays in the first plugin's archive, as before.
+SPLIT_DIR = "textures"
+
+
+def archive_plan(plugins, sizes: dict, limit=None) -> list:
+    """[(archive file name, [Data dirs])]: one archive for the first plugin while everything fits, else SPLIT_DIR in
+    the second plugin's. Exits when that still does not fit."""
+    limit = ARCHIVE_LIMIT if limit is None else limit
+    total = sum(sizes.values())
+    name = [os.path.splitext(p)[0] + " - Main.ba2" for p in plugins]
+    if total <= limit:
+        return [(name[0], list(sizes))]
+    rest = [d for d in sizes if d != SPLIT_DIR]
+    if len(plugins) < 2 or SPLIT_DIR not in sizes:
+        sys.exit(f"staged Data is {total / 1024 ** 3:.2f} GiB: over one archive's 4 GiB and no second plugin to carry "
+                 "the textures; use a smaller area or --max-texture 1024 in the convert step")
+    plan = [(name[0], rest), (name[1], [SPLIT_DIR])]
+    for arc, dirs in plan:
+        size = sum(sizes[d] for d in dirs)
+        if size > limit:
+            sys.exit(f"{arc} would hold {size / 1024 ** 3:.2f} GiB ({', '.join(dirs)}): over 4 GiB; use a smaller "
+                     "area or --max-texture 1024 in the convert step")
+    return plan
+
+
 def build_archive(starfield, staging, dirs, out):
     tool = os.path.join(starfield, "Tools", "Archive2", "Archive2.exe")
     if not os.path.exists(tool):
@@ -107,9 +139,7 @@ def build_archive(starfield, staging, dirs, out):
 def install(a):
     staging = os.path.abspath(a.staging)
     prm, plugins, dirs, size, coc = staged(staging)
-    if size > ARCHIVE_LIMIT:
-        sys.exit(f"staged Data is {size / 1024 ** 3:.2f} GiB: over one archive's 4 GiB; use a smaller area or "
-                 "--max-texture 1024 in the convert step")
+    plan = archive_plan(plugins, {d: dir_size(staging, d) for d in dirs})
     data = os.path.join(a.starfield, "Data")
     man_path = os.path.join(data, MANIFEST)
     if os.path.exists(man_path):
@@ -118,8 +148,8 @@ def install(a):
     if others:
         sys.exit(f"another terrain experiment is installed ({others}); every Mars plugin overrides MarsPlanetData, "
                  "so only one at a time: uninstall it first")
-    archive = os.path.splitext(plugins[0])[0] + " - Main.ba2"
-    targets = plugins + [archive]
+    archives = [arc for arc, _dirs in plan]
+    targets = plugins + archives
     clash = [t for t in targets if os.path.exists(os.path.join(data, t))]
     if clash:
         sys.exit("refusing to overwrite existing files in Data: " + ", ".join(clash))
@@ -127,14 +157,20 @@ def install(a):
     original, lines = read_plugins(pt)
     names = {ln.strip().lstrip("*").lower() for ln in lines}
     add = [f"*{p}" for p in plugins if p.lower() not in names]
-    print(f"install {targets} -> {data} ({', '.join(dirs)}, {size / 1e6:,.0f} MB stored)\n"
+    print(f"install {targets} -> {data} ({'; '.join(arc + ': ' + ', '.join(ds) for arc, ds in plan)}, "
+          f"{size / 1e6:,.0f} MB stored)\n"
           f"Plugins.txt ({pt}): add {add or 'nothing'}")
     if a.dry_run:
         return 0
-    built = os.path.join(staging, archive)
-    print("packing with Archive2 (stored, no compression)...")
-    build_archive(a.starfield, staging, dirs, built)
-    sources = [os.path.join(staging, p) for p in plugins] + [built]
+    built = []
+    for arc, ds in plan:
+        built.append(os.path.join(staging, arc))
+        print(f"packing {arc} with Archive2 (stored, no compression)...")
+        build_archive(a.starfield, staging, ds, built[-1])
+    for arc in sorted({os.path.splitext(p)[0] + " - Main.ba2" for p in plugins} - set(archives)):
+        if os.path.exists(os.path.join(staging, arc)):
+            os.remove(os.path.join(staging, arc))       # a stale archive of an earlier split must not linger
+    sources = [os.path.join(staging, p) for p in plugins] + built
     state = {"files": [], "artifacts": {}, "plugins_txt": pt, "plugins_added": add, "coc": coc}
     with open(man_path, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=1)
