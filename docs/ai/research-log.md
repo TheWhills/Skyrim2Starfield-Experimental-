@@ -353,3 +353,18 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   ('02') in a later component: **verified** (staging SkyrimTerrainTamriel_Mars.esm).
 - A city's terrain cut from Tamriel's BTD equals the same cells of Tamriel's file and the city's own rebuild within
   5 mm inside its land: **verified** offline (cells x -5..12, y -8..9).
+
+## 2026-11-25 Whiterun's ground: meshes over the land, vertex-alpha layers (Claude)
+- WhiterunWorld's ground-hugging references (flora, trees, rocks, markers; export of Skyrim.esm) stand a median 76 -
+  492 units above Tamriel's LAND inside the walls (5,-2: 163; 6,-1: 279; 7,-1: 331): the city's floor is its WRTerrain
+  meshes (43 references, 38 models), not the land: **verified**. Its own LAND equals Tamriel's in 5 of its 7 cells.
+- Update.esm overrides Tamriel LAND in every cell 2..9 x -5..1 but changes heights only in (4,-1) and (5,-3), max 56
+  units: **verified** (the terrain builds read Skyrim.esm only; open, small).
+- Skyrim alpha test with Shader Flags 1 bit 3 Vertex_Alpha: texture alpha x vertex alpha against the threshold
+  (WRMainRoadMarket:15 grass and :29 stone floor share one footprint; the grass is meant to show in patches): **supported
+  hypothesis** (standard fixed-function behaviour; the owner's screenshots show the layer covering the stone).
+- Shader Flags 2 bit 29 Tree_Anim (shapes under BSLeafAnimNode): vertex alpha is the sway weight, not opacity:
+  **supported hypothesis** (WRTempleTree02:1 vertex alpha 0 on every vertex; TundraShrub01 mean 21 vs threshold 180).
+- Starfield .mat AlphaSettingsComponent can take the vertex colour (Blender UseVertexColor, VertexColorChannel Alpha:
+  DecalLabels01.mat, LeafDebrisPile01.mat): **verified** that it exists; how it combines with the opacity map
+  **unresolved** (not used: the converter cuts the geometry instead).

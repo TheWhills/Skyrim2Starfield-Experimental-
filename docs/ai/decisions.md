@@ -2939,3 +2939,14 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   city's own ground conversion (LTEX conflicts, a second copy of every ground texture); writing the gates with Mutagen
   (PluginSpike / TerrainOverlays) - the Python copy needs a FormID remap of three WRLD fields (BNAM, XLCN, RNAM), small
   and tested, and keeps FO4Port.esm (Riverwood) untouched.
+
+## 2026-11-25 (later): Skyrim's vertex-alpha cutouts as cut geometry, not a vertex-colour material (Claude)
+- Decision: an alpha-tested Skyrim shape with Vertex_Alpha (not Tree_Anim) is clipped along its vertex alpha: nothing
+  below threshold / 255, the rest in 4 bands with a cutout threshold raised per band (same textures, a material per
+  band). The city archive packs a file Tamriel also holds when its contents differ (it loads later and wins).
+- Why: the owner's Whiterun market showed the ground meshes' grass / moss layers over the cobbles. The cut reproduces
+  Skyrim's rule exactly where the texture has no alpha and closely where it has (stepwise in vertex alpha), is checked
+  offline, and needs no new material type.
+- Alternatives: Starfield's AlphaBlenderSettings UseVertexColor (exists in vanilla; its combination with the opacity map
+  is unverified, would need an in-game probe first); dropping whole triangles under the threshold (jagged edges); leaving
+  the shared models to Tamriel's next convert (Whiterun's walls would keep their moss sheet meanwhile).

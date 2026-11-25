@@ -128,6 +128,39 @@ is 1 byte in another component); now only the list.
   the land, not above the city's floor meshes. The gate is the way in.
 * Whiterun's interiors (Dragonsreach, houses), NPCs, navmesh: not built; their doors are statics.
 
+### In game: the market's ground (owner, 2026-11-25)
+The owner's screenshots show Whiterun loaded on Nirn (verified: the city world loads on Tamriel's planet; how the owner
+got in was not stated). "Some of the ground is not the right level, or in the wrong spot, mostly near the market
+district": earth and moss lying over the market's cobbles and filling a stair in the wall.
+* **Not the land** (verified, Skyrim.esm export vs LAND): inside the walls Whiterun's flora, rocks and markers stand a
+  median 1.1 - 7 m above Tamriel's land (cells 5,-2: +163 units; 6,-1: +279; 7,-1: +331), and the city's own LAND in the
+  7 cells equals Tamriel's in 5 of them. Update.esm overrides Tamriel's LAND there but changes only cells (4,-1) and
+  (5,-3), by at most 56 units (0.8 m). Whiterun's floor is its 43 ground meshes (Architecture\WhiteRun\WRTerrain:
+  WRMainRoadMarket, WRMainRoadPlains, WRTerWind01, the house bases ...), converted and placed; the land lies under them.
+* **The cause** (verified in the NIFs): those meshes are layered. WRMainRoadMarket has a stone floor ':29'
+  (WRStoneFloor02, opaque) and a grass layer ':15' (WRFieldGrass01) on the same 13.7 x 16.6 m footprint, alpha-tested
+  (threshold 128) with Shader Flags 1 Vertex_Alpha: Skyrim draws the grass only where texture alpha x vertex alpha
+  passes, i.e. where the vertex alpha is painted high. The converter's cutout material saw the texture's alpha only, so
+  the whole grass layer drew over the stone. Geometry check: Skyrim draws 37.6 % of WRMainRoadMarket:15's area (before
+  the texture's own alpha), 28 % of the moss on WRStairsWater01's steps, 73 - 75 % of WRMainRoadPlains' grass and moss.
+  Same pattern on the walls' moss (WRMossAlpha01), the Rocks01 overlays of rock piles (threshold 34), hay: 105 shapes in
+  Whiterun's 309 models have it (6 more are alpha-blended decals with vertex alpha, not handled).
+* **The fix** (`skyrimconvert._vertex_alpha_cut`, `clip_vertex_alpha`, `vertex_alpha_bands`; tests/test_vertex_alpha.py):
+  such a shape is cut along its vertex alpha. Where the vertex alpha is under threshold / 255 nothing is kept (Skyrim
+  draws nothing there whatever the texture); the rest is split into 4 bands of vertex alpha, each with its own cutout
+  material whose threshold is raised to make up for its vertex alpha (texture alpha >= threshold / vertex alpha, at
+  the band's middle; same textures, `<stem>_va<threshold>.mat`). A texture without alpha keeps its opaque material and
+  is only cut. Geometry only: vanilla Starfield materials can take the vertex colour in their alpha
+  (AlphaBlenderSettings UseVertexColor / VertexColorChannel Alpha, e.g. DecalLabels01.mat, LeafDebrisPile01.mat), but
+  how that combines with an opacity map is unverified, while the cut is checkable offline.
+  Left alone: shapes with Shader Flags 2 Tree_Anim (shrubs and tree leaves with a BSLeafAnimNode), whose vertex alpha
+  is the sway weight (supported hypothesis: WRTempleTree02:1 has vertex alpha 0 everywhere, TundraShrub01's leaves a mean
+  of 21 against threshold 180, and both are full in Skyrim).
+* The converter applies to every Skyrim static, so Tamriel's rocks, walls and hay get it on Tamriel's next convert. Until
+  then, a fixed model that Tamriel's archives also hold under the same path (Whiterun's walls, rock piles) goes into the
+  city's archive, which loads after Tamriel's (`deploy_skyrim_city.pack_plan` now compares contents, not only paths):
+  both worlds show the fixed model while the city is installed.
+
 ### The other cities (plan, with numbers from Skyrim.esm)
 | City | Land | Own LAND | Gate pairs (Skyrim) | Plan |
 |---|---|---|---|---|

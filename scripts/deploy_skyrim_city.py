@@ -3,8 +3,10 @@ first; docs/terrain/skyrim-cities.md).
 
 install : per staged city (make_skyrim_objects.py stage --out, built make_skyrim_overlay.py --terrain-from the installed
           exterior): packs its Data into "<city plugin> - Main.ba2" (Archive2, stored) leaving out every file the installed
-          exterior's archives already hold (same path: Tamriel's copy is the one the game uses, so a model shared by both
-          looks the same in both), copies the archive, the city plugin and the registration / gates plugin
+          exterior's archives already hold with the same contents (a file of the same path that differs, from a newer
+          converter, is packed: the city's archive loads after the exterior's, so a model shared by both still looks the
+          same in both; supported hypothesis, Bethesda's later-archive-wins rule), copies the archive, the city plugin
+          and the registration / gates plugin
           (register_worlds.py --skyrim) into Starfield\\Data and adds them to Plugins.txt after the exterior's plugins.
           Then hides each gate's static in place (register_worlds.json "hide": the static's own record gets Initially
           Disabled and is sunk 1000 m, as apply_ref_overrides.py does), in the installed exterior plugin and the city
@@ -49,30 +51,50 @@ def load(path):
         return json.load(fh)
 
 
-def installed_names(data, exterior_files) -> set:
-    """Every file path (lower case, backslashes) in the installed exterior's archives."""
-    out = set()
+def installed_names(data, exterior_files) -> dict:
+    """{file path (lower case, backslashes): (Ba2, entry index)} of the installed exterior's archives."""
+    out = {}
     for f in exterior_files:
         if f.lower().endswith(".ba2") and os.path.isfile(os.path.join(data, f)):
-            out.update(ba2.Ba2._norm(n) for n in ba2.Ba2(os.path.join(data, f)).names)
+            arc = ba2.Ba2(os.path.join(data, f))
+            for i, n in enumerate(arc.names):
+                out.setdefault(ba2.Ba2._norm(n), (arc, i))
     return out
 
 
-def pack_plan(staging, have: set) -> tuple:
-    """([(relative path under Data, size)] to pack, {"skipped": n, "skipped_bytes": b}) of a staged city: its
-    DATA_DIRS files minus those the exterior already holds."""
+def _same(path, entry) -> bool:
+    """True when the exterior's archived file (Ba2, index) holds exactly the staged file's bytes. Textures (DX10
+    entries) are not compared: the converter names them by their source, and a city converts them as the exterior did."""
+    arc, i = entry
+    e = arc.entries[i]
+    if e.kind != "GNRL":
+        return True
+    if e.unpacked != os.path.getsize(path):
+        return False
+    with open(path, "rb") as fh:
+        return fh.read() == arc.read(i)
+
+
+def pack_plan(staging, have) -> tuple:
+    """([(relative path under Data, size)] to pack, {"skipped": n, "skipped_bytes": b, "replaced": n}) of a staged city:
+    its DATA_DIRS files minus those the exterior already holds. `have`: installed_names (a file of the same path but
+    other contents is packed: the city's converter is newer, e.g. 2026-11-25 vertex-alpha cutouts in Whiterun's walls,
+    and the city's archive loads after the exterior's, so both worlds then show the newer file) or a set of paths."""
     root = os.path.join(staging, "Data")
-    keep, skipped, sk_bytes = [], 0, 0
+    keep, skipped, sk_bytes, replaced = [], 0, 0, 0
     for d in dse.DATA_DIRS:
         for r, _ds, fs in os.walk(os.path.join(root, d)):
             for f in fs:
-                rel = os.path.relpath(os.path.join(r, f), root)
-                size = os.path.getsize(os.path.join(r, f))
-                if ba2.Ba2._norm(rel) in have:
+                path = os.path.join(r, f)
+                rel = os.path.relpath(path, root)
+                size = os.path.getsize(path)
+                name = ba2.Ba2._norm(rel)
+                if name in have and (not isinstance(have, dict) or _same(path, have[name])):
                     skipped, sk_bytes = skipped + 1, sk_bytes + size
                 else:
+                    replaced += name in have
                     keep.append((rel, size))
-    return keep, {"skipped": skipped, "skipped_bytes": sk_bytes}
+    return keep, {"skipped": skipped, "skipped_bytes": sk_bytes, "replaced": replaced}
 
 
 def build_pack_root(staging, files, root):
@@ -181,7 +203,8 @@ def install(a):
         arc = os.path.splitext(plugins[0])[0] + " - Main.ba2"
         plan.append((c, plugins[0], arc, files, skip, coc))
         print(f"{plugins[0]}: {len(files):,} files ({size / 1e6:,.0f} MB) into {arc}; {skip['skipped']:,} "
-              f"({skip['skipped_bytes'] / 1e6:,.0f} MB) already in the exterior's archives")
+              f"({skip['skipped_bytes'] / 1e6:,.0f} MB) already in the exterior's archives; {skip['replaced']:,} "
+              "packed although the exterior has an older version")
     reg_plugin = reg["plugin"]
     targets = [t for _c, p, arc, _f, _s, _coc in plan for t in (p, arc)] + [reg_plugin]
     clash = [t for t in targets if os.path.exists(os.path.join(data, t))]

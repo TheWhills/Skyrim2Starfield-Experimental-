@@ -442,6 +442,30 @@ def alpha_test(n, alpha_ref) -> Tuple[bool, bool, int]:
     return bool(flags & 0x200), bool(flags & 0x1), thr
 
 
+SLSF1_VERTEX_ALPHA = 0x8              # Shader Flags 1 bit 3: the vertex colour's alpha multiplies the texture's alpha
+SLSF2_VERTEX_COLORS = 0x20            # Shader Flags 2 bit 5: the shape's vertex colours are used
+SLSF2_TREE_ANIM = 0x20000000          # Shader Flags 2 bit 29: leaves swaying (BSLeafAnimNode); vertex alpha = sway weight
+
+
+def vertex_alpha(n, shader_ref) -> bool:
+    """True when a BSLightingShaderProperty sets Vertex_Alpha and Vertex_Colors and not Tree_Anim: Skyrim draws an
+    alpha-tested surface where texture alpha x vertex alpha passes the threshold. Whiterun's ground meshes (2026-11-25,
+    WRMainRoadMarket: grass 'WRMainRoadMarket:15' over stone floor ':29', same footprint) paint where the grass shows
+    this way; Starfield's cutout material only sees the texture, so the grass covered the market's stone floor (owner's
+    screenshots). Tree_Anim shapes (shrubs, tree leaves) are left out: their vertex alpha is the sway weight (supported
+    hypothesis: WRTempleTree02:1 has vertex alpha 0 on every vertex, TundraShrub01's leaves a mean of 21 against
+    threshold 180, yet both are full in Skyrim)."""
+    if not (0 <= shader_ref < len(n.blocks)) or n.type_of(shader_ref) != "BSLightingShaderProperty":
+        return False
+    blk = n.blocks[shader_ref]
+    try:
+        n_extra, = struct.unpack_from("<I", blk, 8)
+        f1, f2 = struct.unpack_from("<II", blk, 12 + 4 * n_extra + 4)
+    except struct.error:
+        return False
+    return bool(f1 & SLSF1_VERTEX_ALPHA) and bool(f2 & SLSF2_VERTEX_COLORS) and not f2 & SLSF2_TREE_ANIM
+
+
 # ------------------------------------------------------------------------------------------------- collision
 class CollisionError(ValueError):
     pass

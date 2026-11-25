@@ -21,7 +21,8 @@ import os
 import re
 from typing import Dict, List, Optional
 
-from . import convert_static, nif as nifmod, pipeline, sfcollision, sfmesh, sfnif, skyrimfire, skyrimnif, skyrimrefs
+from . import convert_material as cm, convert_static, nif as nifmod, pipeline, sfcollision, sfmesh, sfnif, skyrimfire, \
+    skyrimnif, skyrimrefs
 from .skyrimflames import FlameMixin
 
 UNIT = 1.0 / 70.0
@@ -239,6 +240,89 @@ def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
         tangents=list(s.tangents) * 2 if s.tangents else s.tangents,
         colors=list(s.colors) * 2 if s.colors else s.colors,
         triangles=[tuple(t) for t in s.triangles] + [(a + nv, c + nv, b + nv) for a, b, c in s.triangles])
+
+
+# Vertex-alpha cutouts (2026-11-25, owner's Whiterun market: grass and moss layers of the city's ground meshes drawn
+# where Skyrim hides them). Skyrim draws an alpha-tested shape with Vertex_Alpha (skyrimnif.vertex_alpha) where
+# texture alpha x vertex alpha >= the threshold; Starfield's cutout material sees the texture only. So the shape is cut
+# along its vertex alpha: below threshold / 255 nothing is drawn (Skyrim draws nothing there whatever the texture),
+# above it the shape is split into VA_BANDS bands of vertex alpha, each with a cutout threshold raised to make up for its
+# vertex alpha (texture alpha >= threshold / vertex alpha, at the band's middle). Geometry and a threshold per band
+# only: no Starfield vertex-colour material setting is needed (vanilla has AlphaBlenderSettings UseVertexColor, how it
+# combines with the opacity map is unverified).
+VA_BANDS = 4
+VA_SOLID = 250          # every vertex alpha at least this: the shape is left as it is
+
+
+def vertex_alpha_bands(ref: int, has_opacity: bool, n: int = VA_BANDS) -> list:
+    """[(low, high or None, cutout threshold 0..255)] for an alpha-tested shape with threshold `ref`: the vertex-alpha
+    ranges to keep and the threshold each one's material needs. Without an opacity map (the texture's alpha is solid,
+    the material is opaque) one range from ref / 255 up, as it is. ref 0 cuts nothing: []."""
+    if ref <= 0:
+        return []
+    r = ref / 255.0
+    if not has_opacity or r >= 1.0:
+        return [(r, None, ref)]
+    edges = [r + (1.0 - r) * k / n for k in range(n + 1)]
+    out = []
+    for k in range(n):
+        lo, hi = edges[k], edges[k + 1]
+        thr = min(255, max(ref, int(round(255.0 * (r / lo + r / hi) / 2.0))))
+        out.append((lo, hi if k < n - 1 else None, thr))
+    return out
+
+
+def clip_vertex_alpha(s: nifmod.Fo4Shape, lo: float, hi: Optional[float] = None) -> Optional[nifmod.Fo4Shape]:
+    """The part of the shape whose vertex alpha (0..1, interpolated across each triangle as the GPU does) lies in
+    [lo, hi] (hi None: no upper limit): each triangle clipped against both levels and fanned back into triangles
+    (winding kept). A vertex made on an edge is shared by the triangles on both sides; every attribute is interpolated
+    there (normals renormalised). Unused vertices are dropped. None when nothing is left."""
+    import math
+    alpha = [c[3] / 255.0 for c in s.colors]
+    attrs = {k: getattr(s, k) for k in ("positions", "uvs", "normals", "tangents", "colors") if getattr(s, k)}
+    out = {k: list(v) for k, v in attrs.items()}
+    made = {}
+
+    def cut(i, j, level):
+        key = (min(i, j), max(i, j), level)
+        if key not in made:
+            t = (level - alpha[i]) / (alpha[j] - alpha[i])
+            for k, v in attrs.items():
+                x = [p + t * (q - p) for p, q in zip(out[k][i], out[k][j])]
+                if k == "colors":
+                    x = [int(round(min(255.0, max(0.0, c)))) for c in x]
+                elif k == "normals":
+                    ln = math.sqrt(sum(c * c for c in x)) or 1.0
+                    x = [c / ln for c in x]
+                out[k].append(tuple(x))
+            alpha.append(level)
+            made[key] = len(alpha) - 1
+        return made[key]
+
+    def clip(poly, inside, level):
+        res = []
+        for m, cur in enumerate(poly):
+            nxt = poly[(m + 1) % len(poly)]
+            ci, ni = inside(alpha[cur]), inside(alpha[nxt])
+            if ci:
+                res.append(cur)
+            if ci != ni:
+                res.append(cut(cur, nxt, level))
+        return res
+
+    tris = []
+    for tri in s.triangles:
+        poly = clip(list(tri), lambda a: a >= lo, lo)
+        if hi is not None and len(poly) >= 3:
+            poly = clip(poly, lambda a: a <= hi, hi)
+        tris += [(poly[0], poly[k], poly[k + 1]) for k in range(1, len(poly) - 1)]
+    if not tris:
+        return None
+    used = sorted({i for t in tris for i in t})
+    new = {old: k for k, old in enumerate(used)}
+    keep = {k: [v[i] for i in used] for k, v in out.items()}
+    return dataclasses.replace(s, triangles=[tuple(new[i] for i in t) for t in tris],
+                               **{k: keep.get(k, []) for k in ("positions", "uvs", "normals", "tangents", "colors")})
 
 
 def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
@@ -547,6 +631,71 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral
 
+    def _threshold_material(self, mat: str, ref: int) -> Optional[str]:
+        """The cutout material `mat` (skyrim_material: materials\\<prefix>\\<stem>.mat over textures\\<prefix>\\<stem>_*)
+        with another alpha threshold: the same textures, a material of its own (<stem>_va<ref>). None when `mat` is not
+        such a material or has no opacity map."""
+        pre = f"materials\\{self.prefix}\\".lower()
+        low = mat.lower()
+        if not (low.startswith(pre) and low.endswith(".mat")) or low[len(pre):].startswith("decals"):
+            return None
+        stem = mat[len(pre):-4].replace("\\", "/")
+        key = f"skyva:{stem}|{ref}"
+        if key not in self._materials:
+            tex_rel = f"textures/{self.prefix}/{stem}"
+            if not os.path.isfile(os.path.join(self.staging, *f"{tex_rel}_opacity.dds".split("/"))):
+                return None
+            vstem = f"{stem}_va{ref:03d}"
+            m = cm.build_mat(self.template_mat, "FO4Port_" + re.sub(r"[^a-z0-9]+", "_", vstem),
+                             *(cm.game_path(f"{tex_rel}_{k}.dds") for k in ("color", "normal", "rough")),
+                             opacity=cm.game_path(f"{tex_rel}_opacity.dds"), alpha_threshold=ref / 255.0)
+            rel = f"materials/{self.prefix}/{vstem}.mat"
+            p = os.path.join(self.staging, *rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(cm.dump_mat(m))
+            self._materials[key] = rel.replace("/", "\\")
+        return self._materials[key]
+
+    def _vertex_alpha_cut(self, src, shapes, mats, report: dict):
+        """(shapes, materials) with every alpha-tested Vertex_Alpha shape cut along its vertex alpha (VA_BANDS,
+        clip_vertex_alpha): only the parts Skyrim draws, each with the threshold its vertex alpha needs. A shape
+        whose vertex alpha is all under the threshold is gone; one whose parts would not fit u16 indices stays whole."""
+        out_s, out_m = [], []
+        for s, m in zip(shapes, mats):
+            if (m is None or m == self.neutral or not s.colors or "\\effects\\" in m.lower()
+                    or not skyrimnif.vertex_alpha(src, s.shader_ref)):
+                out_s.append(s)
+                out_m.append(m)
+                continue
+            test, _blend, ref = skyrimnif.alpha_test(src, s.alpha_ref)
+            if not test or min(c[3] for c in s.colors) >= VA_SOLID:
+                out_s.append(s)
+                out_m.append(m)
+                continue
+            pre = f"materials\\{self.prefix}\\"
+            stem = m[len(pre):-4].replace("\\", "/") if m.lower().startswith(pre.lower()) else ""
+            has_opacity = bool(stem) and os.path.isfile(
+                os.path.join(self.staging, *f"textures/{self.prefix}/{stem}_opacity.dds".split("/")))
+            bands = vertex_alpha_bands(ref, has_opacity)
+            parts = []
+            for lo, hi, thr in bands:
+                part = clip_vertex_alpha(s, lo, hi)
+                if part is not None:
+                    parts.append((part, m if thr == ref else (self._threshold_material(m, thr) or m)))
+            if not bands or any(len(p.positions) > MAX_VERTICES for p, _m in parts):
+                out_s.append(s)
+                out_m.append(m)
+                report["vertex_alpha_too_big"] = report.get("vertex_alpha_too_big", 0) + bool(bands)
+                continue
+            report["vertex_alpha_shapes"] = report.get("vertex_alpha_shapes", 0) + 1
+            report["vertex_alpha_parts"] = report.get("vertex_alpha_parts", 0) + len(parts)
+            self.stats["vertex_alpha_shapes"] = self.stats.get("vertex_alpha_shapes", 0) + 1
+            for p, pm in parts:
+                out_s.append(p)
+                out_m.append(pm)
+        return out_s, out_m
+
     def _spin_model(self, src, spin: dict, shapes, out_name: str, res: dict) -> Dict[str, bytes]:
         """The spinning part as its own static model (no collision: it turns) in the spin frame; res["spin"] tells
         make_skyrim_objects where to place it: model, pivot (metres, source model space), frame (row-major rotation of
@@ -619,7 +768,9 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             if not shapes and not editor_shapes and not spin_shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
-            flame_shapes = sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
+            va_report = {}
+            shapes, mats = self._vertex_alpha_cut(src, shapes, mats, va_report)
+            flame_shapes =sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
             shapes = [skyrimfire.normalize_card_uvs(s) if m in getattr(self, "_layered", ()) else s for s, m in zip(shapes, mats)]
             doubled = too_big = 0
             for i, s in enumerate(shapes):
@@ -665,7 +816,7 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                        flame_shapes=flame_shapes, flame_cards=len(cards),
                        sf_effects=self.model_fire_effects(src) if self.fire and not skin_bone else [],
                        addon_nodes=len(skyrimfire.addon_nodes(src)), editor_marker_shapes=editor_shapes,
-                       **hook_report)
+                       **va_report, **hook_report)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"

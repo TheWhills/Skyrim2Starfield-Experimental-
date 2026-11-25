@@ -621,3 +621,18 @@ the flag wins (evidence: in cell (4, -1) Whiterun's walls stand 2.0 - 3.9 m abov
 city's own). (2) register_worlds.py overwrote both CNAM fields of Nirn's PNDT (the world list and a 1-byte field of
 another component). (3) cities.ps1 (2026-11-10) could not have run: `--like C:\Modding\staging\skyrim_all` needs a
 build_command.txt that folder does not have.
+
+## 2026-11-25 (later): Whiterun in game; the market's ground was its grass layer drawn everywhere (Claude)
+
+**Owner's test:** Whiterun loads on Nirn (screenshots). "Some of the ground is not the right level, or in the wrong
+spot, mostly near the market district": earth over the cobbles, a stair in the wall filled.
+
+**Cause (verified):** not the land. Whiterun's floor is 43 ground meshes (WRTerrain) standing 1.1 - 7 m above Tamriel's
+land; each has a grass / moss layer over its stone, alpha-tested with Skyrim's Vertex_Alpha (drawn where texture alpha x
+vertex alpha passes). The converter used the texture's alpha only, so the layers drew everywhere (WRMainRoadMarket's
+grass: Skyrim draws 37.6 % of it). 105 shapes in Whiterun's models (walls' moss, rock piles' Rocks01 overlay, hay).
+
+**Fix:** the converter cuts such shapes along their vertex alpha, in 4 bands with a raised cutout threshold each
+(docs/terrain/skyrim-cities.md "In game: the market's ground"; tests/test_vertex_alpha.py); shrubs and tree leaves
+(Tree_Anim: vertex alpha = sway) left alone. The city archive now also packs files whose contents differ from Tamriel's
+copy, so shared models (walls, rocks) show the fix while the city is installed. **Not seen in game yet.**

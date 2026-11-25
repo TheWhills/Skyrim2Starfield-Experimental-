@@ -336,7 +336,29 @@ class PackTests(unittest.TestCase):
                     fh.write(b"x" * 10)
             keep, skip = DSC.pack_plan(d, {"meshes\\skyrim\\a.nif", "textures\\t.dds"})
         self.assertEqual(sorted(r.replace("\\", "/") for r, _s in keep), ["Terrain/SKY_City.btd", "meshes/skyrim/b.nif"])
-        self.assertEqual(skip, {"skipped": 2, "skipped_bytes": 20})
+        self.assertEqual(skip, {"skipped": 2, "skipped_bytes": 20, "replaced": 0})
+
+    def test_a_newer_version_of_an_exterior_file_is_packed(self):
+        class Arc:                                   # stands in for ba2.Ba2: two general entries, one texture
+            entries = [mock.Mock(kind="GNRL", unpacked=10), mock.Mock(kind="GNRL", unpacked=10),
+                       mock.Mock(kind="DX10")]
+
+            def read(self, i):
+                return [b"x" * 10, b"y" * 10][i]
+        arc = Arc()
+        with tempfile.TemporaryDirectory() as d:
+            for rel, body in (("meshes/skyrim/same.nif", b"x" * 10), ("meshes/skyrim/newer.nif", b"x" * 10),
+                              ("meshes/skyrim/longer.nif", b"x" * 12), ("textures/t.dds", b"z")):
+                p = os.path.join(d, "Data", *rel.split("/"))
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "wb") as fh:
+                    fh.write(body)
+            have = {"meshes\\skyrim\\same.nif": (arc, 0), "meshes\\skyrim\\newer.nif": (arc, 1),
+                    "meshes\\skyrim\\longer.nif": (arc, 0), "textures\\t.dds": (arc, 2)}
+            keep, skip = DSC.pack_plan(d, have)
+        self.assertEqual(sorted(r.replace("\\", "/") for r, _s in keep),
+                         ["meshes/skyrim/longer.nif", "meshes/skyrim/newer.nif"])
+        self.assertEqual(skip, {"skipped": 2, "skipped_bytes": 11, "replaced": 2})
 
 
 if __name__ == "__main__":
