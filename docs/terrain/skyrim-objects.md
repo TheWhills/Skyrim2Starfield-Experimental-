@@ -965,8 +965,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   mirror. (2) Both normal maps restored, RotationAngle 0 instead of the template's 148 on those two: the dirt crisp,
   matching the road meshes (owner: "they look better"). Supported hypothesis: the shader turns the texture by
   RotationAngle but not the normal map's tangent directions, so every bump is lit from ~148 degrees off and reads as a
-  dent. Fix: RotationAngle 0 on every ground material (skyrimground.terrain_settings; ground_tiling.py). In game, all
-  textures: pending.
+  dent. Fix: RotationAngle 0 on every ground material (skyrimground.terrain_settings; ground_tiling.py).
+  **Correction (owner, same day): the crisp "dirt" in the rotation test was the road mesh, not the terrain.** With
+  rotation 0 on all 55, every ground texture still draws dark 3D bumps; the road meshes do not. The rotation
+  hypothesis is not supported (rotation 0 stays: harmless, and nothing showed 148 helping). What stands: test (1),
+  a flat normal map removes the dents. No texture is flipped: 54 of 55 normal maps tilt the same way as their colour
+  detail (x, y correlation +0.11 .. +0.43; LFrozenMarshIce01 -0.1, nearly flat). So the terrain shader shades the
+  same normal map more deeply than the object shader. Fix under test: ground normal strength
+  (scripts/terrain/ground_normals.py, x / y scaled from the kept originals; ground_heights.ps1 -NormalStrength),
+  first 0.5. In game: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a

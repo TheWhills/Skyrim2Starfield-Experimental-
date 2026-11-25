@@ -1,8 +1,11 @@
 # Sharper ground (2026-11-25): the ground textures at Skyrim's own size (2.44 m per repeat, was 4.88:
 # scripts\terrain\ground_tiling.py) and height maps from each texture's normal map (scripts\terrain\ground_heights.py),
 # in the staged exterior; then reinstalls it. Starfield must be closed.
-#   powershell -ExecutionPolicy Bypass -File tools\owner\ground_heights.ps1
+# -NormalStrength: the ground normal maps' bump strength (scripts\terrain\ground_normals.py; 1 = as converted; the
+# terrain shades bumps darker than objects do).
+#   powershell -ExecutionPolicy Bypass -File tools\owner\ground_heights.ps1 [-NormalStrength 0.5]
 param(
+    [double]$NormalStrength = -1,
     [string]$Staging = "C:\Modding\staging\skyrim_all",
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
@@ -14,6 +17,10 @@ $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $Repo
 function Fail($t) { Write-Host "FAILED: $t" -ForegroundColor Red; exit 1 }
 if (-not $NoInstall -and (Get-Process Starfield -ErrorAction SilentlyContinue)) { Fail "Starfield is running: close it first" }
+if ($NormalStrength -ge 0) {
+    python -I scripts\terrain\ground_normals.py --staging $Staging --texconv $Texconv --strength $NormalStrength.ToString([cultureinfo]::InvariantCulture)
+    if ($LASTEXITCODE -ne 0) { Fail "ground_normals" }
+}
 python -I scripts\terrain\ground_heights.py --skyrim "$SKY\Skyrim.esm" --staging $Staging --texconv $Texconv
 if ($LASTEXITCODE -ne 0) { Fail "ground_heights" }
 python -I scripts\terrain\ground_tiling.py --staging $Staging
