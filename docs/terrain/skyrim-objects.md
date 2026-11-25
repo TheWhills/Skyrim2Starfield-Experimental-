@@ -973,7 +973,19 @@ Max Density; what a vanilla grass model needs. Two tools:
   detail (x, y correlation +0.11 .. +0.43; LFrozenMarshIce01 -0.1, nearly flat). So the terrain shader shades the
   same normal map more deeply than the object shader. Fix under test: ground normal strength
   (scripts/terrain/ground_normals.py, x / y scaled from the kept originals; ground_heights.ps1 -NormalStrength),
-  first 0.5. In game: pending.
+  first 0.5.
+  **Correction (found 2026-11-25): our BC5 decoder (textures.decode_bc5) read Starfield's signed BC5_SNORM normal
+  maps as unsigned**, flipping ~12 % of the pixels (blocks whose values straddle zero). The game files were right (our
+  converted LDirt02 normal map against Skyrim's Dirt02_n, decoded correctly: correlation 0.999, no bad pixels), but
+  every normal-map figure above was wrong, and the first half-strength maps and the normal-integrated height maps were
+  built from the broken reading (their flipped pixels draw as specks); both rebuilt. Fixed: decode_bc5(signed=True),
+  pipeline._plane_pair for DXGI 84. Corrected figures: vanilla terrain normal maps are gentle, |xy| mean 0.22-0.39
+  (RockGraniteSmooth01 0.23, DirtPacked02 0.27, DirtFootprints01 0.34, SnowRough01 0.39); ours are stronger: LDirt02
+  0.46, LPineForest01 0.51, LFallForestLeaves01 0.61, LRocks01 0.74 (LFieldGrass01 0.34, LSnow01 0.09). So the
+  ground's dark bumps are supported by the numbers: about 1.5-2x vanilla terrain's bump strength; 0.5 puts them in
+  vanilla's range. The height method holds better than stated: the integral of vanilla's normal maps reproduces its
+  own height maps exactly for RockGraniteSmooth01 and SnowRough01 (1.000), DirtFootprints01 0.68, DirtPacked02 0.46.
+  In game: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a

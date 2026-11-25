@@ -295,9 +295,13 @@ def recolor(rgba, target) -> "np.ndarray":
 def _plane_pair(dds: bytes, tmp: str, texconv_exe: str):
     """(R, G) uint8 planes of a DDS: native BC5, otherwise decoded through texconv."""
     h = textures.read_dds_header(dds)
-    if h["dxgi"] in (83, 84) or h["fourcc"] in (b"BC5U", b"ATI2"):
-        return textures.decode_bc5(dds[h["data_offset"]:], h["width"], h["height"])
     import numpy as np
+    if h["dxgi"] == 84:                                   # BC5_SNORM: signed, mapped to the unorm convention used here
+        r, g = textures.decode_bc5(dds[h["data_offset"]:], h["width"], h["height"], signed=True)
+        to_u = lambda a: np.clip(np.round(a.astype(np.float32) / 127.0 * 127.5 + 127.5), 0, 255).astype(np.uint8)  # noqa: E731
+        return to_u(r), to_u(g)
+    if h["dxgi"] == 83 or h["fourcc"] in (b"BC5U", b"ATI2"):
+        return textures.decode_bc5(dds[h["data_offset"]:], h["width"], h["height"])
     src = os.path.join(tmp, "dec_in.dds")
     open(src, "wb").write(dds)
     textures.texconv(texconv_exe, src, tmp, "R8G8B8A8_UNORM", ("-m", "1"))

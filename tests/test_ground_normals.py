@@ -25,3 +25,26 @@ class GroundNormalsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Bc5SnormDecodeTest(unittest.TestCase):
+    def test_signed_blocks_straddling_zero(self):
+        """2026-11-25: BC5_SNORM read as unorm flipped ~12 % of a normal map's pixels (blocks across zero)."""
+        from fo4sf import textures
+        # one 4 x 4 block per channel: endpoints +100 / -100 (8-value mode, a0 > a1), indices 0, 1, 2 .. 7 repeated
+        idx = [0, 1, 2, 3, 4, 5, 6, 7] * 2
+        word = 0
+        for i, v in enumerate(idx):
+            word |= v << (3 * i)
+        chan = bytes([100, 156]) + word.to_bytes(6, "little")            # 156 = int8 -100
+        r, g = textures.decode_bc5(chan + chan, 4, 4, signed=True)
+        pal = [100, -100] + [round(((7 - i) * 100 + i * -100) / 7) for i in range(1, 7)]
+        self.assertEqual(r.dtype, np.int8)
+        self.assertEqual(r.ravel().tolist(), [pal[i] for i in idx])
+        self.assertEqual(g.ravel().tolist(), r.ravel().tolist())
+        # 6-value mode (a0 <= a1): indices 6 / 7 are the extremes -127 / +127
+        chan6 = bytes([156, 100]) + sum(v << (3 * i) for i, v in enumerate([6, 7] * 8)).to_bytes(6, "little")
+        r6, _ = textures.decode_bc5(chan6 + chan6, 4, 4, signed=True)
+        self.assertEqual(r6.ravel().tolist(), [-127, 127] * 8)
+        u, _ = textures.decode_bc5(chan + chan, 4, 4)                     # unorm reading unchanged
+        self.assertEqual(u.dtype, np.uint8)

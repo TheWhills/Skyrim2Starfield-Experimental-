@@ -37,10 +37,17 @@ def read_dds_header(data: bytes):
 
 # ---- block decoders (mip 0 only) ---------------------------------------------------------
 
-def _bc4_block_values(blocks):
-    """blocks: (N, 8) uint8 -> (N, 16) uint8 values (BC4 / BC5 single-channel unorm)."""
-    a0 = blocks[:, 0].astype(np.float32)
-    a1 = blocks[:, 1].astype(np.float32)
+def _bc4_block_values(blocks, signed: bool = False):
+    """blocks: (N, 8) uint8 -> (N, 16) values: uint8 (BC4 / BC5 unorm), or int8 with signed=True (BC4 / BC5 SNORM:
+    the endpoints are int8, -128 reads as -127, interpolation in signed space, the 6-value mode's extremes -127 / 127).
+    2026-11-25: SNORM maps read as unorm flipped ~12 % of a normal map's pixels (blocks whose values straddle zero)."""
+    if signed:
+        a0 = np.maximum(blocks[:, 0].view(np.int8).astype(np.float32), -127.0)
+        a1 = np.maximum(blocks[:, 1].view(np.int8).astype(np.float32), -127.0)
+    else:
+        a0 = blocks[:, 0].astype(np.float32)
+        a1 = blocks[:, 1].astype(np.float32)
+    lo, hi = (-127.0, 127.0) if signed else (0.0, 255.0)
     pal = np.zeros((len(blocks), 8), dtype=np.float32)
     pal[:, 0], pal[:, 1] = a0, a1
     gt = a0 > a1
@@ -48,16 +55,16 @@ def _bc4_block_values(blocks):
         pal[:, i + 1] = np.where(gt, ((7 - i) * a0 + i * a1) / 7.0, 0.0)
     for i in range(1, 5):
         pal[:, i + 1] = np.where(~gt, ((5 - i) * a0 + i * a1) / 5.0, pal[:, i + 1])
-    pal[:, 6] = np.where(~gt, 0.0, pal[:, 6])
-    pal[:, 7] = np.where(~gt, 255.0, pal[:, 7])
+    pal[:, 6] = np.where(~gt, lo, pal[:, 6])
+    pal[:, 7] = np.where(~gt, hi, pal[:, 7])
     bits = blocks[:, 2:8].astype(np.uint64)
     word = np.zeros(len(blocks), dtype=np.uint64)
     for i in range(6):
         word |= bits[:, i] << np.uint64(8 * i)
-    out = np.zeros((len(blocks), 16), dtype=np.uint8)
+    out = np.zeros((len(blocks), 16), dtype=np.int8 if signed else np.uint8)
     for px in range(16):
         idx = ((word >> np.uint64(3 * px)) & np.uint64(7)).astype(np.int64)
-        out[:, px] = np.round(pal[np.arange(len(blocks)), idx]).astype(np.uint8)
+        out[:, px] = np.round(pal[np.arange(len(blocks)), idx]).astype(out.dtype)
     return out
 
 
@@ -73,12 +80,12 @@ def decode_bc4(data: bytes, width: int, height: int):
     return _blocks_to_plane(_bc4_block_values(blocks), width, height)
 
 
-def decode_bc5(data: bytes, width: int, height: int):
-    """Returns (R, G) planes, uint8."""
+def decode_bc5(data: bytes, width: int, height: int, signed: bool = False):
+    """Returns (R, G) planes: uint8, or int8 with signed=True (BC5_SNORM, DXGI 84: Starfield normal maps)."""
     n = (width // 4) * (height // 4)
     blocks = np.frombuffer(data[:n * 16], dtype=np.uint8).reshape(n, 16)
-    return (_blocks_to_plane(_bc4_block_values(blocks[:, :8]), width, height),
-            _blocks_to_plane(_bc4_block_values(blocks[:, 8:]), width, height))
+    return (_blocks_to_plane(_bc4_block_values(blocks[:, :8], signed), width, height),
+            _blocks_to_plane(_bc4_block_values(blocks[:, 8:], signed), width, height))
 
 
 def _bc1_colour_values(blocks, four_colour_always: bool):

@@ -319,8 +319,8 @@ def normal_planes(normal_dds: bytes, texconv: str):
     from fo4sf import textures
     h = textures.read_dds_header(normal_dds)
     if h["dxgi"] == 84:                                   # BC5_SNORM
-        r, g = textures.decode_bc5(normal_dds[h["data_offset"]:], h["width"], h["height"])
-        return r.view(np.int8).astype(np.float64) / 127.0, g.view(np.int8).astype(np.float64) / 127.0
+        r, g = textures.decode_bc5(normal_dds[h["data_offset"]:], h["width"], h["height"], signed=True)
+        return r.astype(np.float64) / 127.0, g.astype(np.float64) / 127.0
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "n.dds")
         with open(src, "wb") as f:
