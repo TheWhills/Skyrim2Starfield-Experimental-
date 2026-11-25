@@ -933,7 +933,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   Snow01_n 19; RockL01 has specular off. Fix (make_skyrim_objects convert): roughness = 1 - m (1 - r), m = mask x
   strength x luminance of the specular colour, r = sqrt(sqrt(2 / (glossiness + 2))) (Blinn-Phong -> GGX; 30 -> 0.5);
   specular off = 255. Converted: Road01 mean 234 (p10 219, p90 244), Dirt02 242, MountainSlab02 (rocks) 255; before
-  all 190. File names unchanged, so tools/owner/object_specular.ps1 copies the new maps over the staging. In game: pending.
+  all 190. File names unchanged, so tools/owner/object_specular.ps1 copies the new maps over the staging. Installed
+  2026-11-25 (in game pending). Full run: 1,205 roughness maps in the staging, 226 fully matte, 915 from a mask, 64
+  still the old 190 (not object conversions: grass and the like). Limitation: a material is named by its textures,
+  not its specular, so shapes sharing textures with another specular take the first one's (1,030 + 1,530 such uses in
+  sky_all / sky_alt): Dirt02 came out 255 (the road alone: 242), MountainSlab02 230 (RockL01 alone: 255). All stay
+  near matte; naming by specular too would duplicate the colour and normal maps (archive size).
   Other Skyrim conversions (armour, weapons, hair, creatures, interiors) keep the uniform value for now
   (SkyrimConverter.skyrim_specular, off by default).
 * **Alternate textures in game (owner, 2026-11-25, verified)**: the Hollyfrost road draws snowy. Coverage (offline):
