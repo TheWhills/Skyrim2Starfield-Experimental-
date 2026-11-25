@@ -985,7 +985,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   ground's dark bumps are supported by the numbers: about 1.5-2x vanilla terrain's bump strength; 0.5 puts them in
   vanilla's range. The height method holds better than stated: the integral of vanilla's normal maps reproduces its
   own height maps exactly for RockGraniteSmooth01 and SnowRough01 (1.000), DirtFootprints01 0.68, DirtPacked02 0.46.
-  In game: pending.
+  **Verified in game (owner, 2026-11-25): at half strength the ground matches the roads ("matches now").** Installed
+  state: ground textures 2.44 m per repeat, rotation 0, normal maps at 0.5 (originals kept in
+  skyrim_all\ground_normals_original), height maps integrated from the half-strength normal maps.
+  make_skyrim_overlay.py builds this by default (--skyrim-ground-normal-strength 0.5).
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a

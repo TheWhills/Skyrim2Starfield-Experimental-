@@ -13,42 +13,28 @@ import argparse
 import os
 import shutil
 import sys
-import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "src"))
 
-from fo4sf import skyrimground, textures  # noqa: E402
+from fo4sf import skyrimground  # noqa: E402
 
 KEEP = "ground_normals_original"
 
 
-def scale_planes(x, y, strength: float):
-    """Tangent x / y scaled by strength, kept inside the unit disc."""
-    import numpy as np
-    x, y = x * strength, y * strength
-    r = np.hypot(x, y)
-    k = np.where(r > 0.999, 0.999 / np.maximum(r, 1e-9), 1.0)
-    return x * k, y * k
+scale_planes = skyrimground.scale_normal_planes
 
 
 def scaled(data: bytes, strength: float, texconv: str) -> bytes:
-    """A BC5 SNORM normal map with x / y scaled by strength."""
-    import numpy as np
-    x, y = scale_planes(*skyrimground.normal_planes(data, texconv), strength)
-    to_unorm = lambda v: np.clip(np.round((v + 1.0) / 2.0 * 255.0), 0, 255).astype(np.uint8)  # noqa: E731
-    with tempfile.TemporaryDirectory() as tmp:
-        p = os.path.join(tmp, "n.dds")
-        textures.write_rg8_snorm(p, to_unorm(x), to_unorm(y))
-        textures.texconv(texconv, p, tmp, "BC5_SNORM")
-        return open(p, "rb").read()
+    return skyrimground.scaled_normal_map(data, strength, texconv)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--staging", required=True)
     ap.add_argument("--texconv", required=True)
-    ap.add_argument("--strength", type=float, required=True, help="1 = the converted maps as they are")
+    ap.add_argument("--strength", type=float, default=skyrimground.GROUND_NORMAL_STRENGTH,
+                    help="default 0.5 (verified in game); 1 = the converted maps as they are")
     a = ap.parse_args(argv)
     ground = os.path.join(a.staging, "Data", "textures", "skyrim", "ground")
     keep = os.path.join(a.staging, KEEP)

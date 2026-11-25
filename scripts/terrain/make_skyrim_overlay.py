@@ -204,6 +204,12 @@ def skyrim_ground(a, ltex, cells, usage, out, colours=None):
             skyrimground.terrain_settings(md, tiling)
             with open(mp, "w", encoding="utf-8", newline="\n") as f:
                 f.write(cm.dump_mat(md))
+            np_ = os.path.join(out, "Data", "textures", "skyrim", *(stem + "_normal.dds").split("/"))
+            if normal and a.skyrim_ground_normal_strength != 1.0 and os.path.isfile(np_):
+                with open(np_, "rb") as f:                 # gentler bumps (skyrimground.GROUND_NORMAL_STRENGTH)
+                    nd = skyrimground.scaled_normal_map(f.read(), a.skyrim_ground_normal_strength, a.texconv)
+                with open(np_, "wb") as f:
+                    f.write(nd)
         except Exception as e:                       # noqa: BLE001  (reported; that texture uses the category pick)
             failed[v["edid"]] = f"{type(e).__name__}: {e}"
             continue
@@ -795,6 +801,9 @@ def main(argv=None):
                     help="build --skyrim-ground: the colour texture's alpha. 'one' (default, BC1 like the vanilla "
                          "dirt), 'zero' (BC3), 'keep' (Skyrim's specular alpha). The earlier zero default was chosen "
                          "while the BTD index bug drew the wrong textures, so those tests did not show its effect")
+    ap.add_argument("--skyrim-ground-normal-strength", type=float, default=0.5,
+                    help="build --skyrim-ground: ground normal map strength (default 0.5, verified in game: Skyrim's "
+                         "ground bumps are 1.5-2x vanilla terrain's and drew as dark 3D bumps; 1 = as converted)")
     ap.add_argument("--skyrim-ground-flat-normal", action="store_true",
                     help="build --skyrim-ground: flat normal maps instead of Skyrim's (diagnosis)")
     ap.add_argument("--skyrim-ground-flat-height", action="store_true",

@@ -333,6 +333,35 @@ def normal_planes(normal_dds: bytes, texconv: str):
     return px[:, :, 0] / 127.5 - 1.0, px[:, :, 1] / 127.5 - 1.0
 
 
+# Ground bump strength (verified in game 2026-11-25, owner: "matches now"): Starfield's terrain draws Skyrim's normal
+# maps as dark 3D bumps beside the same texture on objects; Skyrim's ground maps are 1.5-2x as strong as vanilla
+# terrain's (|xy| mean: ours 0.34-0.74, vanilla 0.22-0.39). Half strength puts them in vanilla's range.
+GROUND_NORMAL_STRENGTH = 0.5
+
+
+def scale_normal_planes(x, y, strength: float):
+    """Tangent x / y scaled by strength, kept inside the unit disc (direction unchanged)."""
+    import numpy as np
+    x, y = x * strength, y * strength
+    r = np.hypot(x, y)
+    k = np.where(r > 0.999, 0.999 / np.maximum(r, 1e-9), 1.0)
+    return x * k, y * k
+
+
+def scaled_normal_map(data: bytes, strength: float, texconv: str) -> bytes:
+    """A normal map (BC5 SNORM or anything texconv reads) as BC5 SNORM with x / y scaled by strength."""
+    import tempfile
+    import numpy as np
+    from fo4sf import textures
+    x, y = scale_normal_planes(*normal_planes(data, texconv), strength)
+    to_unorm = lambda v: np.clip(np.round((v + 1.0) / 2.0 * 255.0), 0, 255).astype(np.uint8)  # noqa: E731
+    with tempfile.TemporaryDirectory() as tmp:
+        p = os.path.join(tmp, "n.dds")
+        textures.write_rg8_snorm(p, to_unorm(x), to_unorm(y))
+        textures.texconv(texconv, p, tmp, "BC5_SNORM")
+        return open(p, "rb").read()
+
+
 def integrate_normals(nx, ny):
     """The height field whose slopes the normal map describes (Frankot-Chellappa: least squares in the Fourier domain,
     exact for a tiling texture), mean 0. Slopes dH/du = -nx/nz, dH/dv = -ny/nz (v = rows down): verified 2026-11-25 on
