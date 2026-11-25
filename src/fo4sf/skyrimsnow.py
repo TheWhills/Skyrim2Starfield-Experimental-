@@ -42,8 +42,10 @@ def with_snow(shape, up_model: Tuple[float, float, float], scale: float, bias: f
     out = []
     for i, n in enumerate(shape.normals):
         m = _mv(rot, n)
-        ln = math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]) or 1.0
-        d = (m[0] * up_model[0] + m[1] * up_model[1] + m[2] * up_model[2]) / ln
+        ln = math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2])
+        d = (m[0] * up_model[0] + m[1] * up_model[1] + m[2] * up_model[2]) / ln if ln > 1e-9 else 0.0
+        if not math.isfinite(d):                    # a degenerate (NaN) normal: no snow (SPatioWallEntrance.nif)
+            d = 0.0
         v = int(round(255 * mask(d, scale, bias, max_angle_deg)))
         g, b = (cols[i][1], cols[i][2]) if cols else (255, 255)
         out.append((v, g, b, v))
@@ -94,8 +96,8 @@ def snow_uv_scale(shape, repeat_units: float = SNOW_REPEAT_UNITS, step: float = 
         cx, cy, cz = u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]
         area += 0.5 * math.sqrt(cx * cx + cy * cy + cz * cz) * s * s
         uv += 0.5 * abs((uvs[b][0] - uvs[a][0]) * (uvs[c][1] - uvs[a][1]) - (uvs[b][1] - uvs[a][1]) * (uvs[c][0] - uvs[a][0]))
-    if uv <= 0 or area <= 0:
-        return 1.0
+    if not (math.isfinite(uv) and math.isfinite(area)) or uv <= 0 or area <= 0:
+        return 1.0                                  # degenerate data (NaN in SPatioWallEntrance.nif)
     k = math.sqrt(area / uv) / repeat_units
     return max(step, round(k / step) * step)
 

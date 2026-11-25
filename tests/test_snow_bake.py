@@ -136,3 +136,16 @@ class SkyrimSnowLayerTest(unittest.TestCase):
                       triangles=[(0, 1, 2), (0, 2, 3)], skinned=False)
         self.assertEqual(skyrimsnow.snow_uv_scale(sq), 2.0)
         self.assertEqual(skyrimsnow.snow_uv_scale(shape([(0, 0, 1)])), 1.0)          # no triangles / UVs
+
+
+class DegenerateNormalTest(unittest.TestCase):
+    def test_nan_and_zero_normals(self):
+        out = skyrimsnow.with_snow(shape([(float("nan"), 0, 1), (0, 0, 0)]), (0, 0, 1), 0.35, 0.4)
+        self.assertEqual([c[0] for c in out.colors], [0, 0])
+
+    def test_nan_uvs(self):
+        q = shape([(0, 0, 1)] * 3)
+        q.positions[:] = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
+        q.uvs[:] = [(0, 0), (float("nan"), 0), (0, 1)]
+        q.triangles.append((0, 1, 2))
+        self.assertEqual(skyrimsnow.snow_uv_scale(q), 1.0)

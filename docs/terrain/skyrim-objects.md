@@ -1029,7 +1029,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   Now Skyrim's snow: layer 2 is Skyrim's Landscape\Snow01 (the snowy ground's texture; Skyrim's glacier snow
   materials name it, SnowMatShader.nif; the single-pass 1P materials' editor model ShaderBox.nif is not shipped),
   tiled like Skyrim's (MATO material UV scale 170.67 units = the ground's 2.44 m): per shape, snow UV scale = the
-  shape's own texture repeat / 170.67 (RockL02: 2 and 2.25). Vertex-colour switch back on. In game: pending.
+  shape's own texture repeat / 170.67 (RockL02: 2 and 2.25). Vertex-colour switch back on.
+  **Verified in game (owner, 2026-11-25): snow on the boulders' tops, bare steep sides** (RockL02Snow, and a
+  SnowLight variant dusted on its upper faces).
+  Full build: 4,880 variants of 651 meshes, 22,207 references (rocks, cliffs, mountain trims, glacier slabs, woven
+  fences, stockades, tents ...); 4,867 with snow materials (the rest cutouts / effects, kept single-layer); 430 MB of
+  new meshes and geometry (main archive ~1.1 GB). One mesh (Solitude's SPatioWallEntrance) has NaN normals / UVs:
+  no snow there, guarded. Plugin checked: 4,880 STATs added, 22,207 references repointed, only the STAT group grew,
+  group sizes consistent. Not done: object LOD (distant objects) still without snow; the snow edge pattern is
+  vanilla's SnowLayeredSmooth01 height mask, and the falloff formula our approximation.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a

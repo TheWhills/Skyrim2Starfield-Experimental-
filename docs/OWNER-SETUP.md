@@ -309,6 +309,10 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
+8r. (2026-11-25) Snow on rocks, baked into the objects (verified in game on the RockL02 boulders). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\snow_bake.ps1
+   (all 4,880 snowy variants; Claude staged it on 2026-11-25; rerunning is safe: existing variants are kept,
+   their models and snow materials refreshed.) Test boulders: console player.moveto 0A018E40 or 0A018194.
 8q. (2026-11-25) Snow on rocks (Starfield's global snow layer on Skyrim's snowy cells). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\snow_layer.ps1      (-Off removes it)
    Result (2026-11-25): no snow in game; the engine ignores the cell layer outdoors. Removed again from the staging.
