@@ -6,6 +6,9 @@ add_records    new top-level records at the end of a top group (STAT): copies of
                updated. Only a top group that comes before WRLD may grow: the WRLD cell index (OFST) counts from the
                WRLD record (scripts/tools/world_offsets.py), so it stays valid.
 set_ref_bases  the base (NAME) of placed references, written in place (same size). Compressed references are refused.
+set_cell_fields fields set on (added to, or replaced in) exterior CELL records of one world, by grid (XCLC); the
+               records and every group around them change size, so the WRLD cell index (OFST / CLSZ) must be written
+               again afterwards (scripts/tools/world_offsets.py write).
 
 Record header (24 bytes): type, data size, flags, FormID, version control, form version, unknown; group header
 (24 bytes): 'GRUP', size including the header, label, group type, stamp. TES4 HEDR: f32 version, u32 record count,
@@ -154,3 +157,57 @@ def set_ref_bases(data: bytes, bases: dict) -> tuple:
 def zstring(s: str) -> bytes:
     return s.encode("cp1252") + b"\0"
 
+
+
+def set_cell_fields(data: bytes, world_fid: int, fields: dict, remove: tuple = ()) -> tuple:
+    """fields: {(x, y): {sig: bytes}} for exterior cells of the world with that full FormID (its XCLC grid). A field the
+    cell has is replaced in place, a new one appended; sigs in `remove` are dropped from every exterior cell of the
+    world first (so a cell left out of `fields` loses an earlier setting). Returns (new bytes, cells changed, grid
+    positions not found). Compressed cell records are refused."""
+    buf = bytes(data)
+    todo = {tuple(k): v for k, v in fields.items()}
+    seen, changed = set(), [0]
+
+    def cell(off):
+        typ, size, flags, fid, vc, fv, unk = _HDR.unpack_from(buf, off)
+        rec = buf[off:off + 24 + size]
+        if flags & COMPRESSED:
+            raise PatchError(f"cell {fid:08X} is compressed")
+        f = _fields(rec[24:])
+        xy = next((struct.unpack_from("<ii", d) for s, d in f if s == b"XCLC" and len(d) >= 8), None)
+        if xy is None:
+            return rec
+        want = todo.get(xy, {})
+        seen.add(xy) if xy in todo else None
+        new = [(s, d) for s, d in f if s not in remove or s in want]
+        have = {s for s, _d in new}
+        new = [(s, want.get(s, d)) for s, d in new] + [(s, d) for s, d in want.items() if s not in have]
+        if new == f:
+            return rec
+        body = _pack_fields(new)
+        changed[0] += 1
+        return _HDR.pack(typ, len(body), flags, fid, vc, fv, unk) + body
+
+    def group(off, end, inside, block=False):
+        label, gtype = buf[off + 8:off + 12], struct.unpack_from("<i", buf, off + 12)[0]
+        inside = inside or (gtype == 1 and struct.unpack("<I", label)[0] == world_fid)
+        block = block or (inside and gtype in (4, 5))   # exterior block / sub-block: never the persistent cell
+        parts = [b""]
+        for it in fo4land.iter_items(buf, off + 24, end):
+            if it[0] == "GRUP":
+                parts.append(group(it[1], it[2], inside, block))
+            elif it[0] == b"CELL" and block:
+                parts.append(cell(it[1]))
+            else:
+                parts.append(buf[it[1]:it[1] + 24 + struct.unpack_from("<I", buf, it[1] + 4)[0]])
+        body = b"".join(parts)
+        return buf[off:off + 4] + struct.pack("<I", 24 + len(body)) + buf[off + 8:off + 24] + body
+
+    out = [buf[:len_tes4(buf)]]
+    for it in fo4land.iter_items(buf, len_tes4(buf), len(buf)):
+        if it[0] == "GRUP" and it[3] == b"WRLD":
+            out.append(group(it[1], it[2], False))
+        else:
+            end = it[2] if it[0] == "GRUP" else it[1] + 24 + struct.unpack_from("<I", buf, it[1] + 4)[0]
+            out.append(buf[it[1]:end])
+    return b"".join(out), changed[0], sorted(set(todo) - seen)

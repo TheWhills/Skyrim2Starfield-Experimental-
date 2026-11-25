@@ -114,6 +114,38 @@ def alternate_textures(data_dir: str, plugins=LOAD_ORDER, wanted_sigs=tuple(SIG_
     return out
 
 
+def directional_materials(data_dir: str, plugins=LOAD_ORDER) -> dict:
+    """{STAT formkey: {"max_angle", "material": MATO formkey, "edid": the MATO's EditorID}} for every static whose
+    winning record's DNAM names a directional material (Skyrim's snow on the tops of rocks: SnowMaterialObject1P ...).
+    STAT DNAM (verified 2026-11-25 on RoadChunkM01Snow and Tamriel's rocks): f32 max angle (degrees, 90 typical), u32
+    MATO FormID (0 = none); Update.esm's 12-byte form adds a u32."""
+    present = [n for n in plugins if os.path.isfile(os.path.join(data_dir, n))]
+    dnam, mato = {}, {}
+    for name in present:
+        with fo4land.Plugin(os.path.join(data_dir, name)) as p:
+            masters = [fo4land.zstring(d) for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, 0))
+                       if sig == b"MAST"]
+
+            def key(fid):
+                i = fid >> 24
+                return formkey(fid, masters[i] if i < len(masters) else name)
+
+            for item in fo4land.iter_items(p.buf, p.body, len(p.buf)):
+                if item[0] != "GRUP" or item[3] not in (b"STAT", b"MATO"):
+                    continue
+                for typ, off, flags, fid in fo4land.iter_items(p.buf, item[1] + 24, item[2]):
+                    if typ == "GRUP":
+                        continue
+                    fields = [] if flags & DELETED else list(fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
+                    if typ == b"MATO":
+                        mato[key(fid)] = next((fo4land.zstring(d) for s, d in fields if s == b"EDID"), "")
+                        continue
+                    d = next((d for s, d in fields if s == b"DNAM" and len(d) >= 8), None)
+                    ang, m = struct.unpack_from("<fI", d) if d is not None else (0.0, 0)
+                    dnam[key(fid)] = (round(float(ang), 3), key(m)) if m else None
+    return {b: {"max_angle": v[0], "material": v[1], "edid": mato.get(v[1], "")} for b, v in dnam.items() if v}
+
+
 def alt_id(alt) -> str:
     """Short stable identity of a list of alternate textures (8 hex digits; '' for none)."""
     if not alt:
