@@ -233,6 +233,31 @@ class HeightMapTests(unittest.TestCase):
             h = tx.read_dds_header(open(dst, "rb").read())
         self.assertEqual((h["width"], h["height"]), (64, 64))
 
+    def test_height_is_smooth_like_vanilla(self):
+        """2026-11-25: pixel-noise height maps drew every dark speck as a dent; vanilla's undulate (pixel-scale sd 3-5)."""
+        import numpy as np
+        from fo4sf import textures as tx
+        n = 256
+        y, x = np.mgrid[0:n, 0:n]
+        shape = 40 * np.sin(2 * np.pi * x / 32) * np.sin(2 * np.pi * y / 32)          # pebble clusters
+        noise = np.random.default_rng(4).normal(0, 40, (n, n))                       # per-pixel specks
+        px = np.zeros((n, n, 4), np.uint8)
+        px[..., :3] = np.clip(128 + shape + noise, 0, 255)[..., None]
+        px[..., 3] = 255
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "s.dds")
+            tx.write_dds_dx10(src, n, n, tx.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+            dst = os.path.join(tmp, "out", "h.dds")
+            with mock.patch.object(textures, "texconv", lambda *a, **k: None):
+                skyrimground.height_from_diffuse(open(src, "rb").read(), "texconv", dst)
+            d = open(dst, "rb").read()
+        h = tx.read_dds_header(d)
+        v = np.frombuffer(d[h["data_offset"]:h["data_offset"] + n * n], np.uint8).reshape(n, n).astype(float)
+        self.assertAlmostEqual(float(v.std()), skyrimground.HEIGHT_SPREAD, delta=3.0)
+        self.assertGreater(np.corrcoef(v.ravel(), shape.ravel())[0, 1], 0.8)          # the shapes kept
+        fine = v - (np.roll(v, 2, 0) + np.roll(v, -2, 0) + np.roll(v, 2, 1) + np.roll(v, -2, 1)) / 4
+        self.assertLess(float(fine.std()), 8.0)                                       # the specks gone
+
     def test_box_blur_wrap_matches_rolling(self):
         import numpy as np
         a = np.random.default_rng(3).random((13, 17))

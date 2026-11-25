@@ -245,6 +245,10 @@ def flat_textures(staging: str, texconv: str, prefix: str = "skyrim") -> dict:
     return out
 
 
+HEIGHT_SPREAD = 25.0        # sd of a ground height map (vanilla DirtFootprints01 24.9, RockGraniteSmooth01 23.4)
+HEIGHT_SMOOTH_DIV = 128     # low-pass radius = texture side / this (Dirt02 1024: 8 px, about 4 cm on the ground)
+
+
 def box_blur_wrap(a, k: int, axis: int):
     """Mean of the 2k + 1 neighbours along one axis, wrapping round (a tiling texture): the same as averaging
     np.roll(a, d) for d in -k..k, by a cumulative sum."""
@@ -264,7 +268,11 @@ def height_from_diffuse(diffuse_dds: bytes, texconv: str, dst: str, size: Option
     showed as hard-edged blobs (owner's Jemison close-ups: white snow patches over dirt). Written as BC4 to dst.
     size: None (default) keeps the colour texture's resolution, as vanilla terrain does (DirtFootprints01: colour,
     normal and height all 2048). The earlier 256 made the per-pixel blend follow a quarter-resolution map: blurred
-    dark holes with bright rims wherever two ground textures meet (owner's close-up beside a road, 2026-11-25)."""
+    dark holes with bright rims wherever two ground textures meet (owner's close-up beside a road, 2026-11-25).
+    Band-passed, as smooth as vanilla's (2026-11-25, measured): vanilla height maps undulate (sd 23-49, pixel-scale
+    detail sd 3-5: DirtFootprints01, SnowRough01, RockGraniteSmooth01); ours were nearly all pixel noise (sd 39,
+    pixel-scale 34-42), so every dark speck drew as a dent with a lit rim. Now: luminance smoothed over 1/128 of the
+    texture, minus the 1/16 blur, spread HEIGHT_SPREAD (Dirt02: sd 25, pixel-scale 6.4)."""
     import tempfile
     import numpy as np
     from fo4sf import textures
@@ -285,9 +293,14 @@ def height_from_diffuse(diffuse_dds: bytes, texconv: str, dst: str, size: Option
     blur = lum.astype(np.float64)
     for ax in (0, 1):
         blur = box_blur_wrap(blur, k, ax)
-    det = lum - blur
+    r = max(1, min(lum.shape) // HEIGHT_SMOOTH_DIV)       # low-pass: no pixel-scale noise (two box passes)
+    smooth = lum.astype(np.float64)
+    for _ in range(2):
+        for ax in (0, 1):
+            smooth = box_blur_wrap(smooth, r, ax)
+    det = smooth - blur
     sd = float(det.std()) or 1.0
-    out = np.clip(128.0 + det / sd * 40.0, 0, 255).astype(np.uint8)
+    out = np.clip(128.0 + det / sd * HEIGHT_SPREAD, 0, 255).astype(np.uint8)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     textures.write_r8(dst, out)
     textures.texconv(texconv, dst, os.path.dirname(dst), "BC4_UNORM")

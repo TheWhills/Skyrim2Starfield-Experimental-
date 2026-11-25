@@ -933,8 +933,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   textures per pixel by height, so the soft Skyrim-style blend followed a blurred pattern. Vanilla terrain keeps
   colour, normal and height at one resolution (DirtFootprints01: all 2048, tiled every 3.2 m). Fix: full-resolution
   height maps (same pattern: each new map averaged down correlates >= 0.986 with the old, median 0.994; +31 MB).
-  scripts/terrain/ground_heights.py rebuilds the staged ones; tools/owner/ground_heights.ps1 reinstalls. In game:
-  pending. Texel density itself (1024 px per 4.88 m) is Skyrim's own and stays.
+  scripts/terrain/ground_heights.py rebuilds the staged ones; tools/owner/ground_heights.ps1 reinstalls.
+  Texel density itself (1024 px per 4.88 m) is Skyrim's own and stays.
+  **Correction (owner in game, same day): the full-resolution maps did not change the look**; resolution was not the
+  cause. The holes are the maps' content: vanilla height maps undulate (sd 23-49, pixel-scale detail sd 3-5:
+  DirtFootprints01, SnowRough01, RockGraniteSmooth01), ours were nearly all pixel noise (sd 39, pixel-scale 34-42), so
+  every dark speck drew as a dent with a lit rim. Normals ruled out: ours tilt the same way as vanilla's against the
+  height slopes (+0.26 .. +0.39 both channels; vanilla +0.39). Now band-passed (smoothed over 1/128 of the texture,
+  spread 25): LDirt02 sd 24.9, p1-p99 71-194, pixel-scale 6.4 (vanilla dirt: 24.9, 69-193, 5.2). In game: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
