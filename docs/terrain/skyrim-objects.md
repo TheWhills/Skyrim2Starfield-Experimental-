@@ -902,7 +902,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   LSnow01's (28 %); cover_plan gave a slot the grass of every Skyrim texture painted with it, so all snow grew the
   lumps (and all LRiverMud01 the frozen-marsh grass of LFrozenMarshLichen01). Now a slot grows only its own Skyrim
   texture's grass; borrowers are listed in "skipped". 11 of 66 mapped Skyrim textures borrow a converted slot.
-* **Snowy road (owner)**: unresolved. Correction: LSnowCobble01 borrows LSnow01 (snow), so a brown cobbled road is
+* **Snowy road at Hollyfrost Farm (owner's side-by-side, 2026-11-25, verified offline)**: the road is 52 road mesh
+  references, not ground texture (LDirtSnowPath01 0.1 % of the 3 x 3 cells). Ruled out: ground height (ours minus
+  Skyrim's over the road areas: median 0.00 m, 5-95 % within 5 cm), Update.esm heights (its LAND overrides there
+  only repaint, 3 vertices changed nearby), the mesh (opaque: no NiAlphaProperty, vertex and texture alpha 255).
+  Cause: the references use RoadChunkM01**Snow**, RoadChunkM02Snow, RoadCurve90R01Snow ... (17 bases): separate STAT
+  records with the SAME mesh plus **MODS alternate textures** (per shape a snowy TXST; Update.esm replaces them with
+  its own TXSTs and adds a DNAM flag). objects.json groups bases by model (make_skyrim_objects.py select), and nothing
+  in the pipeline reads MODS, so every snow road draws the plain Road01.dds cobbles. Fix (planned): export MODS and
+  their TXSTs as loaded, key models on (mesh, alternate textures), apply them per shape in convert.
+* **Snowy road (owner, first note)**: superseded by the entry above. Correction: LSnowCobble01 borrows LSnow01 (snow), so a brown cobbled road is
   probably not LSnowCobble01 (claimed above without the road's position); more likely LDirtPath01 / LDirtSnowPath01
   with their Tamriel-wide mean tint (Starfield has no per-vertex ground colour). Needs the road's position. LSnowCobble01 is one of the 13 Skyrim ground
   textures without a slot of their own (55 spare vanilla LTEX records: listed by no vanilla BTD, referenced by no
