@@ -258,6 +258,45 @@ class HeightMapTests(unittest.TestCase):
         fine = v - (np.roll(v, 2, 0) + np.roll(v, -2, 0) + np.roll(v, 2, 1) + np.roll(v, -2, 1)) / 4
         self.assertLess(float(fine.std()), 8.0)                                       # the specks gone
 
+    def test_integrate_normals_recovers_the_height(self):
+        """2026-11-25: heights from the normal map (the texture's real shape), sign as verified on vanilla terrain."""
+        import numpy as np
+        n = 128
+        y, x = np.mgrid[0:n, 0:n]
+        H = 3 * np.sin(2 * np.pi * x / 32) * np.cos(2 * np.pi * y / 16) + np.sin(2 * np.pi * (x + 2 * y) / 64)
+        p = (np.roll(H, -1, 1) - np.roll(H, 1, 1)) / 2              # dH/du
+        q = (np.roll(H, -1, 0) - np.roll(H, 1, 0)) / 2              # dH/dv (rows down)
+        ln = np.sqrt(p * p + q * q + 1)
+        Z = skyrimground.integrate_normals(-p / ln, -q / ln)
+        self.assertGreater(np.corrcoef(Z.ravel(), H.ravel())[0, 1], 0.99)
+
+    def test_height_from_normal_bc5(self):
+        import numpy as np
+        from fo4sf import textures as tx
+        n = 64
+        y, x = np.mgrid[0:n, 0:n]
+        nx = 0.4 * np.sin(2 * np.pi * x / 16)
+        ny = np.zeros_like(nx)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "n.dds")                         # an RG8 map decoded through the texconv path
+            px = np.zeros((n, n, 4), np.uint8)
+            px[..., 0] = np.round((nx + 1) * 127.5)
+            px[..., 1] = np.round((ny + 1) * 127.5)
+            px[..., 2] = 255
+            px[..., 3] = 255
+            tx.write_dds_dx10(src, n, n, tx.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+            dst = os.path.join(tmp, "out", "h.dds")
+            with mock.patch.object(textures, "texconv", lambda *a, **k: None):
+                skyrimground.height_from_normal(open(src, "rb").read(), "texconv", dst)
+            d = open(dst, "rb").read()
+        h = tx.read_dds_header(d)
+        v = np.frombuffer(d[h["data_offset"]:h["data_offset"] + n * n], np.uint8).reshape(n, n).astype(float)
+        self.assertEqual((h["width"], h["height"]), (n, n))
+        self.assertAlmostEqual(float(v.std()), skyrimground.HEIGHT_SPREAD, delta=3.0)
+        # nx = -dH/du * nz > 0 where the surface falls to the right: H ~ cos, peaks where nx crosses 0 going down
+        expect = np.cos(2 * np.pi * x / 16)
+        self.assertGreater(np.corrcoef(v.ravel(), expect.ravel())[0, 1], 0.9)
+
     def test_box_blur_wrap_matches_rolling(self):
         import numpy as np
         a = np.random.default_rng(3).random((13, 17))

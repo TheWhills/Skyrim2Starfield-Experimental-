@@ -175,11 +175,15 @@ def skyrim_ground(a, ltex, cells, usage, out, colours=None):
                 files["Roughness"] = tslots["Roughness"]["File"]
             elif a.skyrim_ground_roughness == "matte":      # fully rough everywhere: no sheen
                 files["Roughness"] = flat["RoughnessMatte"]
-            if not a.skyrim_ground_flat_height:            # blend heights from the texture's own detail
-                d = conv.src.texture(skyrimground.texture_path(v["diffuse"]))
-                if d is not None:
-                    rel = f"textures/skyrim/{stem}_height.dds"
+            if not a.skyrim_ground_flat_height:            # heights: the shape in the texture's own normal map
+                rel = f"textures/skyrim/{stem}_height.dds"
+                nm = conv.src.texture(skyrimground.texture_path(v["normal"])) if v.get("normal") else None
+                d = None if nm is not None else conv.src.texture(skyrimground.texture_path(v["diffuse"]))
+                if nm is not None:                         # (2026-11-25: brightness-guessed heights smeared it)
+                    skyrimground.height_from_normal(nm, a.texconv, os.path.join(out, "Data", *rel.split("/")))
+                elif d is not None:
                     skyrimground.height_from_diffuse(d, a.texconv, os.path.join(out, "Data", *rel.split("/")))
+                if nm is not None or d is not None:
                     files["Height"] = cm.game_path(rel)
             normal = "" if a.skyrim_ground_flat_normal else skyrimground.texture_path(v.get("normal"))
             mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]), normal, "",

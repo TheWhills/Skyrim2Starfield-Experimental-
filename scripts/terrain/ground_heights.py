@@ -1,12 +1,15 @@
-r"""Rebuild the staged Skyrim ground textures' blend height maps at full resolution (2026-11-25), without rebuilding the
-terrain: skyrimground.height_from_diffuse now keeps the colour texture's resolution (vanilla terrain: colour, normal
-and height all 2048). The 256 x 256 maps made Starfield's per-pixel blend of two ground textures follow a blurred,
-quarter-resolution pattern: dark smeared holes with bright rims beside the roads (owner's close-up).
+r"""Rebuild the staged Skyrim ground textures' height maps without rebuilding the terrain (2026-11-25).
 
-For every <staging>\Data\textures\skyrim\ground\<stem>_height.dds whose stem names a Skyrim LTEX (as
-make_skyrim_overlay.py names them), the map is made again from that LTEX's Skyrim diffuse. The staged file is replaced
-(removed first: staging files may be hard links into the build folder). Reinstall the exterior afterwards
-(tools/owner/ground_heights.ps1 does it).
+Starfield's terrain shader shifts the colour by the height map (parallax), so a height map must be the texture's real
+shape. Ours were guessed from colour brightness (skyrimground.height_from_diffuse): dark specks and leaves were pushed
+down and the texture smeared (owner's side-by-sides: crisp on the road objects, smeared on the ground). Now each map is
+the integral of the texture's own normal map (skyrimground.height_from_normal; the method reproduces vanilla's own
+height maps from their normal maps, correlation 0.63 .. 0.99).
+
+--source normal (default): from the staged converted normal map <stem>_normal.dds (what the game draws with);
+--source diffuse: the earlier brightness maps, from the LTEX's Skyrim diffuse (to compare).
+Every <staging>\Data\textures\skyrim\ground\<stem>_height.dds is replaced (removed first: staging files may be hard
+links into the build folder). Reinstall the exterior afterwards (tools/owner/ground_heights.ps1 does it).
 
     python -I scripts\terrain\ground_heights.py --skyrim <Skyrim.esm> --staging C:\Modding\staging\skyrim_all --texconv <texconv.exe>
 """
@@ -32,37 +35,45 @@ def main(argv=None):
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm (its folder holds the archives)")
     ap.add_argument("--staging", required=True)
     ap.add_argument("--texconv", required=True)
-    ap.add_argument("--size", type=int, default=0, help="0 (default): the colour texture's resolution")
+    ap.add_argument("--source", choices=("normal", "diffuse"), default="normal")
     a = ap.parse_args(argv)
     ground = os.path.join(a.staging, "Data", "textures", "skyrim", "ground")
-    diffuse = {}
-    for path in landtex.official_plugins(a.skyrim):       # later plugins win, but only with a texture set they hold
-        with landtex.fo4land.Plugin(path) as p:           # (Update.esm's LTEX overrides name Skyrim.esm's TXSTs)
-            for v in landtex.read_ltex(p).values():
-                if v["edid"] and v["diffuse"]:
-                    diffuse[stem_of(v["edid"])] = v["diffuse"]
-    src = bsa.SkyrimArchives(os.path.dirname(os.path.abspath(a.skyrim)))
+    diffuse, src = {}, None
+    if a.source == "diffuse":
+        for path in landtex.official_plugins(a.skyrim):   # later plugins win, but only with a texture set they hold
+            with landtex.fo4land.Plugin(path) as p:       # (Update.esm's LTEX overrides name Skyrim.esm's TXSTs)
+                for v in landtex.read_ltex(p).values():
+                    if v["edid"] and v["diffuse"]:
+                        diffuse[stem_of(v["edid"])] = v["diffuse"]
+        src = bsa.SkyrimArchives(os.path.dirname(os.path.abspath(a.skyrim)))
     done, missing = [], []
     for fn in sorted(os.listdir(ground)):
         if not fn.endswith("_height.dds") or fn.startswith("_"):
             continue
         stem = fn[:-len("_height.dds")]
-        d = src.texture(skyrimground.texture_path(diffuse[stem])) if stem in diffuse else None
+        if a.source == "normal":
+            p = os.path.join(ground, stem + "_normal.dds")
+            d = open(p, "rb").read() if os.path.isfile(p) else None
+        else:
+            d = src.texture(skyrimground.texture_path(diffuse[stem])) if stem in diffuse else None
         if d is None:
             missing.append(stem)
             continue
         dst = os.path.join(ground, fn)
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, fn)
-            skyrimground.height_from_diffuse(d, a.texconv, out, size=a.size or None)
+            if a.source == "normal":
+                skyrimground.height_from_normal(d, a.texconv, out)
+            else:
+                skyrimground.height_from_diffuse(d, a.texconv, out)
             data = open(out, "rb").read()
         os.remove(dst)
         with open(dst, "wb") as f:
             f.write(data)
         h = textures.read_dds_header(data)
         done.append(f"{stem} {h['width']}")
-    print(f"{len(done)} height maps rebuilt ({', '.join(done[:6])}{' ...' if len(done) > 6 else ''})"
-          + (f"; no Skyrim diffuse found for {missing}" if missing else ""))
+    print(f"{len(done)} height maps rebuilt from the {a.source} maps ({', '.join(done[:4])}"
+          f"{' ...' if len(done) > 4 else ''})" + (f"; no {a.source} map for {missing}" if missing else ""))
     return 1 if missing and not done else 0
 
 

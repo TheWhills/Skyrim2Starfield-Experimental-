@@ -306,6 +306,69 @@ def height_from_diffuse(diffuse_dds: bytes, texconv: str, dst: str, size: Option
     textures.texconv(texconv, dst, os.path.dirname(dst), "BC4_UNORM")
 
 
+def normal_planes(normal_dds: bytes, texconv: str):
+    """(x, y) of a tangent-space normal map in -1..1: BC5 SNORM read directly (our converted maps, vanilla's), anything
+    else decoded through texconv as unsigned 0..255 (Skyrim's DXT maps). Same axes as the converter writes them."""
+    import tempfile
+    import numpy as np
+    from fo4sf import textures
+    h = textures.read_dds_header(normal_dds)
+    if h["dxgi"] == 84:                                   # BC5_SNORM
+        r, g = textures.decode_bc5(normal_dds[h["data_offset"]:], h["width"], h["height"])
+        return r.view(np.int8).astype(np.float64) / 127.0, g.view(np.int8).astype(np.float64) / 127.0
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "n.dds")
+        with open(src, "wb") as f:
+            f.write(normal_dds)
+        textures.texconv(texconv, src, tmp, "R8G8B8A8_UNORM", ("-m", "1"))
+        raw = open(src, "rb").read()
+    hh = textures.read_dds_header(raw)
+    px = np.frombuffer(raw[hh["data_offset"]:hh["data_offset"] + hh["width"] * hh["height"] * 4], np.uint8)
+    px = px.reshape(hh["height"], hh["width"], 4).astype(np.float64)
+    return px[:, :, 0] / 127.5 - 1.0, px[:, :, 1] / 127.5 - 1.0
+
+
+def integrate_normals(nx, ny):
+    """The height field whose slopes the normal map describes (Frankot-Chellappa: least squares in the Fourier domain,
+    exact for a tiling texture), mean 0. Slopes dH/du = -nx/nz, dH/dv = -ny/nz (v = rows down): verified 2026-11-25 on
+    vanilla terrain, whose maps carry both: the integral of each normal map against its own height map correlates
+    0.99 (SnowRough01), 0.80 (RockGraniteSmooth01), 0.63 (DirtFootprints01, hand-painted prints on top); the other
+    sign choices give -0.99 .. 0.27."""
+    import numpy as np
+    nz = np.sqrt(np.clip(1.0 - nx * nx - ny * ny, 0.05, 1.0))
+    p, q = -nx / nz, -ny / nz
+    h, w = p.shape
+    u = (2j * np.pi * np.fft.fftfreq(w))[None, :]
+    v = (2j * np.pi * np.fft.fftfreq(h))[:, None]
+    den = (np.abs(u) ** 2 + np.abs(v) ** 2)
+    den[0, 0] = 1.0
+    hf = (np.conj(u) * np.fft.fft2(p) + np.conj(v) * np.fft.fft2(q)) / den
+    hf[0, 0] = 0.0
+    return np.real(np.fft.ifft2(hf))
+
+
+def height_from_normal(normal_dds: bytes, texconv: str, dst: str) -> None:
+    """A ground height map from the texture's own normal map (2026-11-25): Starfield's terrain shader shifts the colour
+    by height (parallax: the owner's flat-colour test showed the template's height as bumps), so a height guessed from
+    brightness pushed dark specks and leaves down and smeared the texture (owner's side-by-sides with the same texture
+    on objects). The integrated normal map is the shape the texture was drawn with, as vanilla's heights are. High-passed
+    (minus the 1/16 blur: no texture-wide tilt), spread HEIGHT_SPREAD around 128, full resolution, BC4 to dst."""
+    import numpy as np
+    from fo4sf import textures
+    nx, ny = normal_planes(normal_dds, texconv)
+    z = integrate_normals(nx, ny)
+    k = max(1, min(z.shape) // 16)
+    blur = z
+    for ax in (0, 1):
+        blur = box_blur_wrap(blur, k, ax)
+    det = z - blur
+    sd = float(det.std()) or 1.0
+    out = np.clip(128.0 + det / sd * HEIGHT_SPREAD, 0, 255).astype(np.uint8)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    textures.write_r8(dst, out)
+    textures.texconv(texconv, dst, os.path.dirname(dst), "BC4_UNORM")
+
+
 def terrain_settings(mat: dict, tiling_m: float, max_displacement: float = 0.0) -> int:
     """Set the Terrain1Layer TerrainSettingsComponent: TilingDistance (metres per texture repeat; vanilla dirt 3.2) and
     MaxDisplacement (0: the flat height map must not lift the ground). Returns how many components were changed."""

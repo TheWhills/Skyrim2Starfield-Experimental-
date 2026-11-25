@@ -940,7 +940,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   DirtFootprints01, SnowRough01, RockGraniteSmooth01), ours were nearly all pixel noise (sd 39, pixel-scale 34-42), so
   every dark speck drew as a dent with a lit rim. Normals ruled out: ours tilt the same way as vanilla's against the
   height slopes (+0.26 .. +0.39 both channels; vanilla +0.39). Now band-passed (smoothed over 1/128 of the texture,
-  spread 25): LDirt02 sd 24.9, p1-p99 71-194, pixel-scale 6.4 (vanilla dirt: 24.9, 69-193, 5.2). In game: pending.
+  spread 25): LDirt02 sd 24.9, p1-p99 71-194, pixel-scale 6.4 (vanilla dirt: 24.9, 69-193, 5.2).
+  **Owner, in game: dents gone, but the terrain still looks 3D and smeared next to the same textures on objects**
+  (dirt, grass, leaf litter side-by-sides). Supported hypothesis: the terrain shader shifts the colour by the height
+  map (parallax; earlier evidence: the owner's flat-colour checkerboard showed the template's height as bumps), so a
+  brightness-guessed height drags the texture. Fix: heights are the integral of each texture's own normal map
+  (skyrimground.integrate_normals, Frankot-Chellappa; slopes -nx/nz, -ny/nz). Verified on vanilla terrain: the
+  integral of each vanilla normal map against its own height map correlates 0.99 SnowRough01, 0.80
+  RockGraniteSmooth01, 0.63 DirtFootprints01 (hand-painted prints on top). Ours now: heights agree with their normal
+  maps (slope correlation 0.69-0.75), sd 25, p1-p99 68-193 (LDirt02). In game: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
