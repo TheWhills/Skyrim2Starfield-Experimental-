@@ -2,9 +2,10 @@ r"""Set the staged Skyrim ground materials' texture repeat (TilingDistance) with
 
 Skyrim repeats a ground texture every 2048 / 12 units = 2.44 m (skyrimground.SKYRIM_TILING_M, measured on Skyrim's
 ground-matched meshes); the staged terrain used 4.88 m, so every ground texture drew at twice Skyrim's size. This
-rewrites TilingDistance in every <staging>\Data\materials\skyrim\ground\*.mat (MaxDisplacement stays 0). The staged file
-is replaced (removed first: staging files may be hard links into the build folder). Reinstall afterwards
-(tools/owner/ground_heights.ps1 runs it).
+rewrites TilingDistance, and RotationAngle 0 (the template's 148 shaded our normal maps from the wrong side: owner's
+in-game tests, skyrimground.terrain_settings), in every <staging>\Data\materials\skyrim\ground\*.mat (MaxDisplacement
+stays 0). The staged file is replaced (removed first: staging files may be hard links into the build folder).
+Reinstall afterwards (tools/owner/ground_heights.ps1 runs it).
 
     python -I scripts\terrain\ground_tiling.py --staging C:\Modding\staging\skyrim_all [--tiling 2.44]
 """
@@ -43,7 +44,7 @@ def main(argv=None):
         with open(p, "w", encoding="utf-8", newline="\n") as f:      # as make_skyrim_overlay writes it
             f.write(new)
         n += 1
-    print(f"{n} ground materials set to {a.tiling:g} m per repeat ({same} already)")
+    print(f"{n} ground materials set to {a.tiling:g} m per repeat, rotation 0 ({same} already)")
     return 0
 
 

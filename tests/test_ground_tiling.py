@@ -37,9 +37,9 @@ class GroundTilingTest(unittest.TestCase):
                 ground_tiling.main(["--staging", t])
                 ground_tiling.main(["--staging", t])
             after = open(p, encoding="utf-8").read()
-        self.assertIn("1 ground materials set to 2.44", out.getvalue())
-        self.assertIn("0 ground materials set to 2.44 m per repeat (1 already)", out.getvalue())
-        self.assertEqual(after, before.replace('"4.88"', '"2.44"'))
+        self.assertIn("1 ground materials set to 2.44 m per repeat, rotation 0", out.getvalue())
+        self.assertIn("0 ground materials set to 2.44 m per repeat, rotation 0 (1 already)", out.getvalue())
+        self.assertEqual(after, before.replace('"4.88"', '"2.44"').replace('"148"', '"0"'))   # rotation 0 too
 
 
 if __name__ == "__main__":

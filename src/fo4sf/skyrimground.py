@@ -374,15 +374,23 @@ def height_from_normal(normal_dds: bytes, texconv: str, dst: str) -> None:
     textures.texconv(texconv, dst, os.path.dirname(dst), "BC4_UNORM")
 
 
-def terrain_settings(mat: dict, tiling_m: float, max_displacement: float = 0.0) -> int:
-    """Set the Terrain1Layer TerrainSettingsComponent: TilingDistance (metres per texture repeat; vanilla dirt 3.2) and
-    MaxDisplacement (0: the flat height map must not lift the ground). Returns how many components were changed."""
+GROUND_ROTATION = 0.0       # degrees; the vanilla template's 148 shaded our normal maps from the wrong side
+
+
+def terrain_settings(mat: dict, tiling_m: float, max_displacement: float = 0.0,
+                     rotation: float = GROUND_ROTATION) -> int:
+    """Set the Terrain1Layer TerrainSettingsComponent: TilingDistance (metres per texture repeat; vanilla dirt 3.2),
+    MaxDisplacement (0: the flat height map must not lift the ground) and RotationAngle (0; owner's in-game tests
+    2026-11-25: with the template's 148 every bump of our normal maps drew as a dent with a lit rim, specks all over
+    the ground; a flat normal map removed them, a green flip did not, rotation 0 with the real normal map drew the dirt
+    crisp, matching the same texture on the road meshes). Returns how many components were changed."""
     n = 0
     for o in mat.get("Objects", []):
         for c in o.get("Components", []):
             if c.get("Type") == "BSMaterial::TerrainSettingsComponent":
                 c.setdefault("Data", {})["TilingDistance"] = f"{tiling_m:g}"
                 c["Data"]["MaxDisplacement"] = f"{max_displacement:g}"
+                c["Data"]["RotationAngle"] = f"{rotation:g}"
                 n += 1
     return n
 

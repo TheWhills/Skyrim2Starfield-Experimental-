@@ -958,7 +958,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   TundraRocks01 ...) tile at a median 175 units = 2.49 m, i.e. 2048 / 12 units (a twelfth of a land quadrant) =
   2.44 m. Our terrain used 4.88 m (owner's side-by-sides by eye), so every ground texture drew at twice Skyrim's
   size: pebbles, blades and leaves twice as large and half as sharp. skyrimground.SKYRIM_TILING_M = 2.44 m;
-  scripts/terrain/ground_tiling.py sets the staged materials. In game: pending.
+  scripts/terrain/ground_tiling.py sets the staged materials.
+  **Owner, in game (2.44 m): the size is right, but black specks with lit rims remain** where the same dirt on a rock
+  pile mesh is crisp. Two A/B installs (verified in game): (1) LDirt02 with a flat normal map: specks gone;
+  LFieldGrass01 with its green channel negated: no change. So the terrain shades our normal maps wrongly, and not by a
+  mirror. (2) Both normal maps restored, RotationAngle 0 instead of the template's 148 on those two: the dirt crisp,
+  matching the road meshes (owner: "they look better"). Supported hypothesis: the shader turns the texture by
+  RotationAngle but not the normal map's tangent directions, so every bump is lit from ~148 degrees off and reads as a
+  dent. Fix: RotationAngle 0 on every ground material (skyrimground.terrain_settings; ground_tiling.py). In game, all
+  textures: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
