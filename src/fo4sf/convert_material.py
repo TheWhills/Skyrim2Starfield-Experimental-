@@ -238,6 +238,60 @@ def build_from_template(template: dict, name: str, files: dict, opacity_value: f
     return mat
 
 
+# Snow on up-facing surfaces (2026-11-25, Skyrim's directional snow materials): vanilla's own snow-on-rock material,
+# 2LayerStandard with layer 2 (snow) blended over layer 1 by the vertex colour (Summary: Blender "VertexAlpha": true,
+# "VertexColorChannel": "Red", BlendMode PositionContrast, a snow height map as BlendMask; "UseVertexColorAsTint":
+# false). Layer 1 gets the object's own maps.
+SNOW_TEMPLATE_MAT = "Materials/Landscape/Caves/Smooth/CaveSmoothSnow01.mat"
+SNOW_BASE_SLOTS = (0, 1, 3, 5, 6)          # colour, normal, roughness, AO, height (the template's layer 1 fills these)
+
+
+def _objects_by_id(mat: dict) -> dict:
+    return {o["ID"]: o for o in mat["Objects"] if "ID" in o}
+
+
+def _ref(obj: dict, comp_type: str, index: int = 0):
+    return next((c["Data"]["ID"] for c in obj.get("Components", [])
+                 if c.get("Type") == comp_type and c.get("Index", 0) == index), None)
+
+
+def build_snow_mat(template: dict, name: str, base_files: dict, uv_scale: float = 1.0) -> dict:
+    """A two-layer snow material from SNOW_TEMPLATE_MAT: base_files {slot: game path} for layer 1 (slots
+    SNOW_BASE_SLOTS: colour, normal, roughness, AO, height) replace what the template's layer 1 inherits; layer 1's UV
+    scale is set to uv_scale (the template tiles its rock 3x); the snow layer and the blender stay vanilla. The
+    template's distant LOD material (all snow) is dropped. Object IDs are remapped as in build_from_template."""
+    missing = [s for s in SNOW_BASE_SLOTS if s not in base_files]
+    if missing:
+        raise ValueError(f"snow material {name}: no file for slots {missing}")
+    mat = build_from_template(template, name, {})
+    mat.pop("Filename", None)                    # the template's own path; our working materials carry none
+    objs = _objects_by_id(mat)
+    root = mat["Objects"][0]
+    root["Components"] = [c for c in root["Components"] if c.get("Type") != "BSMaterial::LODMaterialID"]
+    layer = objs[_ref(root, "BSMaterial::LayerID", 0)]
+    material = objs[_ref(layer, "BSMaterial::MaterialID")]
+    texset = objs[_ref(material, "BSMaterial::TextureSetID")]
+    texset["Components"] = [c for c in texset.get("Components", []) if c.get("Type") not in
+                            ("BSMaterial::MRTextureFile", "BSMaterial::TextureReplacement")]
+    for slot in SNOW_BASE_SLOTS:
+        texset["Components"].append({"Data": {"FileName": base_files[slot]}, "Index": slot,
+                                     "Type": "BSMaterial::MRTextureFile", "Version": 2})
+    uv = objs.get(_ref(layer, "BSMaterial::UVStreamID"))
+    for c in (uv or {}).get("Components", []):
+        if c.get("Type") == "BSMaterial::Scale":
+            c["Data"]["Value"]["Data"].update({"x": _num(uv_scale), "y": _num(uv_scale)})
+    keep, todo = set(), [root]                   # drop what only the removed LOD material reached
+    while todo:
+        o = todo.pop()
+        for c in o.get("Components", []):
+            i = (c.get("Data") or {}).get("ID")
+            if i in objs and i not in keep:
+                keep.add(i)
+                todo.append(objs[i])
+    mat["Objects"] = [root] + [o for o in mat["Objects"][1:] if o.get("ID") in keep]
+    return mat
+
+
 ROOT = "Data\\Materials\\Layered\\Root\\"
 
 

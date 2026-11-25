@@ -1007,8 +1007,22 @@ Max Density; what a vanilla grass model needs. Two tools:
   Next option (not started): bake the snow into the objects, as Skyrim's material does, for up-facing surfaces.
   Turning about the vertical axis does not change which faces point up, only tilt does: the 22,207 placed snowy
   references use 651 Skyrim models and need ~4,100 model + tilt variants at 15 degree steps (3,200 at 20; median
-  tilt 11.8 degrees, 37 % under 5). Needs Starfield's layered materials with a vertex-colour (or mask) blend,
-  unresearched.
+  tilt 11.8 degrees, 37 % under 5).
+  **Baked snow, research (2026-11-25):** vanilla's own snow-on-rock material Materials/Landscape/Caves/Smooth/
+  CaveSmoothSnow01.mat is 2LayerStandard: layer 2 (snow, CaveSnowLayeredSmooth01) over layer 1, its Blender in
+  BlendMode PositionContrast with a snow height map as BlendMask and ParamBool 5 true; the file's Summary names it:
+  "VertexAlpha": true, "VertexColorChannel": "Red", "UseVertexColorAsTint": false (verified in the file; that the
+  vertex colour drives the blend in game: hypothesis, the test below). Layer 1 fills texture slots 0 colour, 1 normal,
+  3 roughness, 5 AO, 6 height. Our .mesh writer already stores vertex colours (sfmesh). Skyrim side: snow is on
+  separate base records (RockL02Snow, RockL02SnowLight, ... beside 1,641 plain RockL02), DNAM max angle 40-95,
+  MATO DATA (48 bytes): falloff scale, bias, noise UV, material UV, projection (0, 0, -1), normal dampener,
+  single-pass colour, flag (SnowMaterialObject1P 0.35, 0.4, 48, 170.7, down, 0.4, (0.42, 0.455, 0.494), 1).
+  Prototype: scripts/terrain/snow_bake.py (fo4sf.skyrimsnow, convert_material.build_snow_mat): variants per mesh,
+  snow material, max angle and 15-degree tilt bucket; vertex red = alpha = clamp((dot(n, up) - bias) / scale) (our
+  approximation of Skyrim's falloff); every opaque material becomes the two-layer one (our maps in layer 1, flat AO /
+  height). All of Tamriel: 22,207 references, 4,880 variants of 651 meshes. RockL02 alone: 593 references, 109
+  variants, converted in 16 s; staged (109 STATs added, 593 references moved; plugin checked: only the STAT group
+  grew, 1,779 bytes of NAME changed, group sizes consistent). In game: pending (boulders north of the Riverwood spawn).
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a

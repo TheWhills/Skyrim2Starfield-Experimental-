@@ -138,12 +138,23 @@ def directional_materials(data_dir: str, plugins=LOAD_ORDER) -> dict:
                         continue
                     fields = [] if flags & DELETED else list(fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
                     if typ == b"MATO":
-                        mato[key(fid)] = next((fo4land.zstring(d) for s, d in fields if s == b"EDID"), "")
+                        data = next((bytes(d) for s, d in fields if s == b"DATA" and len(d) >= 8), b"")
+                        mato[key(fid)] = (next((fo4land.zstring(d) for s, d in fields if s == b"EDID"), ""),
+                                          [round(float(v), 4) for v in struct.unpack_from("<2f", data)] if data else None)
                         continue
                     d = next((d for s, d in fields if s == b"DNAM" and len(d) >= 8), None)
                     ang, m = struct.unpack_from("<fI", d) if d is not None else (0.0, 0)
                     dnam[key(fid)] = (round(float(ang), 3), key(m)) if m else None
-    return {b: {"max_angle": v[0], "material": v[1], "edid": mato.get(v[1], "")} for b, v in dnam.items() if v}
+    # MATO DATA (verified on SnowMaterialObject1P, 48 bytes): falloff scale 0.35, falloff bias 0.4, noise UV scale,
+    # material UV scale, projection vector (0, 0, -1), normal dampener, single-pass colour, single-pass flag
+    out = {}
+    for b, v in dnam.items():
+        if v:
+            edid, fall = mato.get(v[1], ("", None))
+            out[b] = {"max_angle": v[0], "material": v[1], "edid": edid}
+            if fall:
+                out[b]["falloff"] = fall
+    return out
 
 
 def alt_id(alt) -> str:

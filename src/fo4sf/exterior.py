@@ -64,7 +64,7 @@ def alt_id(alt) -> str:
 
 def mesh_of(key: str) -> str:
     """The mesh path of a source key (without its alternate-texture part)."""
-    return key.split(ALT_SEP, 1)[0]
+    return key.split("|", 1)[0]                       # |alt: textures, |snow: snow_bake.py
 
 
 def classify(ref: dict, convert_types=CONVERT_TYPES) -> Tuple[str, Optional[str], str]:

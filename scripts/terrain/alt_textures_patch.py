@@ -114,7 +114,7 @@ def apply_plan(objects: dict, formids: dict, plan_refs: dict, items: dict, plugi
     formids = dict(formids, bases=dict(formids["bases"]))
     _count, _next, masters = esm_patch.header(plugin)
     have = {(b.get("source") or "").lower(): i for i, b in enumerate(objects["bases"])
-            if exterior.ALT_SEP in (b.get("source") or "")}
+            if "|" in (b.get("source") or "")}          # any variant: |alt: (textures) or |snow: (snow_bake.py)
     taken = {b["edid"].lower() for b in objects["bases"]}
     rep, new = Counter(), []                       # new: [(variant key, edid, template FormID, item, plain base)]
     plain_of = {}
