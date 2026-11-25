@@ -8,7 +8,7 @@ import zipfile
 
 import numpy as np
 
-from fo4sf import bsa, nif, sfnif, textures
+from fo4sf import bsa, fo4land, nif, sfnif, textures
 
 IDENT_R = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
 
@@ -362,11 +362,17 @@ def build_esm(world_items_cells, hills, extent, base_records=BASES, persistent_r
     items.append(grup(b"\0\0\0\0", 4, [grup(b"\0\0\0\0", 5, sub)]))
     wrld = rec(b"WRLD", 0x3C, [(b"EDID", b"Tamriel\0"), (b"DNAM", struct.pack("<ff", -2048.0, -14000.0))])
     worlds = [wrld, grup(0x3C, 1, items)]
-    for wfid, wedid, parent, pflags, cells, refs in extra_worlds:      # child worldspaces (cities): no LAND
+    for wfid, wedid, parent, pflags, cells, refs, *own_land in extra_worlds:   # child worldspaces (cities)
+        # own_land (optional): {(x, y): height in units} cells with a flat LAND of their own (WhiterunWorld has 7)
+        own_land = own_land[0] if own_land else {}
         csub, cfid = [], wfid * 0x100
         for x, y in cells:
             csub.append(rec(b"CELL", cfid, [(b"XCLC", struct.pack("<iiI", x, y, 0))]))
-            csub.append(grup(cfid, 6, [grup(cfid, 9, [ref(*r) for r in refs.get((x, y), [])])]))
+            kids = [ref(*r) for r in refs.get((x, y), [])]
+            if (x, y) in own_land:
+                vh = fo4land.encode_vhgt(own_land[(x, y)] / 8.0, np.zeros((33, 33), np.int64))
+                kids.insert(0, rec(b"LAND", cfid + 0x80, [(b"DATA", bytes(4)), (b"VHGT", vh)]))
+            csub.append(grup(cfid, 6, [grup(cfid, 9, kids)]))
             cfid += 1
         wf = [(b"EDID", wedid.encode() + b"\0"), (b"WNAM", struct.pack("<I", parent)), (b"PNAM", struct.pack("<H", pflags))]
         worlds += [rec(b"WRLD", wfid, wf), grup(wfid, 1, [grup(b"\0\0\0\0", 4, [grup(b"\0\0\0\0", 5, csub)])])]

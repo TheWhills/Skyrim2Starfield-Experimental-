@@ -113,6 +113,15 @@ class SkyrimLand:
                     self.edids[xy] = c["edid"]
                 if c["vhgt"]:
                     self.grids[xy] = fo4land.decode_vhgt(c["vhgt"])
+            self.own_land_ignored = 0
+            if self.parent and self.cells and self.grids and self.parent_flags & 1:
+                # "Use Land Data" set, yet some LAND of its own (2026-11-25, Skyrim.esm: WhiterunWorld has 7 LAND records
+                # in cells 4..7, -3..-1, up to 1,056 units off Tamriel's there; SolitudeWorld 20, RiftenWorld 12,
+                # WindhelmWorld 2). Before, those few cells became the whole city's terrain (an overlay sized to them).
+                # The flag says the parent's land is used (supported hypothesis: the flag's documented meaning; which
+                # ground Skyrim really draws in those cells is unverified), so the parent's LAND it is.
+                self.own_land_ignored = len(self.grids)
+                self.grids = {}
             if not self.grids and self.parent and self.cells:
                 # a child worldspace without LAND of its own (Skyrim's walled cities use their parent's terrain, flag
                 # "Use Land Data"; they share the parent's coordinates): the parent's LAND under the child's cells
@@ -193,7 +202,7 @@ class SkyrimLand:
         lo, hi = self.height_range()
         x0, x1, y0, y1 = self.extent
         return {"world": self.world, "world_fid": "%08X" % self.world_fid, "land_source": self.land_source,
-                "cells": len(self.cells),
+                "cells": len(self.cells), "own_land_ignored": getattr(self, "own_land_ignored", 0),
                 "cells_with_vhgt": len(self.grids), "extent": {"x": [x0, x1], "y": [y0, y1]},
                 "extent_m": {"x": [x0 * CELL_UNITS / 70.0, (x1 + 1) * CELL_UNITS / 70.0],
                              "y": [y0 * CELL_UNITS / 70.0, (y1 + 1) * CELL_UNITS / 70.0]},

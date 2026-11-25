@@ -55,6 +55,9 @@ Starfield must be closed while a script writes into the mods folders.
 | Alternate-texture variants of the exterior's objects (8n; its own convert) | `C:\Modding\work\sky_alt` |
 | Installed exterior (Tamriel on the planet; matches the game's SkyrimTerrainTamriel.esm, height offset 385 m) | `C:\Modding\staging\skyrim_all` |
 | Other exterior builds (older) | `C:\Modding\staging\skyrim_objects`, `C:\Modding\staging\skyrim_tamriel` |
+| Walled cities (2026-11-25): staged city / its terrain / registration + gates plugin | `C:\Modding\staging\sky_whiterunworld`, `..\sky_whiterunworld_terrain`, `..\sky_worlds_register` |
+| City objects work folder (export / convert, resumable) | `C:\Modding\work\city_whiterunworld` |
+| Installed cities (manifest; undo: `cities.ps1 -Uninstall`) | `$sf\Data\SkyrimCities.deploy.json` |
 | Interior batches (checklist step 11, Oct 23) | `C:\Modding\work\s2s\interiors`, `C:\Modding\work\s2s\checklist` |
 | Riverwood <-> inn door build | `C:\Modding\work\s2s\riverwood_doors` |
 | Exterior navmesh (export, survey, compare.html) | `C:\Modding\work\s2s\riverwood_doors\navmesh` |
@@ -447,13 +450,22 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    the Sleeping Giant Inn's bottles, bread, cabbages: do they stay put at load (not jump or fall through), sit on
    the tables at the right height, get knocked over, pick up with their Skyrim name, get eaten / drunk? Send
    `C:\Modding\work\s2s\riverwood_doors\items.json` and the 2e lines.
-7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
-   (one city converts its models once; later runs resume):
+7c. C (2026-11-25): **Whiterun through its gate** (docs/terrain/skyrim-cities.md "Whiterun through its gate"). Already
+   built and installed into Starfield\Data by Claude (nothing to run). In MO2: refresh (F5), tick
+   **SkyrimTerrainWhiterunWorld.esm** and **SkyrimWorlds_Register.esm** and drag them right after
+   SkyrimTerrainTamriel_Mars.esm (the register plugin after the city). In game: `coc SKY_TamrielRiverwoodSpawn`, then
+   go to Whiterun's main gate (about 570 m north of the Riverwood arrival; or `player.setpos x 272`, `player.setpos y
+   -106`, `player.setpos z 340`, unverified: the console may take other units), use the gate. Send: does the gate
+   prompt show and load Whiterun; do you land just inside the gate on the ground; does the city look like Tamriel's
+   ground and objects (textures, roads, snow-free); use the gate back out (lands outside Tamriel's gate); and
+   does Tamriel still load as before (Riverwood's inn door too). `coc SKY_WhiterunWorldCell5M2Spawn` goes straight to the
+   Plains District but may land under the terrace floor (`tcl`, fly up). A rebuild (Starfield closed):
    ```powershell
-   powershell -ExecutionPolicy Bypass -File tools\owner\cities.ps1 -Cities WhiterunWorld
+   powershell -ExecutionPolicy Bypass -File tools\owner\cities.ps1
    ```
-   Enable "S2S Skyrim Cities" in MO2 (SkyrimWorlds_Register.esm last), then in game `coc` the printed marker. Does
-   Whiterun stand on its ground, and does Tamriel still load as before? Then all five (no -Cities). Gates later.
+   Undo: `powershell -ExecutionPolicy Bypass -File tools\owner\cities.ps1 -Uninstall` (puts Tamriel's gate back).
+   After a reinstall of the exterior (alt_textures.ps1, snow_bake.ps1 ...) Tamriel's gate static shows again under the
+   door: `python -I scripts\deploy_skyrim_city.py hide --starfield $sf` hides it again.
 8. Done 2026-11-23 (verified: the new tag played): SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:
    ```powershell

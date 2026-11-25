@@ -31,8 +31,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
+sys.path.insert(0, HERE)
 
-from fo4sf import fo4land, sfplugin  # noqa: E402
+from fo4sf import fo4land, sfplugin, worldgates  # noqa: E402
+import make_planet  # noqa: E402
 
 PLUGIN = "SkyrimWorlds_Register.esm"
 
@@ -125,10 +127,121 @@ def plan(main, worlds, spacing=0.02, places=None):
             wrep["location"] = "not changed (no LCTN of that name, or no *_Surface location in the planet plugin)"
         rep["worlds"].append(wrep)
     data = b"".join(struct.pack("<ddI", *e) for e in new_entries)
-    psubs = [(s, data if s == b"CNAM" else d) for s, d in subs]
+    # only the master-worldspace list: Nirn's PNDT (make_planet.py) has a second CNAM, 1 byte, in another component
+    # (2026-11-25: the old code wrote the list over both)
+    k = next(i for i, (s, _d) in enumerate(subs) if s == b"CNAM")
+    psubs = list(subs)
+    psubs[k] = (b"CNAM", data)
     out.insert(0, (t, h, psubs, p_fid))
     rep["entries"] = len(new_entries)
     return out, masters, rep
+
+
+# ------------------------------------------------------------------------------------------------------------ gates
+def _ref_with_place(path, lid):
+    """(flags, subs) of the plugin's own reference lid where it stands: a static already hidden in place (Initially
+    Disabled, sunk) is read from the plugin's .before_ref_overrides backup instead. None if neither has it."""
+    for cand in (path, path + ".before_ref_overrides"):
+        if os.path.isfile(cand):
+            got = worldgates.placed_refs(cand, [lid]).get(lid)
+            if got and not got[1] & worldgates.DISABLED:
+                return got[1], got[2]
+    return None
+
+
+def _stat(path, fid):
+    return next((r for r in sfplugin.records(path, [b"STAT"]) if r[3] == fid), None)
+
+
+def _world_and_cell(path, edid):
+    with fo4land.Plugin(path) as p:
+        return make_planet.world_and_persistent_cell(p.buf, p.body, edid)
+
+
+def plan_gates(main, worlds, masters, esm, main_world="Tamriel"):
+    """Load doors between the main build's world and each city world, from Skyrim's door pairs (worldgates).
+    masters: the registration plugin's masters (plan()); our new records follow them. Returns (DOOR records, the WRLD
+    group bytes, its record count, its FormIDs, hide list, report)."""
+    prm = load_params(main)
+    with open(os.path.join(main, "formids.json"), encoding="utf-8") as fh:
+        mids = json.load(fh)
+    mov = prm["overlays"][0]
+    m_plugin = os.path.join(main, mids["plugin"])
+    m_last = os.path.join(main, prm["mars"]["plugin"]) if prm.get("mars") else m_plugin
+    own = len(masters)
+    new_ids = iter(range(10 ** 6))
+    door_recs, door_base, hide, rep = [], {}, [], []
+    main_refs, worlds_out = [], []
+    for w in worlds:
+        wp = load_params(w)
+        cov = wp["overlays"][0]
+        with open(os.path.join(w, "formids.json"), encoding="utf-8") as fh:
+            cids = json.load(fh)
+        c_plugin = os.path.join(w, cids["plugin"])
+        idx = masters.index(cids["plugin"])
+        with open(os.path.join(w, "skyrim_source.json"), encoding="utf-8") as fh:
+            city_edid = json.load(fh)["summary"]["world"]
+        pairs = worldgates.skyrim_gates(esm, main_world, city_edid)
+        city_refs = []
+        for pr in pairs:
+            gm, gc = pr["main"], pr["city"]
+            ml, cl = mids["refs"].get(gm["src"]), cids["refs"].get(gc["src"])
+            entry = {"city": city_edid, "main_door": gm["src"], "city_door": gc["src"], "model": gm["edid"]}
+            if ml is None or cl is None:
+                entry["skipped"] = "a static of the pair is not placed (" + ("main" if ml is None else "city") + ")"
+                rep.append(entry)
+                continue
+            ml, cl = int(ml, 16), int(cl, 16)
+            got_m, got_c = _ref_with_place(m_plugin, ml), _ref_with_place(c_plugin, cl)
+            if got_m is None or got_c is None:
+                sys.exit(f"gate {gm['src']} / {gc['src']}: static reference not found standing in its plugin")
+            dm, dc = dict(got_m[1])[b"DATA"][:24], dict(got_c[1])[b"DATA"][:24]
+            m_base = struct.unpack("<I", dict(got_m[1])[b"NAME"])[0]
+            stat = _stat(m_plugin, m_base)
+            if stat is None:
+                sys.exit(f"gate {gm['src']}: its base {m_base:08X} is not a STAT of {mids['plugin']}")
+            fids = {}
+            for side, name in (("to_city", cov.get("name") or city_edid), ("to_main", mov.get("name") or main_world)):
+                key = (stat[3], name)
+                if key not in door_base:
+                    fid = sfplugin.new_form_id(next(new_ids), own)
+                    edid = f"SKY_Gate{name.replace(' ', '')}_{sfplugin.edid(stat[2]).replace('SKY_', '')}"[:200]
+                    door_recs.append((b"DOOR", stat[1], worldgates.door_record(stat[2], edid, name), fid))
+                    door_base[key] = fid
+                fids[side] = door_base[key]
+            f_main, f_city = sfplugin.new_form_id(next(new_ids), own), sfplugin.new_form_id(next(new_ids), own)
+            hdr = stat[1][:8] + struct.pack("<I", worldgates.PERSISTENT) + stat[1][12:]
+            main_refs.append(sfplugin.record_bytes(b"REFR", hdr, worldgates.door_ref_subs(
+                fids["to_city"], dm, worldgates.xtel(f_city, worldgates.to_local(gm["xtel"]["pos"], cov),
+                                                    gm["xtel"]["rot"], gm["xtel"]["flags"])), f_main))
+            city_refs.append(sfplugin.record_bytes(b"REFR", hdr, worldgates.door_ref_subs(
+                fids["to_main"], dc, worldgates.xtel(f_main, worldgates.to_local(gc["xtel"]["pos"], mov),
+                                                    gc["xtel"]["rot"], gc["xtel"]["flags"])), f_city))
+            hide += [{"plugin": mids["plugin"], "local_id": "%06X" % ml, "data": worldgates.sunk(dm).hex(),
+                      "original": dm.hex()},
+                     {"plugin": cids["plugin"], "local_id": "%06X" % cl, "data": worldgates.sunk(dc).hex(),
+                      "original": dc.hex()}]
+            entry.update(main_ref="%08X" % f_main, city_ref="%08X" % f_city,
+                         main_static=f"{mids['plugin']}:{ml:06X}", city_static=f"{cids['plugin']}:{cl:06X}",
+                         lands_in_city=[round(v, 2) for v in worldgates.to_local(gm["xtel"]["pos"], cov)],
+                         lands_in_main=[round(v, 2) for v in worldgates.to_local(gc["xtel"]["pos"], mov)])
+            rep.append(entry)
+        if city_refs:
+            (wh, wsubs, wfid), (ch, csubs, cfid) = _world_and_cell(c_plugin, cov["world"])
+            nm = worldgates.n_masters(c_plugin)
+            worlds_out.append(((wh, worldgates.remap_world_subs(wsubs, nm, idx), worldgates.remap(wfid, nm, idx)),
+                               (ch, worldgates.remap_world_subs(csubs, nm, idx), worldgates.remap(cfid, nm, idx)),
+                               city_refs))
+    tail, count, tail_fids = b"", 0, []
+    if main_refs:
+        (wh, wsubs, wfid), cell = _world_and_cell(m_last, mov["world"])
+        # the main world's records keep their master indices: our master list starts with the planet plugin's
+        main_w = ((wh, [(s, d) for s, d in wsubs if s not in (b"OFST", b"CLSZ")], wfid), cell, main_refs)
+        allw = [main_w] + worlds_out
+        tail = worldgates.world_groups(allw)
+        count = sum(2 + len(r) for _w, _c, r in allw)
+        tail_fids = [sfplugin.new_form_id(i, own) for i in range(next(new_ids))]
+    return door_recs, tail, count, tail_fids, hide, rep
 
 
 def main(argv=None):
@@ -138,12 +251,27 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="folder for the registration plugin")
     ap.add_argument("--spacing", type=float, default=0.02, help="radians of longitude between neighbours")
     ap.add_argument("--plugin", default=PLUGIN)
+    ap.add_argument("--skyrim", default="", help="Skyrim.esm: also the gates (load doors both ways, as Skyrim pairs "
+                    "them) between the main world and each city world (fo4sf.worldgates)")
     a = ap.parse_args(argv)
     recs, masters, rep = plan(a.main, a.world, a.spacing)
+    tail, count, tail_fids = b"", 0, []
+    if a.skyrim:
+        doors, tail, count, tail_fids, hide, grep_ = plan_gates(a.main, a.world, masters, a.skyrim)
+        recs = recs + doors
+        rep.update(gates=grep_, hide=hide)
+        for g in grep_:
+            print(f"  gate {g['city']}: {g['main_door']} <-> {g['city_door']} ({g['model']}): " +
+                  (g["skipped"] if "skipped" in g else
+                   f"doors {g['main_ref']} / {g['city_ref']}, lands at {g['lands_in_city']} in the city, "
+                   f"{g['lands_in_main']} outside"))
+        if not any("main_ref" in g for g in grep_):
+            print("  no gate linked")
     info = sfplugin.header_info(os.path.join(a.main, load_params(a.main)["mars"]["plugin"]))
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, a.plugin), "wb") as fh:
-        fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield worlds", masters=masters))
+        fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield worlds", masters=masters,
+                                tail=tail, tail_records=count, tail_fids=tail_fids))
     rep.update(plugin=a.plugin, masters=masters)
     with open(os.path.join(a.out, "register_worlds.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1)

@@ -338,3 +338,18 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
 - Evidence: 0 packed vertices, shared-index entries in triples (2130, start, x), primitives like (3,2,2,2);
   docs/JOURNAL.md "Precombine debris parts" and its correction.
 - Status: **unresolved**. The "thin rods" reading was **refuted** (groups up to ~3 m in every axis).
+
+## 2026-11-25 Skyrim's walled cities: land, gates (Claude)
+- "Use Land Data" with own LAND: WhiterunWorld (PNAM 0x1, parent Tamriel) has 7 LAND records (cells 4..7, -3..-1), up
+  to 1,056 units off Tamriel's; SolitudeWorld 20, RiftenWorld 12, WindhelmWorld 2; MarkarthWorld has no flag and 139
+  (129 differ from Tamriel's, median 408 units, max 4,656). Which ground Skyrim draws in those cells: **supported
+  hypothesis** the parent's (the flag; in cell (4, -1) the wall pieces sit 200 - 392 units above Tamriel's land and
+  904 - 1,104 above the own LAND; make_skyrim_overlay.py worlds, scratch analysis of Skyrim.esm).
+- Gate pairs (persistent doors with XTEL to each other, `fo4sf.worldgates.skyrim_gates`): Whiterun 1 (Tamriel 01B1F1
+  <-> 01B1F3, WRDoorMainGate01), Solitude 3, Windhelm 2, Riften 4, Markarth 1: **verified** (Skyrim.esm SE).
+- Starfield: a persistent load door from one of our plugins in another plugin's world, XTEL into a third world:
+  exterior -> interior **verified** (Riverwood, 2026-11-08); exterior -> exterior **unresolved** (Whiterun, built).
+- Nirn's PNDT (make_planet.py) has two CNAM fields: 20 bytes per master world (lat f64, lon f64, WRLD) and 1 byte
+  ('02') in a later component: **verified** (staging SkyrimTerrainTamriel_Mars.esm).
+- A city's terrain cut from Tamriel's BTD equals the same cells of Tamriel's file and the city's own rebuild within
+  5 mm inside its land: **verified** offline (cells x -5..12, y -8..9).

@@ -2926,3 +2926,16 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   the biome's EFSD (snow on all of Tamriel); a custom GL material with Skyrim's snow texture (next, once the
   mechanism works outdoors).
 
+- 2026-11-25 (Claude) Walled cities reach the player as their own overlay worlds behind Skyrim's gates, next to the
+  installed Tamriel, not merged into SKY_Tamriel. Why: Tamriel's cells at Whiterun hold the walls, the gate and LOD
+  stand-ins of the city (WRBreezehome01LOD, WRCloudDistrictTerrainLOD ...), only 109 of WhiterunWorld's 1,804
+  references have a twin there: merging means per-city clean-up; the owner chose "separate, like Skyrim" (2026-11-10).
+  How: (a) a city on Tamriel's land gets its terrain CUT from the installed Tamriel's terrain file (identical ground,
+  every later ground fix included, no LTEX overrides of its own that would fight Tamriel's); (b) the gates are NEW
+  persistent load doors in the registration plugin with the statics hidden in place (the path verified for Riverwood;
+  an override of a persistent reference adding XTEL is unverified, and of a temporary one did not take); (c) the city's
+  archive leaves out what Tamriel's archives hold (Tamriel's copy wins; one look in both worlds); (d) installed into
+  Data with a manifest like the exterior, not loose in an MO2 mod. Alternatives: merging into Tamriel (above); the
+  city's own ground conversion (LTEX conflicts, a second copy of every ground texture); writing the gates with Mutagen
+  (PluginSpike / TerrainOverlays) - the Python copy needs a FormID remap of three WRLD fields (BNAM, XLCN, RNAM), small
+  and tested, and keeps FO4Port.esm (Riverwood) untouched.

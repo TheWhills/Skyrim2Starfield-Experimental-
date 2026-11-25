@@ -137,3 +137,11 @@ moving it would change textures.py again and cost one more full reconvert.
 - Owner's terrain_blend.ps1: 8.2 min (one pass) -> 14.7 min (two passes, raster slot plan). The map-wide slot plan
   adds about 32 s per 144 x 144-quadrant tile (synthetic, measured here); owner's run: 15.5 min (from 14.7).
 - terrain_blend.ps1 -Blend smooth: 4.7 min on the owner's machine (noise 15.5 min, same input).
+
+## 2026-11-25 Claude: city archive without Tamriel's files
+- What: `scripts\deploy_skyrim_city.py` packs only the city files that the installed exterior's archives do not hold
+  (same path; Tamriel's copy is the one used).
+- Before / after (same staging C:\Modding\staging\sky_whiterunworld, counted by pack_plan): 2,260 files, 693 MB ->
+  977 files, 152 MB packed (-78 %); Archive2 + copy of the archive: under 3 s. The 1,283 files left out (541 MB) are
+  already loaded with Tamriel. Also: the city's ground textures are not converted again (terrain cut from Tamriel's:
+  the terrain build took 4.8 s); its 319 models converted in 112 s, a rebuild with --resume in 17 s.

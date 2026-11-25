@@ -25,6 +25,8 @@ import re
 import subprocess
 import sys
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "src"))
 sys.path.insert(0, HERE)
@@ -473,6 +475,8 @@ def cmd_build(a, rest):
     ca.display_name = a.display_name or d["display_name"]
     tex_stats = None
     a.texconv = ca.texconv or getattr(a, "texconv", "")   # --texconv belongs to make_cw_overlays' parser (passed in rest)
+    if a.terrain_from:                               # the ground comes cut from the installed terrain (crop_from)
+        a.skyrim_ground = a.skyrim_ground_test = a.land_textures = False
     if a.skyrim_ground_test:
         a.skyrim_ground = True
     if a.skyrim_ground:
@@ -554,9 +558,60 @@ def cmd_build(a, rest):
               f" {agree:.0%} of Skyrim's wet / dry vertices kept")
     if a.height_offset:
         print(f"overlays_params.json: terrain and objects lifted {a.height_offset:g} m")
+    if a.terrain_from:
+        rep = crop_from(prm, a.out, a.terrain_from)
+        print(f"terrain cut from {rep['source']} cells x {rep['source_cells']['x']} y {rep['source_cells']['y']}: "
+              f"heights vs this build's own: median {rep['height_diff_m']['median']:.3f} m, max "
+              f"{rep['height_diff_m']['max']:.2f} m; no LTEX overrides of its own ({rep['ltex_overrides_dropped']} "
+              f"dropped)")
     with open(pp, "w", encoding="utf-8") as f:
         json.dump(prm, f, indent=1)
     return res
+
+
+def crop_from(prm, out, staging):
+    """--terrain-from: replace this overlay's terrain file (and its copies) with the same cells of the staged exterior's
+    terrain (2026-11-25: Whiterun on Tamriel's land as installed, with every ground fix made to Tamriel since: blend,
+    tiling, grass slots). The overlay must be built --like that exterior (same height offset) on whole 100 m cells.
+    Tamriel's LTEX overrides (its plugin) draw the textures, so this overlay's own are dropped. Returns a report."""
+    from fo4sf import btd
+    with open(os.path.join(staging, "overlays_params.json"), encoding="utf-8") as f:
+        sp = json.load(f)
+    so, o = sp["overlays"][0], prm["overlays"][0]
+    if abs(float(so.get("height_offset_m") or 0) - float(o.get("height_offset_m") or 0)) > 1e-6:
+        sys.exit(f"--terrain-from: height offset {o.get('height_offset_m')} m here, {so.get('height_offset_m')} m in "
+                 f"{staging} (build --like it)")
+    for k in (0, 1):
+        d = (float(o["origin_cw_m"][k]) - float(so["origin_cw_m"][k])) / 100.0
+        if abs(d - round(d)) > 1e-6:
+            sys.exit("--terrain-from: the overlay's origin is not on the source's 100 m cell grid")
+    # cells_cw: both overlays' cells in the shared Skyrim / 70 frame (a local frame only shifts positions by origin_cw_m)
+    sx0, sy0 = so["cells_cw"]["x"][0], so["cells_cw"]["y"][0]
+    x0, x1 = o["cells_cw"]["x"]
+    y0, y1 = o["cells_cw"]["y"]
+    src = btd.read(open(os.path.join(staging, so["btd_file"]), "rb").read())
+    own_path = os.path.join(out, o["btd_file"])
+    own = btd.read(open(own_path, "rb").read())
+    try:
+        cut = btd.crop(src, x0 - sx0, y0 - sy0, x1 - x0 + 1, y1 - y0 + 1)
+    except btd.BtdError as e:
+        sys.exit(f"--terrain-from: {e}")
+    if cut.heights_raw.shape != own.heights_raw.shape:
+        sys.exit(f"--terrain-from: cut {cut.heights_raw.shape} != this overlay's {own.heights_raw.shape}")
+    diff = np.abs(cut.heights_m() - own.heights_m())
+    data = btd.write(cut)
+    for rel in [o["btd_file"]] + list(o.get("btd_copies") or []):
+        with open(os.path.join(out, rel), "wb") as f:
+            f.write(data)
+    dropped = len(prm.pop("ltex_overrides", None) or [])
+    prm["hmin"], prm["hmax"] = src.hmin, src.hmax
+    rep = {"source": os.path.join(staging, so["btd_file"]), "source_world": so["world"],
+           "source_cells": {"x": [x0, x1], "y": [y0, y1]},
+           "height_diff_m": {"median": float(np.median(diff)), "p99": float(np.percentile(diff, 99)),
+                             "max": float(diff.max())},
+           "ltex_overrides_dropped": dropped}
+    prm["terrain_from"] = rep
+    return rep
 
 
 def apply_planet(prm, a):
@@ -812,6 +867,11 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-max", type=int, default=200, help="build: at most this many converted ground textures")
     ap.add_argument("--content-resources", default="", help="build --skyrim-ground: Starfield Tools\\ContentResources.zip")
     ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")
+    ap.add_argument("--terrain-from", default="",
+                    help="build: a staged exterior (the installed Tamriel, C:\\Modding\\staging\\skyrim_all) whose terrain "
+                         "file this overlay is cut from, cell for cell (a walled city on its parent's land): Tamriel's "
+                         "heights, textures, blend and grass slots as installed; no ground textures or LTEX overrides of "
+                         "its own (Tamriel's plugin carries them)")
     raw = sys.argv[1:] if argv is None else list(argv)
     raw, like = expand_like(raw)
     a, rest = ap.parse_known_args(join_coordinates(raw))

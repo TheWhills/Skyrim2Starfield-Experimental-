@@ -140,6 +140,20 @@ def write(t: Btd, level: int = 9) -> bytes:   # vanilla zlib header is 78 DA (be
     return b"".join(out)
 
 
+def crop(t: Btd, cx0: int, cy0: int, ncx: int, ncy: int) -> Btd:
+    """The ncx x ncy cells of t from cell column cx0, row cy0 (row 0 = south), as their own terrain: same height range
+    (raw heights unchanged), same LTEX table, same quadrant bytes and weights (2026-11-25: a walled city cut out of the
+    installed Tamriel's terrain, so it draws exactly Tamriel's ground there). Raises BtdError outside t."""
+    if cx0 < 0 or cy0 < 0 or ncx < 1 or ncy < 1 or cx0 + ncx > t.ncx or cy0 + ncy > t.ncy:
+        raise BtdError(f"cells [{cx0}, {cx0 + ncx}) x [{cy0}, {cy0 + ncy}) are not inside the "
+                       f"{t.ncx} x {t.ncy} terrain")
+    r0, c0, s = cy0 * CELL_SAMPLES, cx0 * CELL_SAMPLES, CELL_SAMPLES
+    mm = None if t.cell_minmax is None else t.cell_minmax[cy0:cy0 + ncy, cx0:cx0 + ncx].copy()
+    return Btd(t.version, t.hmin, t.hmax, list(t.ltex),
+               t.heights_raw[r0:r0 + ncy * s, c0:c0 + ncx * s].copy(), t.weights[r0:r0 + ncy * s, c0:c0 + ncx * s].copy(),
+               t.quad_map[cy0 * 2:(cy0 + ncy) * 2, cx0 * 2:(cx0 + ncx) * 2].copy(), mm)
+
+
 # 2026-11-24 (owner's Rift label test, docs/terrain/skyrim-objects.md): every 50 m quadrant that used byte value 3
 # (table entry 2) drew the default ground (table entry 0) instead of its five textures; after swapping that entry to the
 # end of the table (same textures, other byte values) the same ground showed its real textures. Values 8 and 14 were

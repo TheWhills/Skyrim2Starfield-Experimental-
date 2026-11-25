@@ -601,3 +601,23 @@ open PRs (#34 QA PASS, #35 in progress), local team state, next steps. Removed a
 docs/ai/agent-status.md refreshed from live sources. Shut down: guardian proxy stopped, local model unloaded, no
 background jobs left. Next session: re-run Vault 81 and the library, finish the Prydwen (same pinned build), then
 movable bodies for loose items.
+
+## 2026-11-25: Whiterun behind its gate, next to the installed Tamriel (Claude)
+
+**Done:** Whiterun (WhiterunWorld) built from the real Skyrim.esm as its own overlay world and installed into
+Starfield\Data next to the installed Tamriel, its gate linked both ways (docs/terrain/skyrim-cities.md "Whiterun through
+its gate"; `tools\owner\cities.ps1`). Terrain cut from the installed Tamriel's terrain file (`--terrain-from`), so every
+ground fix made to Tamriel applies; objects converted with the current converter (315 of 319 models, 112 s); the gates
+are new persistent load doors in SkyrimWorlds_Register.esm (`fo4sf.worldgates`), the two gate statics hidden in place;
+`scripts\deploy_skyrim_city.py` installs / uninstalls with a manifest.
+
+**Result (offline):** the cut equals Tamriel's file cell for cell; install -> uninstall leaves the Tamriel plugin's
+SHA-256 as before (e1879f01d348f2db...); the register plugin walks cleanly (10 records = HEDR count), its city world
+records remapped to the city's master index. **Not seen in game yet.**
+
+**Corrections:** (1) skyrimland took a child world's own LAND whenever it had any, also with "Use Land Data" set:
+Whiterun's overlay would have been sized to its 7 own-LAND cells (the 2026-10-14 doc said "own LAND: used as is"); now
+the flag wins (evidence: in cell (4, -1) Whiterun's walls stand 2.0 - 3.9 m above Tamriel's land, 13 - 16 m above the
+city's own). (2) register_worlds.py overwrote both CNAM fields of Nirn's PNDT (the world list and a 1-byte field of
+another component). (3) cities.ps1 (2026-11-10) could not have run: `--like C:\Modding\staging\skyrim_all` needs a
+build_command.txt that folder does not have.

@@ -113,13 +113,15 @@ def group_bytes(typ: bytes, recs: List[bytes]) -> bytes:
 
 
 def build(recs: List[Tuple[bytes, bytes, list, int]], info: Dict, author: str = "Skyrim2Starfield",
-          masters=("Starfield.esm",), children: Optional[Dict[int, Tuple[int, list]]] = None) -> bytes:
+          masters=("Starfield.esm",), children: Optional[Dict[int, Tuple[int, list]]] = None,
+          tail: bytes = b"", tail_records: int = 0, tail_fids=()) -> bytes:
     """A master plugin holding recs [(type, template header, subs, FormID)], one top group per type in first-seen
     order. children {FormID: (group type, [records])}: a record's child group written right after it (a quest's
     topics: type 10; a topic's responses: type 7), labelled with that FormID, recursively (the child records may
-    have children of their own)."""
+    have children of their own). tail: whole top groups written after those (e.g. worldgates.world_groups), holding
+    tail_records records; tail_fids their FormIDs (for the next object ID)."""
     children = children or {}
-    count = [0]
+    count = [tail_records]
 
     def rec_and_children(typ, header, subs, fid) -> bytes:
         count[0] += 1
@@ -134,6 +136,7 @@ def build(recs: List[Tuple[bytes, bytes, list, int]], info: Dict, author: str = 
         by_type.setdefault(typ, []).append(rec_and_children(typ, header, subs, fid))
     every = list(recs) + [k for _g, kids in children.values() for k in kids]
     own = [fid & 0xFFFFFF for _t, _h, _s, fid in every if fid >> 24 == len(masters)]
+    own += [fid & 0xFFFFFF for fid in tail_fids if fid >> 24 == len(masters)]
     next_id = max(own + [FIRST_OBJECT - 1]) + 1
     tes4_subs = [(b"HEDR", struct.pack("<fII", info["hedr_version"], count[0], next_id)),
                  (b"CNAM", zs(author))]
@@ -141,7 +144,7 @@ def build(recs: List[Tuple[bytes, bytes, list, int]], info: Dict, author: str = 
         tes4_subs += [(b"MAST", zs(m)), (b"DATA", bytes(8))]
     data = b"".join(subrecord_bytes(s, d) for s, d in tes4_subs)
     tes4 = struct.pack("<4sIII", b"TES4", len(data), MASTER, 0) + bytes(4) + struct.pack("<HH", info["form_version"], 0)
-    return tes4 + data + b"".join(group_bytes(t, r) for t, r in by_type.items())
+    return tes4 + data + b"".join(group_bytes(t, r) for t, r in by_type.items()) + tail
 
 
 def new_form_id(index: int, masters: int = 1) -> int:
