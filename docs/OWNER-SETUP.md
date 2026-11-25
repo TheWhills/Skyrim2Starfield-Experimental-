@@ -311,8 +311,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
 8q. (2026-11-25) Snow on rocks (Starfield's global snow layer on Skyrim's snowy cells). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\snow_layer.ps1      (-Off removes it)
-   Claude ran it on 2026-11-25. In game: rocks about 80 m north of SKY_TamrielRiverwoodSpawn and at Hollyfrost Farm
-   should have snow on top; Riverwood itself none.
+   Result (2026-11-25): no snow in game; the engine ignores the cell layer outdoors. Removed again from the staging.
 8p. (2026-11-25) Ground textures at Skyrim's size, gentler bumps (verified in game: matches the roads). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\ground_heights.ps1
    (Claude ran it with -NormalStrength 0.5. Other bump strengths: -NormalStrength 0.35 flatter, 0.7 more relief;

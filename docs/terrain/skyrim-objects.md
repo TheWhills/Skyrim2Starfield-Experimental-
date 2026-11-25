@@ -1000,8 +1000,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   the exterior cells where at least 25 % of the placed Skyrim objects carry a snow directional material: 685 of 2,402
   object cells (GL_Snow_Light_01 on 112 where Skyrim's Light snow materials dominate, GL_Snow_Medium_01 on 573), then
   rewrites the WRLD cell index (esm_patch.set_cell_fields; world_offsets.write). Verified offline: of 230,873
-  records only those 685 CELLs (each gained XCGD) and the WRLD (OFST / CLSZ) changed. Unverified: whether the
-  engine honours XCGD on exterior cells; the layer covers every object in a cell, not only Skyrim's snowy ones.
+  records only those 685 CELLs (each gained XCGD) and the WRLD (OFST / CLSZ) changed.
+  **In game (owner, same day): no snow on the rocks** at a snowy farm cell (snowy ground, frosted trees, rocks bare).
+  Supported hypothesis: the engine ignores XCGD on exterior cells (vanilla sets it only on interiors); exteriors take
+  the biome's layer. Removed from the staging (snow_layer.py --off); the next install drops it.
+  Next option (not started): bake the snow into the objects, as Skyrim's material does, for up-facing surfaces.
+  Turning about the vertical axis does not change which faces point up, only tilt does: the 22,207 placed snowy
+  references use 651 Skyrim models and need ~4,100 model + tilt variants at 15 degree steps (3,200 at 20; median
+  tilt 11.8 degrees, 37 % under 5). Needs Starfield's layered materials with a vertex-colour (or mask) blend,
+  unresearched.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
