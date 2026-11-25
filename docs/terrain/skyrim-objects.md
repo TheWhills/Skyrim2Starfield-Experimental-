@@ -1048,7 +1048,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   it show rock and their texture-painted snow (supported hypothesis, from the side-by-sides; read as an axis instead,
   MountainCliff02 came out 75 % white). Vertex share with snow: RockL02 48 % (was 49), MountainTrim01 52 % (85),
   MountainTrimSlab 35 % (24). Clean rebuild (staging restored from .before_snow_bake, the 16,373 files of the first
-  build removed): 5,136 variants of 630 meshes, 20,870 references, 459 MB; plugin checked as before. In game: pending.
+  build removed): 5,136 variants of 630 meshes, 20,870 references, 459 MB; plugin checked as before.
+  **Owner, in game: boulders right; the Mountain1P cliffs now bare where Skyrim shows streaks of snow on ledges.**
+  Left as is (owner, 2026-11-25). Open: Skyrim weights snow per pixel (the rock's normal map + a noise texture), we per
+  vertex. Proposed, not done: a per-material blend mask from the rock's normal map (bright where the texture faces
+  outward) in place of vanilla's snow pattern, and Mountain1P back with snow from above, limited by it. Also open:
+  that cliff's rock reads warm beige where Skyrim's is cool grey (check whether it got its snow texture swap).
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
