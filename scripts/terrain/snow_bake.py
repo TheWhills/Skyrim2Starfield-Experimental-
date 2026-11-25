@@ -51,7 +51,10 @@ def snow_groups(objects: dict, export_refs: list, dmat: dict, alts: dict, model=
         if want and exterior.source_key(r["model"]) != want:
             continue
         alt = alts.get(r["base_formkey"])
-        tilt = skyrimsnow.tilt_key(exterior.ref_matrix(r["rot"]), step)
+        axis = skyrimsnow.snow_dir(d.get("projection") or (0.0, 0.0, -1.0))
+        if axis is None:                              # projects from below (SnowMaterialMountain1P): no baked snow
+            continue
+        tilt = skyrimsnow.tilt_key(exterior.ref_matrix(r["rot"]), step, axis)
         ident = f"{d['edid']}:{d['max_angle']:g}:{tilt[0]}.{tilt[1]}"
         key = exterior.source_key(r["model"], alt) + SNOW_SEP + hashlib.sha1(ident.lower().encode()).hexdigest()[:8]
         job = jobs.setdefault(key, {"nif": "meshes\\" + r["model"].replace("/", "\\").lstrip("\\"), "alt": alt,

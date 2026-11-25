@@ -7,24 +7,44 @@ outdoors (owner's test). Its own snow-on-rock material blends a snow layer over 
 vertex colours carry a snow mask computed from the vertex normals: turning about the vertical axis does not change
 which faces point up, only tilt does (variants per tilt, see tilt_key).
 
-Mask (an approximation; Skyrim's exact falloff formula is not known): with d = dot(world normal, up),
-  mask = clamp((d - bias) / scale, 0, 1), and 0 where the normal is more than the base's max angle from up.
-bias / scale come from the MATO (SnowMaterialObject1P: falloff bias 0.4, scale 0.35 -> snow from d 0.4, full from
-d 0.75, i.e. from about 66 degrees to 41 degrees off vertical).
+Weight (2026-11-25, after the owner's side-by-sides showed whole cliffs white): Skyrim's own formula as Community
+Shaders' re-implementation of SSE's lighting shader has it (Lighting.hlsl, PROJECTED_UV; a supported hypothesis, not
+Bethesda's binary):
+  w = smoothstep(0, 1, 5 * (0.1 + dot(normal, dir) * vertex alpha - bias - scale * noise))
+with dir the material's projection axis (MATO DATA floats 4-6), the mesh's own painted vertex alpha (Skyrim's mountain
+skirts carry 0 there), bias / scale = MATO falloff bias / scale and noise a world-space noise texture (0..1), here its
+mean 0.5 (per vertex). dir = minus the projection vector (SnowMaterialObject1P projects along (0, 0, -1): snow
+from above, as on Skyrim's boulders). A material whose dir points down (SnowMaterialMountain1P projects along
+(0, 0, +1)) gets no baked snow: Skyrim's cliffs with it show rock and their texture-painted snow (owner's
+side-by-sides, 2026-11-25; with the axis read as "upper end" they came out ~75 % white). A supported hypothesis.
+The base's DNAM max angle still cuts off faces further than it from dir. The earlier clamp((d - bias) / scale) put Mountain*1P snow (bias 0.2, scale 0.3) on
+every face up to 60 degrees from vertical, straight up.
 """
 import dataclasses
 import math
 from typing import Optional, Tuple
 
 DEFAULT_FALLOFF = (0.35, 0.4)        # (scale, bias): SnowMaterialObject1P, MATO DATA floats 0 and 1
+NOISE_MEAN = 0.5
 
 
-def mask(d: float, scale: float, bias: float, max_angle_deg: float = 90.0) -> float:
-    """Snow amount 0..1 for a surface whose normal has dot d with world up."""
+def snow_dir(projection) -> Optional[Tuple[float, float, float]]:
+    """The direction snow comes from: minus the material's projection vector, normalised; None when that points
+    down or the vector is zero (no baked snow)."""
+    x, y, z = (-float(c) for c in projection)
+    ln = math.sqrt(x * x + y * y + z * z)
+    if ln < 1e-9 or z <= 1e-6:
+        return None
+    return x / ln, y / ln, z / ln
+
+
+def mask(d: float, scale: float, bias: float, max_angle_deg: float = 90.0, alpha: float = 1.0,
+         noise: float = NOISE_MEAN) -> float:
+    """Snow weight 0..1 for a surface whose normal has dot d with the projection axis (Skyrim's smoothstep)."""
     if d < math.cos(math.radians(min(max(max_angle_deg, 0.0), 180.0))) - 1e-9:
         return 0.0
-    s = max(scale, 1e-6)
-    return min(1.0, max(0.0, (d - bias) / s))
+    x = min(1.0, max(0.0, 5.0 * (0.1 + d * alpha - bias - scale * noise)))
+    return x * x * (3.0 - 2.0 * x)
 
 
 def _mv(a, v):
@@ -32,9 +52,10 @@ def _mv(a, v):
 
 
 def with_snow(shape, up_model: Tuple[float, float, float], scale: float, bias: float, max_angle_deg: float = 90.0):
-    """The shape with its vertex colours' red and alpha set to the snow mask (green / blue kept, 255 when the shape had
-    no colours). up_model: world up expressed in the model's frame (a tilted reference: R^T z). Normals go through the
-    shape's own rotation into the model frame. A shape without normals is returned unchanged (no snow)."""
+    """The shape with its vertex colours' red and alpha set to the snow weight (green / blue kept, 255 when the shape
+    had no colours). up_model: the projection axis in the model's frame (a tilted reference: R^T dir). Normals go
+    through the shape's own rotation into the model frame; the shape's own vertex alpha (Skyrim's painted snow limit)
+    multiplies the dot, as in Skyrim. A shape without normals is returned unchanged (no snow)."""
     if not shape.normals:
         return shape
     rot = shape.rotation
@@ -46,17 +67,24 @@ def with_snow(shape, up_model: Tuple[float, float, float], scale: float, bias: f
         d = (m[0] * up_model[0] + m[1] * up_model[1] + m[2] * up_model[2]) / ln if ln > 1e-9 else 0.0
         if not math.isfinite(d):                    # a degenerate (NaN) normal: no snow (SPatioWallEntrance.nif)
             d = 0.0
-        v = int(round(255 * mask(d, scale, bias, max_angle_deg)))
+        alpha = cols[i][3] / 255.0 if cols else 1.0
+        v = int(round(255 * mask(d, scale, bias, max_angle_deg, alpha)))
         g, b = (cols[i][1], cols[i][2]) if cols else (255, 255)
         out.append((v, g, b, v))
     return dataclasses.replace(shape, colors=out)
 
 
-def tilt_key(m, step_deg: float = 15.0) -> Tuple[int, int]:
-    """(tilt bucket, direction bucket) of a reference's rotation matrix (row-major, exterior.ref_matrix): world up in
-    the model frame (R^T z = row 3), its angle from the model's up in step_deg buckets and, when tilted, its compass
-    direction in buckets of about step_deg along the circle. (0, 0) = upright."""
-    up = (m[6], m[7], m[8])
+def in_model(m, v) -> Tuple[float, float, float]:
+    """A world vector in a reference's model frame: R^T v (m row-major, exterior.ref_matrix)."""
+    return (m[0] * v[0] + m[3] * v[1] + m[6] * v[2], m[1] * v[0] + m[4] * v[1] + m[7] * v[2],
+            m[2] * v[0] + m[5] * v[1] + m[8] * v[2])
+
+
+def tilt_key(m, step_deg: float = 15.0, world_dir=(0.0, 0.0, 1.0)) -> Tuple[int, int]:
+    """(tilt bucket, direction bucket) of the projection axis world_dir seen in a reference's model frame (m:
+    row-major rotation, exterior.ref_matrix): its angle from the model's up in step_deg buckets and, when tilted, its
+    compass direction in buckets of about step_deg along the circle. (0, 0) = straight up in the model."""
+    up = in_model(m, world_dir)
     tilt = math.degrees(math.acos(max(-1.0, min(1.0, up[2]))))
     tb = int(round(tilt / step_deg))
     if tb == 0:

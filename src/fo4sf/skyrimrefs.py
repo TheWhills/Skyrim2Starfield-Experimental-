@@ -140,7 +140,7 @@ def directional_materials(data_dir: str, plugins=LOAD_ORDER) -> dict:
                     if typ == b"MATO":
                         data = next((bytes(d) for s, d in fields if s == b"DATA" and len(d) >= 8), b"")
                         mato[key(fid)] = (next((fo4land.zstring(d) for s, d in fields if s == b"EDID"), ""),
-                                          [round(float(v), 4) for v in struct.unpack_from("<2f", data)] if data else None)
+                                          [round(float(v), 4) for v in struct.unpack_from("<7f", data)] if len(data) >= 28 else None)
                         continue
                     d = next((d for s, d in fields if s == b"DNAM" and len(d) >= 8), None)
                     ang, m = struct.unpack_from("<fI", d) if d is not None else (0.0, 0)
@@ -153,7 +153,8 @@ def directional_materials(data_dir: str, plugins=LOAD_ORDER) -> dict:
             edid, fall = mato.get(v[1], ("", None))
             out[b] = {"max_angle": v[0], "material": v[1], "edid": edid}
             if fall:
-                out[b]["falloff"] = fall
+                out[b]["falloff"] = fall[:2]
+                out[b]["projection"] = fall[4:7]
     return out
 
 

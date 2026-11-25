@@ -24,20 +24,30 @@ def shape(normals, colors=None, rotation=(1, 0, 0, 0, 1, 0, 0, 0, 1)):
 
 class MaskTest(unittest.TestCase):
     def test_mask(self):
+        # Skyrim's smoothstep(0, 1, 5 (0.1 + d a - bias - scale noise)), noise at its mean 0.5
         self.assertEqual(skyrimsnow.mask(1.0, 0.35, 0.4), 1.0)            # flat top
         self.assertEqual(skyrimsnow.mask(0.3, 0.35, 0.4), 0.0)            # steep side
-        self.assertAlmostEqual(skyrimsnow.mask(0.575, 0.35, 0.4), 0.5)
-        self.assertEqual(skyrimsnow.mask(0.6, 0.35, 0.4, max_angle_deg=45), 0.0)   # beyond the base's max angle
+        self.assertAlmostEqual(skyrimsnow.mask(0.575, 0.35, 0.4), 0.5)    # x = 0.5: smoothstep 0.5
+        self.assertEqual(skyrimsnow.mask(1.0, 0.35, 0.4, alpha=0.0), 0.0)        # painted out by vertex alpha
+        self.assertEqual(skyrimsnow.mask(0.6, 0.35, 0.4, max_angle_deg=45), 0.0)  # beyond the base's max angle
+
+    def test_snow_dir(self):
+        self.assertEqual(skyrimsnow.snow_dir((0, 0, -1)), (0.0, 0.0, 1.0))           # SnowMaterialObject1P: from above
+        self.assertIsNone(skyrimsnow.snow_dir((0, 0, 1)))                           # SnowMaterialMountain1P: none
+        d = skyrimsnow.snow_dir((-0.4, -0.41, -0.82))                               # MountainTrim1P: tilted, upward
+        self.assertGreater(d[2], 0.8)
+        self.assertAlmostEqual(sum(c * c for c in d), 1.0)
 
     def test_with_snow(self):
-        s = shape([(0, 0, 1), (1, 0, 0), (0, 0, -1)], colors=[(10, 20, 30, 40)] * 3)
+        s = shape([(0, 0, 1), (1, 0, 0), (0, 0, -1), (0, 0, 1)],
+                  colors=[(10, 20, 30, 255)] * 3 + [(10, 20, 30, 0)])
         out = skyrimsnow.with_snow(s, (0, 0, 1), 0.35, 0.4)
-        self.assertEqual(out.colors, [(255, 20, 30, 255), (0, 20, 30, 0), (0, 20, 30, 0)])
+        self.assertEqual(out.colors, [(255, 20, 30, 255), (0, 20, 30, 0), (0, 20, 30, 0), (0, 20, 30, 0)])
         # a shape turned upside down in the model: its local "down" faces up
         flip = shape([(0, 0, -1)], rotation=(1, 0, 0, 0, -1, 0, 0, 0, -1))
         self.assertEqual(skyrimsnow.with_snow(flip, (0, 0, 1), 0.35, 0.4).colors, [(255, 255, 255, 255)])
-        # a tilted reference: world up seen tilted in the model frame
-        t = math.radians(60)
+        # a tilted reference: the snow direction seen tilted in the model frame
+        t = math.radians(30)
         out = skyrimsnow.with_snow(shape([(0, 0, 1)]), (math.sin(t), 0, math.cos(t)), 0.35, 0.4)
         self.assertEqual(out.colors[0][0], round(255 * skyrimsnow.mask(math.cos(t), 0.35, 0.4)))
         bare = shape([])
@@ -97,9 +107,15 @@ class GroupTest(unittest.TestCase):
                   {"formkey": "b", "base_formkey": "S", "model": "Rocks\\R.nif", "rot": [0, 0, 2.0], "base_editor_id": "RSnow"},
                   {"formkey": "c", "base_formkey": "S", "model": "Rocks\\R.nif", "rot": [0.6, 0, 0], "base_editor_id": "RSnow"},
                   {"formkey": "d", "base_formkey": "P", "model": "Rocks\\R.nif", "rot": [0, 0, 0], "base_editor_id": "R"}]
-        dm = {"S": {"edid": "SnowMaterialObject1P", "max_angle": 90.0, "falloff": [0.35, 0.4]}}
+        dm = {"S": {"edid": "SnowMaterialObject1P", "max_angle": 90.0, "falloff": [0.35, 0.4],
+                    "projection": [0, 0, -1]},
+              "M": {"edid": "SnowMaterialMountain1P", "max_angle": 90.0, "falloff": [0.35, 0.2],
+                    "projection": [0, 0, 1]}}
+        export.append({"formkey": "e", "base_formkey": "M", "model": "Rocks\R.nif", "rot": [0, 0, 0],
+                       "base_editor_id": "Cliff"})
+        objects["refs"].append({"src": "e"})
         jobs, refs = S.snow_groups(objects, export, dm, {})
-        self.assertEqual(set(refs), {"a", "b", "c"})                     # the plain rock stays plain
+        self.assertEqual(set(refs), {"a", "b", "c"})        # the plain rock and the from-below material: no snow
         self.assertEqual(refs["a"], refs["b"])                           # yaw does not matter
         self.assertNotEqual(refs["a"], refs["c"])                        # tilt does
         self.assertTrue(all(k.startswith("meshes\\rocks\\r.nif|snow:") for k in jobs))

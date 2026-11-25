@@ -1038,6 +1038,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   no snow there, guarded. Plugin checked: 4,880 STATs added, 22,207 references repointed, only the STAT group grew,
   group sizes consistent. Not done: object LOD (distant objects) still without snow; the snow edge pattern is
   vanilla's SnowLayeredSmooth01 height mask, and the falloff formula our approximation.
+  **Owner's Skyrim side-by-sides (same day): boulders right, but whole cliffs and mountain pieces fully white** where
+  Skyrim shows rock. Correction: the falloff above was a guess. Skyrim's formula, as Community Shaders' re-implementation
+  of SSE's Lighting.hlsl has it (PROJECTED_UV; supported, not Bethesda's binary): w = smoothstep(0, 1, 5 (0.1 + dot(n,
+  dir) x vertex alpha - bias - scale x noise)), dir from the material's projection vector, the mesh's painted vertex alpha
+  (MountainTrim01's skirt: 65 % of vertices below half, one piece all 0; we had overwritten it), noise 0..1 (here its
+  mean). Sign: dir = minus the projection (SnowMaterialObject1P (0, 0, -1): snow from above, as on Skyrim's boulders);
+  SnowMaterialMountain1P projects along (0, 0, +1), so its 1,337 references get no baked snow: Skyrim's cliffs with
+  it show rock and their texture-painted snow (supported hypothesis, from the side-by-sides; read as an axis instead,
+  MountainCliff02 came out 75 % white). Vertex share with snow: RockL02 48 % (was 49), MountainTrim01 52 % (85),
+  MountainTrimSlab 35 % (24). Clean rebuild (staging restored from .before_snow_bake, the 16,373 files of the first
+  build removed): 5,136 variants of 630 meshes, 20,870 references, 459 MB; plugin checked as before. In game: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
