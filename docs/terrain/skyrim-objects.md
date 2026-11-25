@@ -897,7 +897,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   RockGrass01; real grass (SnowGrass01) has alpha test and 90 % transparent texels. The build gave every grass the
   two-sided, back-lit vegetation shader; now only shapes Skyrim cuts by alpha get it (skyrim_grass_native.alpha_cut),
   solid ones keep the plain material (report model_info "opaque"). To test in game.
-* **Snowy road (owner)**: Skyrim draws LSnowCobble01 (snow-dusted cobbles) there; it is one of the 13 Skyrim ground
+* **Borrowed grass (owner's side-by-side, 2026-11-24, verified offline)**: Skyrim's snowy slope shows no lumps;
+  ours hundreds. RockGrassSnow01 belongs to LSnowRocks01wGrass (0.2 % of Tamriel), which has no slot and borrows
+  LSnow01's (28 %); cover_plan gave a slot the grass of every Skyrim texture painted with it, so all snow grew the
+  lumps (and all LRiverMud01 the frozen-marsh grass of LFrozenMarshLichen01). Now a slot grows only its own Skyrim
+  texture's grass; borrowers are listed in "skipped". 11 of 66 mapped Skyrim textures borrow a converted slot.
+* **Snowy road (owner)**: unresolved. Correction: LSnowCobble01 borrows LSnow01 (snow), so a brown cobbled road is
+  probably not LSnowCobble01 (claimed above without the road's position); more likely LDirtPath01 / LDirtSnowPath01
+  with their Tamriel-wide mean tint (Starfield has no per-vertex ground colour). Needs the road's position. LSnowCobble01 is one of the 13 Skyrim ground
   textures without a slot of their own (55 spare vanilla LTEX records: listed by no vanilla BTD, referenced by no
   record; Skyrim's land uses 68), so it borrows a converted texture of its category (brown cobbles). Option: one slot
   per look-alike group (13 groups) frees about 15 slots, at the cost of Skyrim's no-grass twins (grass where Skyrim

@@ -86,8 +86,10 @@ class RecordTests(unittest.TestCase):
         ltex_grass = {0xA: [0x100, 0x101], 0xB: [0x102], 0xD: [0x101, 0x103]}
         sky = {0xA: "LFieldGrass01", 0xB: "LTundra", 0xC: "LDirt", 0xD: "LFieldGrass02"}
         plan = sfgrass.cover_plan(mapping, overrides, ltex_grass, sky)
-        self.assertEqual(plan["slots"], {0x31: [0x100, 0x101, 0x103]})
-        self.assertEqual([s["skyrim"] for s in plan["skipped"]], ["LTundra"])
+        # 2026-11-24: LFieldGrass02 only borrows LFieldGrass01's slot: its grass (0x103) stays out of that slot
+        self.assertEqual(plan["slots"], {0x31: [0x100, 0x101]})
+        self.assertEqual([s["skyrim"] for s in plan["skipped"]], ["LTundra", "LFieldGrass02"])
+        self.assertIn("borrows", plan["skipped"][1]["why"])
 
 
 class SurveyTests(unittest.TestCase):

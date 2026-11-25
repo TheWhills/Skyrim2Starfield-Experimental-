@@ -207,6 +207,12 @@ def cover_plan(mapping_skyrim: Dict, overrides: List[Dict], ltex_grass: Dict[int
             skipped.append({"skyrim": v.get("edid"), "starfield": v.get("starfield"),
                             "why": "painted with a vanilla Starfield texture (would grow on vanilla planets)"})
             continue
+        if v.get("starfield") != "SKYG_" + (v.get("edid") or ""):
+            # 2026-11-24 (owner): LSnowRocks01wGrass (0.2 % of Tamriel) borrows LSnow01's slot, and its rock lumps
+            # grew on every snowfield (28 %; none in Skyrim). A borrower's grass would cover its host everywhere.
+            skipped.append({"skyrim": v.get("edid"), "starfield": v.get("starfield"),
+                            "why": "borrows another Skyrim texture's slot (its grass would grow on all of that one)"})
+            continue
         lst = slots.setdefault(slot, [])
         lst += [g for g in grass if g not in lst]
     return {"slots": slots, "skipped": skipped}
