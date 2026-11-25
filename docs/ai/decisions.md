@@ -2916,3 +2916,13 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   the 261 MB are identical to staged files: a later optimization, needs material rewrites); "- Textures.ba2"
   (would need the DDS archive format; not tried).
 
+## 2026-11-25: Skyrim's directional snow as Starfield's global layer per cell (Claude)
+- Decision: Skyrim's snow directional materials (STAT DNAM -> MATO) become Starfield's global snow layer (vanilla
+  GL_Snow_Light_01 / GL_Snow_Medium_01) set per exterior cell (CELL XCGD) where >= 25 % of the placed Skyrim objects
+  carry snow; written into the staged plugin in place (esm_patch.set_cell_fields), cell index rewritten.
+- Why: Starfield has no per-object directional material; its global layer is the engine's own world-space,
+  top-down layer. A biome is too coarse (one for all of Tamriel); a cell follows Skyrim's snowy regions.
+- Alternatives: snow baked into each mesh (every reference is rotated differently: one model per rotation);
+  the biome's EFSD (snow on all of Tamriel); a custom GL material with Skyrim's snow texture (next, once the
+  mechanism works outdoors).
+

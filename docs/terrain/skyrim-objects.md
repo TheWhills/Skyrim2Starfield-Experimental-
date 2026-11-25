@@ -989,6 +989,19 @@ Max Density; what a vanilla grass model needs. Two tools:
   state: ground textures 2.44 m per repeat, rotation 0, normal maps at 0.5 (originals kept in
   skyrim_all\ground_normals_original), height maps integrated from the half-strength normal maps.
   make_skyrim_overlay.py builds this by default (--skyrim-ground-normal-strength 0.5).
+* **Snow on rocks (2026-11-25; offline checks done, in game pending)**: Skyrim draws snow on the up-facing surfaces of
+  rocks, cliffs, trims and stockades with a directional material (STAT DNAM: f32 max angle, u32 MATO;
+  SnowMaterialObject1P 13,337 of our placed objects, SnowMaterialMountainTrim1P 2,255, ...: 22,348 in all; MATO DATA
+  holds falloff, noise, a projection vector (0, 0, -1) and a single-pass snow colour). Starfield has no such object
+  shader; its equivalent is the global layer (Materials/GlobalLayerSystem/GL_Snow_Light_01 / Medium / Heavy:
+  SourceDirection, directionality, world-space noise, triplanar texture), chosen per biome (BIOM EFSD, 303 vanilla
+  biomes) or per cell (CELL XCGD; vanilla uses XCGD only on 3 interior cells). Our biome covers all of Tamriel (and
+  its coating once covered every object: the ocean slime, 2026-10-17), so scripts/terrain/snow_layer.py writes XCGD on
+  the exterior cells where at least 25 % of the placed Skyrim objects carry a snow directional material: 685 of 2,402
+  object cells (GL_Snow_Light_01 on 112 where Skyrim's Light snow materials dominate, GL_Snow_Medium_01 on 573), then
+  rewrites the WRLD cell index (esm_patch.set_cell_fields; world_offsets.write). Verified offline: of 230,873
+  records only those 685 CELLs (each gained XCGD) and the WRLD (OFST / CLSZ) changed. Unverified: whether the
+  engine honours XCGD on exterior cells; the layer covers every object in a cell, not only Skyrim's snowy ones.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
