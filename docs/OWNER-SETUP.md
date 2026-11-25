@@ -309,6 +309,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
+8p. (2026-11-25) Sharper ground where textures meet (full-resolution blend height maps). Starfield closed:
+   powershell -ExecutionPolicy Bypass -File tools\owner\ground_heights.ps1
 8o. (2026-11-25) Exterior objects lit like Skyrim (the road's sheen in low sun). Starfield closed:
    powershell -ExecutionPolicy Bypass -File tools\owner\object_specular.ps1
    (converts every exterior object again with its Skyrim specular, sky_all then sky_alt, about an hour; copies the

@@ -217,6 +217,29 @@ class HeightMapTests(unittest.TestCase):
         self.assertAlmostEqual(float(v.mean()), 128.0, delta=4.0)     # brightness removed: no texture always "on top"
         self.assertGreater(float(v.std()), 20.0)
 
+    def test_height_keeps_the_colour_resolution_by_default(self):
+        """2026-11-25: a quarter-resolution height map made the per-pixel layer blend blurry (owner's close-up)."""
+        import numpy as np
+        from fo4sf import textures as tx
+        px = np.zeros((64, 64, 4), np.uint8)
+        px[..., :3] = np.random.default_rng(2).integers(60, 200, (64, 64, 1))
+        px[..., 3] = 255
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "s.dds")
+            tx.write_dds_dx10(src, 64, 64, tx.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+            dst = os.path.join(tmp, "out", "h.dds")
+            with mock.patch.object(textures, "texconv", lambda *a, **k: None):
+                skyrimground.height_from_diffuse(open(src, "rb").read(), "texconv", dst)
+            h = tx.read_dds_header(open(dst, "rb").read())
+        self.assertEqual((h["width"], h["height"]), (64, 64))
+
+    def test_box_blur_wrap_matches_rolling(self):
+        import numpy as np
+        a = np.random.default_rng(3).random((13, 17))
+        for k, ax in ((1, 0), (4, 1), (6, 0)):
+            ref = sum(np.roll(a, d, axis=ax) for d in range(-k, k + 1)) / (2 * k + 1)
+            self.assertTrue(np.allclose(skyrimground.box_blur_wrap(a, k, ax), ref))
+
 
 class TintTests(unittest.TestCase):
     def test_land_colours_and_vertex_tints(self):

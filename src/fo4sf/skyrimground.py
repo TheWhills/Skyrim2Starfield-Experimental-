@@ -245,11 +245,26 @@ def flat_textures(staging: str, texconv: str, prefix: str = "skyrim") -> dict:
     return out
 
 
-def height_from_diffuse(diffuse_dds: bytes, texconv: str, dst: str, size: int = 256) -> None:
+def box_blur_wrap(a, k: int, axis: int):
+    """Mean of the 2k + 1 neighbours along one axis, wrapping round (a tiling texture): the same as averaging
+    np.roll(a, d) for d in -k..k, by a cumulative sum."""
+    import numpy as np
+    n = a.shape[axis]
+    idx = np.arange(-k - 1, n + k) % n
+    p = np.cumsum(np.take(a, idx, axis=axis), axis=axis)
+    hi = np.take(p, np.arange(2 * k + 1, n + 2 * k + 1), axis=axis)
+    lo = np.take(p, np.arange(0, n), axis=axis)
+    return (hi - lo) / (2 * k + 1)
+
+
+def height_from_diffuse(diffuse_dds: bytes, texconv: str, dst: str, size: Optional[int] = None) -> None:
     """A blend height map for one Skyrim ground texture, from its own detail: luminance, high-passed (texture-scale
     detail only, no overall brightness), normalised to mean 128 and a fixed spread so that every texture competes on
     equal terms when Terrain1Layer blends layers by height. With flat height maps the BTD's coarse 3-bit layer weights
-    showed as hard-edged blobs (owner's Jemison close-ups: white snow patches over dirt). Written as BC4 to dst."""
+    showed as hard-edged blobs (owner's Jemison close-ups: white snow patches over dirt). Written as BC4 to dst.
+    size: None (default) keeps the colour texture's resolution, as vanilla terrain does (DirtFootprints01: colour,
+    normal and height all 2048). The earlier 256 made the per-pixel blend follow a quarter-resolution map: blurred
+    dark holes with bright rims wherever two ground textures meet (owner's close-up beside a road, 2026-11-25)."""
     import tempfile
     import numpy as np
     from fo4sf import textures
@@ -263,13 +278,13 @@ def height_from_diffuse(diffuse_dds: bytes, texconv: str, dst: str, size: int = 
     px = np.frombuffer(raw[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
     rgb = px.reshape(h["height"], h["width"], 4)[:, :, :3].astype(np.float32)
     lum = rgb @ np.array([0.2126, 0.7152, 0.0722], np.float32)
-    step = max(1, min(lum.shape) // size)               # box-downsample to about `size`
+    step = max(1, min(lum.shape) // size) if size else 1    # box-downsample to about `size`
     hh, ww = (lum.shape[0] // step) * step, (lum.shape[1] // step) * step
     lum = lum[:hh, :ww].reshape(hh // step, step, ww // step, step).mean(axis=(1, 3))
     k = max(1, min(lum.shape) // 16)                     # high-pass: minus a wide (wrapping) box blur
-    blur = lum.copy()
+    blur = lum.astype(np.float64)
     for ax in (0, 1):
-        blur = sum(np.roll(blur, d, axis=ax) for d in range(-k, k + 1)) / (2 * k + 1)
+        blur = box_blur_wrap(blur, k, ax)
     det = lum - blur
     sd = float(det.std()) or 1.0
     out = np.clip(128.0 + det / sd * 40.0, 0, 255).astype(np.uint8)

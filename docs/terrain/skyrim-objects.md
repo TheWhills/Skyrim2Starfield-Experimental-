@@ -925,6 +925,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   by tools/owner/alt_textures.ps1 (in-place plugin patch; docs/ai/decisions.md). Not done: object LOD still shows
   the plain textures from far away; Skyrim's directional snow material (DNAM MATO, the snow on top of rocks) is a
   separate feature, not translated.
+* **Ground looks low quality beside the road (owner's close-ups, 2026-11-25, verified offline)**: the road mesh's dirt
+  was crisp, the ground beside it blurred, with smeared dark holes and bright rims. Not resolution: the terrain's
+  LDirt02 and the road's Dirt02 are both 1024 x 1024 with full mips, as Skyrim's (Skyrim's snow01: 2048, kept). Not
+  relief: MaxDisplacement 0. Not template leftovers: the ground .mat holds only our five maps. Cause: the blend height
+  maps (skyrimground.height_from_diffuse) were 256 x 256, a quarter of the colour's width; Starfield blends two ground
+  textures per pixel by height, so the soft Skyrim-style blend followed a blurred pattern. Vanilla terrain keeps
+  colour, normal and height at one resolution (DirtFootprints01: all 2048, tiled every 3.2 m). Fix: full-resolution
+  height maps (same pattern: each new map averaged down correlates >= 0.986 with the old, median 0.994; +31 MB).
+  scripts/terrain/ground_heights.py rebuilds the staged ones; tools/owner/ground_heights.ps1 reinstalls. In game:
+  pending. Texel density itself (1024 px per 4.88 m) is Skyrim's own and stays.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
