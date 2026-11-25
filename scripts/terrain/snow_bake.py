@@ -32,6 +32,7 @@ import alt_textures_patch as atp  # noqa: E402
 
 FLAT_AO = "Data\\textures\\skyrim\\ground\\_flat_ao.dds"          # in the staged exterior (terrain build)
 FLAT_HEIGHT = "Data\\textures\\skyrim\\ground\\_flat_height.dds"
+SNOW_DIFFUSE, SNOW_NORMAL = "textures\\landscape\\Snow01.dds", "textures\\landscape\\Snow01_n.dds"
 BACKUP = ".before_snow_bake"
 SNOW_SEP = "|snow:"
 
@@ -86,29 +87,42 @@ def convert(a, jobs: dict) -> dict:
     plain_material = conv._shape_material
     snow_mats = {}
 
-    def snow_material(mat):
-        """The two-layer snow material for one of our opaque single-layer materials (None: keep it as it is)."""
-        if not mat or mat == conv.neutral or "\\effects\\" in mat.lower() or "decals" in mat.lower():
-            return None
-        if mat in snow_mats:
-            return snow_mats[mat]
+    def material_files(mat):
         with open(os.path.join(staging, *mat.replace("\\", "/").split("/")), encoding="utf-8-sig") as f:
             one = json.load(f)
-        files = {c["Index"]: c["Data"]["FileName"] for o in one["Objects"] for c in o.get("Components", [])
-                 if c.get("Type") == "BSMaterial::MRTextureFile"}
-        if 2 in files or not all(s in files for s in (0, 1, 3)):     # cutouts (opacity) stay single-layer
-            snow_mats[mat] = None
+        return {c["Index"]: c["Data"]["FileName"] for o in one["Objects"] for c in o.get("Components", [])
+                if c.get("Type") == "BSMaterial::MRTextureFile"}
+
+    # Skyrim's snow (Landscape\Snow01: the snowy ground's texture, and the one Skyrim's glacier snow materials name)
+    snow_one = conv.skyrim_material(SNOW_DIFFUSE, SNOW_NORMAL, False, False, 0)
+    if not snow_one:
+        raise SystemExit("Skyrim's snow texture did not convert")
+    sf = material_files(snow_one)
+    snow_files = {0: sf[0], 1: sf[1], 3: sf[3], 5: FLAT_AO, 6: FLAT_HEIGHT}
+
+    def snow_material(mat, shape):
+        """The two-layer snow material for one of our opaque single-layer materials (None: keep it as it is), its
+        snow layer tiled at Skyrim's snow scale on this shape's UVs (skyrimsnow.snow_uv_scale)."""
+        if not mat or mat == conv.neutral or "\\effects\\" in mat.lower() or "decals" in mat.lower():
             return None
-        stem = os.path.splitext(mat.replace("\\", "/").split("/", 2)[-1])[0]
+        k = skyrimsnow.snow_uv_scale(shape)
+        if (mat, k) in snow_mats:
+            return snow_mats[(mat, k)]
+        files = material_files(mat)
+        if 2 in files or not all(s in files for s in (0, 1, 3)):     # cutouts (opacity) stay single-layer
+            snow_mats[(mat, k)] = None
+            return None
+        stem = os.path.splitext(mat.replace("\\", "/").split("/", 2)[-1])[0] + f"_s{k:g}"
         rel = f"materials/{M.ASSET_PREFIX}/snow/{stem}.mat"
         built = cm.build_snow_mat(template, "SKY_Snow_" + os.path.basename(stem),
-                                  {0: files[0], 1: files[1], 3: files[3], 5: FLAT_AO, 6: FLAT_HEIGHT})
+                                  {0: files[0], 1: files[1], 3: files[3], 5: FLAT_AO, 6: FLAT_HEIGHT},
+                                  snow_files=snow_files, snow_uv_scale=k)
         p = os.path.join(staging, *rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write(cm.dump_mat(built))
-        snow_mats[mat] = rel.replace("/", "\\")
-        return snow_mats[mat]
+        snow_mats[(mat, k)] = rel.replace("/", "\\")
+        return snow_mats[(mat, k)]
 
     items, failures = {}, {}
     for key in sorted(jobs):
@@ -120,7 +134,7 @@ def convert(a, jobs: dict) -> dict:
 
         def shape_material(src, s, *args, **kw):
             m = plain_material(src, s, *args, **kw)
-            return snow_material(m) or m
+            return snow_material(m, s) or m
         conv._shape_material = shape_material
         r = conv.convert_nif(job["nif"], alt_textures=job["alt"], out_suffix="_snow" + key.rsplit(":", 1)[-1])
         if not r["ok"]:
@@ -130,6 +144,27 @@ def convert(a, jobs: dict) -> dict:
                       "model": r["out_name"].replace("/", "\\") + ".nif", "snow_materials": sum(
                           1 for m in r["materials"] if m and "\\snow\\" in m)}
     return items, failures
+
+
+def replace_own(src_root: str, dst_root: str, items: dict) -> int:
+    """A rerun replaces the snow variants' own files that changed: their models and the snow materials (never
+    shared textures). Staging files may be hard links: removed first."""
+    import filecmp
+    own = {os.path.normcase(os.path.join("meshes", *i["model"].split("\\"))) for i in items.values()}
+    n = 0
+    for tree in ("meshes", os.path.join("materials", "skyrim", "snow")):
+        for root, _dirs, files in os.walk(os.path.join(src_root, tree)):
+            for fn in files:
+                s = os.path.join(root, fn)
+                rel = os.path.relpath(s, src_root)
+                if tree == "meshes" and os.path.normcase(rel) not in own:
+                    continue
+                d = os.path.join(dst_root, rel)
+                if os.path.exists(d) and not filecmp.cmp(s, d, shallow=False):
+                    os.remove(d)
+                    shutil.copy2(s, d)
+                    n += 1
+    return n
 
 
 def main(argv=None):
@@ -172,6 +207,7 @@ def main(argv=None):
         if not os.path.exists(path + BACKUP):
             shutil.copy2(path, path + BACKUP)
     n = atp.copy_new(os.path.join(a.out, "convert"), os.path.join(a.staging, "Data"), os.path.join(a.out, "copied.txt"))
+    n["replaced"] = replace_own(os.path.join(a.out, "convert"), os.path.join(a.staging, "Data"), items)
     if data != plugin:
         with open(plugin_path + ".tmp", "wb") as f:
             f.write(data)
@@ -179,7 +215,7 @@ def main(argv=None):
     atp.save(os.path.join(a.staging, "objects.json"), objects2)
     atp.save(os.path.join(a.staging, "formids.json"), formids2)
     print(f"{rep['new bases']:,} snow STATs added, {rep['references moved']:,} references moved; Data: "
-          f"{n['copied']:,} files ({n['bytes'] / 1e6:,.1f} MB)"
+          f"{n['copied']:,} files ({n['bytes'] / 1e6:,.1f} MB), {n['replaced']:,} replaced"
           + "".join(f"; {k}: {v}" for k, v in rep.items() if k not in ("new bases", "references moved")))
     return 0
 

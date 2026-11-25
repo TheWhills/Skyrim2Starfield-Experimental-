@@ -109,3 +109,30 @@ class GroupTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SkyrimSnowLayerTest(unittest.TestCase):
+    def test_snow_layer_files_and_scale(self):
+        t = SnowMaterialTest().template()
+        base = {s: f"Data/rock/{s}.dds" for s in cm.SNOW_BASE_SLOTS}
+        snow = {s: f"Data/snow01/{s}.dds" for s in cm.SNOW_BASE_SLOTS}
+        t["Objects"][-1]["Components"].append({"Type": "BSMaterial::TextureSetID", "Index": 0,
+                                               "Data": {"ID": "res:0000000A:0005B6FE:A05E0763"}})
+        t["Objects"].append({"ID": "res:0000000A:0005B6FE:A05E0763", "Parent": "res:AAAAAAAA:0005A3FB:A06346EA",
+                             "Components": []})
+        m = cm.build_snow_mat(t, "S", base, snow_files=snow, snow_uv_scale=2.0)
+        sets = [{c["Index"]: c["Data"]["FileName"] for c in o["Components"] if c["Type"] == "BSMaterial::MRTextureFile"}
+                for o in m["Objects"][1:]]
+        self.assertIn(base, sets)
+        self.assertIn(snow, sets)
+        with self.assertRaises(ValueError):
+            cm.build_snow_mat(t, "S", base, snow_files={0: "x"})
+
+    def test_snow_uv_scale(self):
+        # a 340 x 340 unit square mapped once: the snow (170.67 units) repeats twice across it
+        sq = Fo4Shape(name=b"q", translation=(0, 0, 0), rotation=(1, 0, 0, 0, 1, 0, 0, 0, 1), scale=1.0, shader_ref=-1,
+                      alpha_ref=-1, skin_ref=-1, positions=[(0, 0, 0), (340, 0, 0), (340, 340, 0), (0, 340, 0)],
+                      uvs=[(0, 0), (1, 0), (1, 1), (0, 1)], normals=[], tangents=[], colors=[],
+                      triangles=[(0, 1, 2), (0, 2, 3)], skinned=False)
+        self.assertEqual(skyrimsnow.snow_uv_scale(sq), 2.0)
+        self.assertEqual(skyrimsnow.snow_uv_scale(shape([(0, 0, 1)])), 1.0)          # no triangles / UVs

@@ -75,6 +75,31 @@ def tilt_up(key: Tuple[int, int], step_deg: float = 15.0) -> Tuple[float, float,
     return math.sin(t) * math.cos(a), math.sin(t) * math.sin(a), math.cos(t)
 
 
+SNOW_REPEAT_UNITS = 2048.0 / 12.0     # Skyrim's snow material UV scale (MATO DATA float 3: 170.667), = its ground
+
+
+def snow_uv_scale(shape, repeat_units: float = SNOW_REPEAT_UNITS, step: float = 0.25) -> float:
+    """The snow layer's UV scale on a shape so that Skyrim's snow repeats every repeat_units of model space, as on
+    Skyrim's rocks and ground: the shape's own texture repeat (sqrt(area / UV area), Skyrim units) / repeat_units,
+    rounded to step (fewer materials), at least step. 1.0 for a shape without UVs."""
+    pos, uvs, tri = shape.positions, shape.uvs, shape.triangles
+    if not uvs or not tri:
+        return 1.0
+    s = float(getattr(shape, "scale", 1.0) or 1.0)
+    area = uv = 0.0
+    for a, b, c in tri:
+        p, q, r = pos[a], pos[b], pos[c]
+        u = (q[0] - p[0], q[1] - p[1], q[2] - p[2])
+        v = (r[0] - p[0], r[1] - p[1], r[2] - p[2])
+        cx, cy, cz = u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]
+        area += 0.5 * math.sqrt(cx * cx + cy * cy + cz * cz) * s * s
+        uv += 0.5 * abs((uvs[b][0] - uvs[a][0]) * (uvs[c][1] - uvs[a][1]) - (uvs[b][1] - uvs[a][1]) * (uvs[c][0] - uvs[a][0]))
+    if uv <= 0 or area <= 0:
+        return 1.0
+    k = math.sqrt(area / uv) / repeat_units
+    return max(step, round(k / step) * step)
+
+
 def falloff(mato_data: Optional[bytes]) -> Tuple[float, float]:
     """(scale, bias) from a MATO DATA field (floats 0 and 1); DEFAULT_FALLOFF when missing."""
     import struct

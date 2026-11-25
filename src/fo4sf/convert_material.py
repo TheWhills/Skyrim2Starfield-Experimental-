@@ -255,31 +255,42 @@ def _ref(obj: dict, comp_type: str, index: int = 0):
                  if c.get("Type") == comp_type and c.get("Index", 0) == index), None)
 
 
-def build_snow_mat(template: dict, name: str, base_files: dict, uv_scale: float = 1.0) -> dict:
-    """A two-layer snow material from SNOW_TEMPLATE_MAT: base_files {slot: game path} for layer 1 (slots
-    SNOW_BASE_SLOTS: colour, normal, roughness, AO, height) replace what the template's layer 1 inherits; layer 1's UV
-    scale is set to uv_scale (the template tiles its rock 3x); the snow layer and the blender stay vanilla. The
-    template's distant LOD material (all snow) is dropped. Object IDs are remapped as in build_from_template."""
-    missing = [s for s in SNOW_BASE_SLOTS if s not in base_files]
-    if missing:
-        raise ValueError(f"snow material {name}: no file for slots {missing}")
-    mat = build_from_template(template, name, {})
-    mat.pop("Filename", None)                    # the template's own path; our working materials carry none
-    objs = _objects_by_id(mat)
-    root = mat["Objects"][0]
-    root["Components"] = [c for c in root["Components"] if c.get("Type") != "BSMaterial::LODMaterialID"]
-    layer = objs[_ref(root, "BSMaterial::LayerID", 0)]
+def _set_layer(objs: dict, layer: dict, files: dict, uv_scale: float):
+    """A layer's own texture files (replacing what it inherits) and UV scale."""
     material = objs[_ref(layer, "BSMaterial::MaterialID")]
     texset = objs[_ref(material, "BSMaterial::TextureSetID")]
     texset["Components"] = [c for c in texset.get("Components", []) if c.get("Type") not in
                             ("BSMaterial::MRTextureFile", "BSMaterial::TextureReplacement")]
-    for slot in SNOW_BASE_SLOTS:
-        texset["Components"].append({"Data": {"FileName": base_files[slot]}, "Index": slot,
+    for slot in sorted(files):
+        texset["Components"].append({"Data": {"FileName": files[slot]}, "Index": slot,
                                      "Type": "BSMaterial::MRTextureFile", "Version": 2})
     uv = objs.get(_ref(layer, "BSMaterial::UVStreamID"))
     for c in (uv or {}).get("Components", []):
         if c.get("Type") == "BSMaterial::Scale":
             c["Data"]["Value"]["Data"].update({"x": _num(uv_scale), "y": _num(uv_scale)})
+
+
+def build_snow_mat(template: dict, name: str, base_files: dict, uv_scale: float = 1.0,
+                   snow_files: dict = None, snow_uv_scale: float = None) -> dict:
+    """A two-layer snow material from SNOW_TEMPLATE_MAT: base_files {slot: game path} for layer 1 (slots
+    SNOW_BASE_SLOTS: colour, normal, roughness, AO, height) replace what the template's layer 1 inherits; layer 1's UV
+    scale is set to uv_scale (the template tiles its rock 3x). snow_files (same slots) and snow_uv_scale do the same
+    for layer 2, the snow (2026-11-25: Skyrim's Snow01 instead of vanilla's; None keeps vanilla's). The blender stays
+    vanilla. The template's distant LOD material (all snow) is dropped. Object IDs are remapped as in
+    build_from_template."""
+    for files, what in ((base_files, "base"), (snow_files or {s: "" for s in SNOW_BASE_SLOTS}, "snow")):
+        missing = [s for s in SNOW_BASE_SLOTS if s not in files]
+        if missing:
+            raise ValueError(f"snow material {name}: no {what} file for slots {missing}")
+    mat = build_from_template(template, name, {})
+    mat.pop("Filename", None)                    # the template's own path; our working materials carry none
+    objs = _objects_by_id(mat)
+    root = mat["Objects"][0]
+    root["Components"] = [c for c in root["Components"] if c.get("Type") != "BSMaterial::LODMaterialID"]
+    _set_layer(objs, objs[_ref(root, "BSMaterial::LayerID", 0)], base_files, uv_scale)
+    if snow_files:
+        snow = objs[_ref(root, "BSMaterial::LayerID", 1)]
+        _set_layer(objs, snow, snow_files, snow_uv_scale if snow_uv_scale is not None else 3.0)
     keep, todo = set(), [root]                   # drop what only the removed LOD material reached
     while todo:
         o = todo.pop()

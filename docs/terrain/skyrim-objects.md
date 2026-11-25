@@ -1022,7 +1022,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   approximation of Skyrim's falloff); every opaque material becomes the two-layer one (our maps in layer 1, flat AO /
   height). All of Tamriel: 22,207 references, 4,880 variants of 651 meshes. RockL02 alone: 593 references, 109
   variants, converted in 16 s; staged (109 STATs added, 593 references moved; plugin checked: only the STAT group
-  grew, 1,779 bytes of NAME changed, group sizes consistent). In game: pending (boulders north of the Riverwood spawn).
+  grew, 1,779 bytes of NAME changed, group sizes consistent).
+  In game (owner): the first look was at other rocks (the clicked one, 0A005037, is RockCliff08Snow_HeavySN, not in
+  the prototype). Diagnostic with the vertex-colour switch off: the boulders (player.moveto 0A018E40) showed the
+  snow layer as pale streaks all over: **the two-layer material loads and draws (verified in game)**.
+  Now Skyrim's snow: layer 2 is Skyrim's Landscape\Snow01 (the snowy ground's texture; Skyrim's glacier snow
+  materials name it, SnowMatShader.nif; the single-pass 1P materials' editor model ShaderBox.nif is not shipped),
+  tiled like Skyrim's (MATO material UV scale 170.67 units = the ground's 2.44 m): per shape, snow UV scale = the
+  shape's own texture repeat / 170.67 (RockL02: 2 and 2.25). Vertex-colour switch back on. In game: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a
