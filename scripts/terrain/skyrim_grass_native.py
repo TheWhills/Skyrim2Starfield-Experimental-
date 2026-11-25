@@ -532,6 +532,15 @@ def without_vertex_colours(sh):
     return dataclasses.replace(sh, colors=[])
 
 
+def alpha_cut(src, sh) -> bool:
+    """True when Skyrim cuts the shape by alpha (an NiAlphaProperty with alpha test or blending); False for solid
+    shapes such as the rock lumps of RockGrass01 / RockGrassSnow01."""
+    if not (0 <= sh.alpha_ref < len(src.blocks)):
+        return False
+    test, blend, _ref = skyrimnif.alpha_test(src, sh.alpha_ref)
+    return bool(test or blend)
+
+
 def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None,
                   keep_colours: bool = False, flat: bool = False, veg_template: dict = None,
                   blades: bool = False, back_faces: bool = True, terrain_tint: bool = False) -> str:
@@ -542,12 +551,14 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
     if raw is None:
         raise FileNotFoundError("not in the Skyrim archives")
     src = nifmod.parse(raw)
-    shapes, mats = [], []
+    shapes, mats, cut = [], [], set()
     every = skyrimnif.trishapes(src)
     for sh in every:
         m = conv._shape_material(src, sh, flat_normal_ok=True, albedo_tint=tint)
         if m is None:
             continue
+        if alpha_cut(src, sh):
+            cut.add(m)
         if blades:                       # 2026-11-24: cards cut into blade strips along their cut-out
             alpha = opacity_of(staging, m)
             if alpha is not None:
@@ -577,8 +588,13 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
                  if not rel.lower().endswith(".mat")}
     else:                            # our own material
         for m in sorted({x for x in mats if x}):
-            if veg_template is not None:     # rebuilt on the game's grass shader model
+            # rebuilt on the game's grass shader model; 2026-11-24: only cut-out shapes (blades, cards). Skyrim's rock
+            # "grass" (RockGrass01, RockGrassSnow01: no NiAlphaProperty, alpha 255) is solid lumps; the two-sided,
+            # back-lit vegetation shader drew them as dark fragments on the snow (owner): plain material instead
+            if veg_template is not None and m in cut:
                 rebuild_as_vegetation(staging, m, veg_template, terrain_tint)
+            elif veg_template is not None and info is not None:
+                info["opaque"] = True
             clamp_material(staging, m)       # Skyrim's grass textures clamp, Starfield wraps by default
     if geometry is not None:
         files = {rel: (with_geometry(d, geometry) if rel.lower().endswith(".nif") else d) for rel, d in files.items()

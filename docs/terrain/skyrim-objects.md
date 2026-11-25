@@ -891,6 +891,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   (Riverwood) were seen working. Why low values fail is open (unresolved). Fix: Starfield's 7 per-mask placeholders
   head the table, unreferenced, as in vanilla tables (btd.with_head_padding; the overlay build, refresh_btd recompute
   and btd_head_pad.py for a staging; grass_hook.ps1 runs it), so every byte we use is 8 or above.
+* **Padding verified (owner, 2026-11-24): "that worked"** - the Rift grows its fall grass, real textures shown.
+* **Snow "grass" (owner's side-by-sides)**: dark flat fragments on the snow. They are RockGrassSnow01 (on LSnow01):
+  in Skyrim a solid lump model (no NiAlphaProperty, texture alpha 255 everywhere, a snowy rock texture), as is
+  RockGrass01; real grass (SnowGrass01) has alpha test and 90 % transparent texels. The build gave every grass the
+  two-sided, back-lit vegetation shader; now only shapes Skyrim cuts by alpha get it (skyrim_grass_native.alpha_cut),
+  solid ones keep the plain material (report model_info "opaque"). To test in game.
+* **Snowy road (owner)**: Skyrim draws LSnowCobble01 (snow-dusted cobbles) there; it is one of the 13 Skyrim ground
+  textures without a slot of their own (55 spare vanilla LTEX records: listed by no vanilla BTD, referenced by no
+  record; Skyrim's land uses 68), so it borrows a converted texture of its category (brown cobbles). Option: one slot
+  per look-alike group (13 groups) frees about 15 slots, at the cost of Skyrim's no-grass twins (grass where Skyrim
+  suppressed it); needs a full ground conversion. Owner's decision pending.
 * **Positions in game**: the merge shift changes between sessions (2026-11-24: (-2200, +1500) m, earlier
   (-37.6, +47.0)); ground_at.py needs `player.getpos` right after `coc` of the same session (--spawn-at).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
