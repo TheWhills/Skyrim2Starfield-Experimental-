@@ -948,7 +948,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   (skyrimground.integrate_normals, Frankot-Chellappa; slopes -nx/nz, -ny/nz). Verified on vanilla terrain: the
   integral of each vanilla normal map against its own height map correlates 0.99 SnowRough01, 0.80
   RockGraniteSmooth01, 0.63 DirtFootprints01 (hand-painted prints on top). Ours now: heights agree with their normal
-  maps (slope correlation 0.69-0.75), sd 25, p1-p99 68-193 (LDirt02). In game: pending.
+  maps (slope correlation 0.69-0.75), sd 25, p1-p99 68-193 (LDirt02).
+  **Owner, in game: looks the same.** Three different height maps changed nothing visible, so the height map is not
+  what the owner sees (correction: the parallax hypothesis above is not supported). Also ruled out: the colour
+  texture has no dark holes (rendered flat); the ground's normal map is byte-identical to the road object's; our
+  normal maps are no stronger than vanilla terrain's (|xy| mean 0.49-0.78, vanilla 0.60-0.70).
+  **Cause (verified offline): the texture repeat.** Skyrim's meshes made to blend into its ground with the ground's
+  own textures (road edges, rock piles, drifts: 177 shapes, Dirt02, Rocks01, Snow01, FieldGrass01, CoastBeach01,
+  TundraRocks01 ...) tile at a median 175 units = 2.49 m, i.e. 2048 / 12 units (a twelfth of a land quadrant) =
+  2.44 m. Our terrain used 4.88 m (owner's side-by-sides by eye), so every ground texture drew at twice Skyrim's
+  size: pebbles, blades and leaves twice as large and half as sharp. skyrimground.SKYRIM_TILING_M = 2.44 m;
+  scripts/terrain/ground_tiling.py sets the staged materials. In game: pending.
 * **Road shines unlike the terrain (owner's screenshots, 2026-11-25)**: in low sun the road's cobbles caught a sheen the
   ground beside them did not. Cause (verified offline): every converted object got one uniform roughness, 190 / 255
   ("fairly rough"), whatever Skyrim's shader said; the terrain's ground is fully matte (255, chosen after the owner saw a

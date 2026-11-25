@@ -1,6 +1,6 @@
-# Sharper ground (2026-11-25): the Skyrim ground textures' blend height maps at full resolution (were 256 x 256: blurred
-# dark holes with bright rims where two ground textures meet). Rebuilds them in the staged exterior
-# (scripts\terrain\ground_heights.py) and reinstalls it. Starfield must be closed.
+# Sharper ground (2026-11-25): the ground textures at Skyrim's own size (2.44 m per repeat, was 4.88:
+# scripts\terrain\ground_tiling.py) and height maps from each texture's normal map (scripts\terrain\ground_heights.py),
+# in the staged exterior; then reinstalls it. Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\ground_heights.ps1
 param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
@@ -16,6 +16,8 @@ function Fail($t) { Write-Host "FAILED: $t" -ForegroundColor Red; exit 1 }
 if (-not $NoInstall -and (Get-Process Starfield -ErrorAction SilentlyContinue)) { Fail "Starfield is running: close it first" }
 python -I scripts\terrain\ground_heights.py --skyrim "$SKY\Skyrim.esm" --staging $Staging --texconv $Texconv
 if ($LASTEXITCODE -ne 0) { Fail "ground_heights" }
+python -I scripts\terrain\ground_tiling.py --staging $Staging
+if ($LASTEXITCODE -ne 0) { Fail "ground_tiling" }
 if ($NoInstall) { exit 0 }
 if (Test-Path "$SF\Data\SkyrimExterior.deploy.json") {
     python -I scripts\deploy_skyrim_exterior.py uninstall --starfield $SF --staging $Staging

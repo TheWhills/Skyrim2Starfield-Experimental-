@@ -224,7 +224,12 @@ def checker_dds(size: int = 256, cells: int = 8) -> bytes:
             return f.read()
 
 
-SKYRIM_TILING_M = 4096.0 / 12.0 / 70.0   # ~4.88 m: Skyrim-sized detail in the owner's side-by-sides (9.75 was 2x)
+# Skyrim's ground texture repeat: 2048 / 12 units (a twelfth of a land quadrant) = 2.44 m. Measured 2026-11-25 on the
+# meshes Skyrim made to blend into its ground with the ground's own textures: 177 shapes of road edges, rock piles and
+# drifts (Dirt02, Rocks01, Snow01, FieldGrass01, CoastBeach01, TundraRocks01 ...) tile at a median 175 units. The
+# earlier 4.88 m (owner's side-by-sides by eye; 9.75 before) drew every ground texture at twice Skyrim's size: pebbles,
+# blades and leaves twice as large and half as sharp beside the same texture on objects (owner's close-ups).
+SKYRIM_TILING_M = 2048.0 / 12.0 / 70.0   # ~2.44 m
 
 
 def flat_textures(staging: str, texconv: str, prefix: str = "skyrim") -> dict:
