@@ -925,6 +925,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   by tools/owner/alt_textures.ps1 (in-place plugin patch; docs/ai/decisions.md). Not done: object LOD still shows
   the plain textures from far away; Skyrim's directional snow material (DNAM MATO, the snow on top of rocks) is a
   separate feature, not translated.
+* **Alternate textures in game (owner, 2026-11-25, verified)**: the Hollyfrost road draws snowy. Coverage (offline):
+  every placed reference whose base has alternate textures got its variant, 25,935 of 25,935; of Skyrim.esm's other
+  references with such bases, 63 fail conversion as their plain model does and 82 are skipped by design (effects,
+  water). **Gap found (unresolved, not alternate textures):** the export reads Skyrim.esm only. The official masters
+  add references to Tamriel that we never place: Update.esm 7,795 (7,006 TREE: TreeThicket01 941, TreeDeadShrub
+  731, their Snow versions 675 / 599, reach shrubs, mountain flowers; 573 CellWaterCurrentMarker), Dawnguard 2,013
+  (Fort Dawnguard, Castle Volkihar platforms, rocks), HearthFires 2,483 (1,868 initially disabled or enable-parented:
+  house plots), Dragonborn 49; plus about 590 overrides of Skyrim.esm references (moves, disables). Adding them means
+  new REFRs in cell groups, so the WRLD cell index (OFST) must be rewritten too.
 * **Snowy road (owner, first note)**: superseded by the entry above. Correction: LSnowCobble01 borrows LSnow01 (snow), so a brown cobbled road is
   probably not LSnowCobble01 (claimed above without the road's position); more likely LDirtPath01 / LDirtSnowPath01
   with their Tamriel-wide mean tint (Starfield has no per-vertex ground colour). Needs the road's position. LSnowCobble01 is one of the 13 Skyrim ground
