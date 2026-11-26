@@ -160,6 +160,11 @@ district": earth and moss lying over the market's cobbles and filling a stair in
   then, a fixed model that Tamriel's archives also hold under the same path (Whiterun's walls, rock piles) goes into the
   city's archive, which loads after Tamriel's (`deploy_skyrim_city.pack_plan` now compares contents, not only paths):
   both worlds show the fixed model while the city is installed.
+* **Rebuilt and reinstalled** (2026-11-26, `cities.ps1 -NoInstall` then `deploy_skyrim_city.py` uninstall / install,
+  Starfield closed): 315 of 319 models in 107 s, 94 shapes cut (52 band materials); WRMainRoadMarket's grass is now 4
+  parts with thresholds 230 / 187 / 158 / 137 over the uncut stone floor. Offline check as before (only "origins on the
+  terrain", expected). City archive 1,406 files, 158 MB (was 977, 152 MB), of which 44 replace an older copy in
+  Tamriel's archives; 1,239 files (538 MB) left to Tamriel's. **In game unverified.**
 
 ### The other cities (plan, with numbers from Skyrim.esm)
 | City | Land | Own LAND | Gate pairs (Skyrim) | Plan |

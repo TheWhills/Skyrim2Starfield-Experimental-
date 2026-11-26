@@ -635,4 +635,5 @@ grass: Skyrim draws 37.6 % of it). 105 shapes in Whiterun's models (walls' moss,
 **Fix:** the converter cuts such shapes along their vertex alpha, in 4 bands with a raised cutout threshold each
 (docs/terrain/skyrim-cities.md "In game: the market's ground"; tests/test_vertex_alpha.py); shrubs and tree leaves
 (Tree_Anim: vertex alpha = sway) left alone. The city archive now also packs files whose contents differ from Tamriel's
-copy, so shared models (walls, rocks) show the fix while the city is installed. **Not seen in game yet.**
+copy, so shared models (walls, rocks) show the fix while the city is installed. Rebuilt and reinstalled 2026-11-26
+with Starfield closed (94 shapes cut; archive 158 MB, 44 files newer than Tamriel's copy). **Not seen in game yet.**
