@@ -44,6 +44,9 @@ EFFECTS_RE = re.compile(r"^\\?effects[\\/]", re.I)
 # placed water planes (activators using meshes\water\*.nif): FO4 renders them with its water type; converted as a
 # static they would be an opaque grey sheet at water level, so they stay out until water is translated
 WATER_RE = re.compile(r"^\\?water[\\/]", re.I)
+# Skyrim's waterfall / rapids effect models (effects\FXWaterfall*.nif, ...): converted with water (classify water=True;
+# their foam and falling sheets become scrolling effect materials, skyrimconvert.skyrim_water_effect_material)
+WATER_EFFECT_MODEL_RE = re.compile(r"[\\/]fx(waterfall|rapids|whitewater|water)", re.I)
 
 
 def source_key(model: str, alt=None) -> str:
@@ -81,7 +84,7 @@ def classify(ref: dict, convert_types=CONVERT_TYPES, water: bool = False) -> Tup
         return "skip", "no_model", what
     if MARKER_RE.search(model):
         return "skip", "editor_marker", f"editor marker model {model}"
-    if EFFECTS_RE.search(model):
+    if EFFECTS_RE.search(model) and not (water and WATER_EFFECT_MODEL_RE.search("\\" + model)):
         return "skip", "effect", f"effect mesh (fog, light beam or particles) {model}"
     if WATER_RE.search(model) and not water:
         return "skip", "water", f"placed water plane {model}: no water translation yet (as a static it is an opaque sheet)"

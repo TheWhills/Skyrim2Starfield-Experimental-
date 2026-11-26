@@ -167,6 +167,26 @@ def editor_id(source, taken):
     return name
 
 
+def water_physics_template(a):
+    """The vanilla water volume (skyrimconvert.WATER_PHYSICS_NIF's bhkPhysicsSystem blob: one box, water's collision
+    filter) from the Starfield archives (--starfield-data), or None: water models then get no volume (no splash)."""
+    from fo4sf import ba2, nif as nifmod, skyrimconvert
+    if not getattr(a, "starfield_data", None) or not os.path.isdir(a.starfield_data):
+        return None
+    for fn in sorted(os.listdir(a.starfield_data)):
+        if fn.lower().startswith("starfield - meshes") and fn.lower().endswith(".ba2"):
+            arc = ba2.Ba2(os.path.join(a.starfield_data, fn))
+            i = arc.find(skyrimconvert.WATER_PHYSICS_NIF)
+            if i is None:
+                continue
+            n = nifmod.parse(arc.read(i))
+            for k in range(len(n.blocks)):
+                if n.type_of(k) == "bhkPhysicsSystem":
+                    blob = n.blocks[k]
+                    return bytes(blob[4:4 + struct.unpack_from("<I", blob, 0)[0]])
+    return None
+
+
 def box_template_nif(a) -> bytes:
     """The vanilla box-collision NIF: --collision-template, else read from the Starfield archives (--starfield-data)."""
     if a.collision_template:
@@ -396,6 +416,7 @@ def cmd_convert(a):
                                                      prefix=ASSET_PREFIX, max_texture=a.max_texture,
                                                      sf_mesh_template=sf_mesh, stair_layer=stair_layer(a))
                 conv.flame_style = getattr(a, "flame_style", "particles")
+                conv.water_physics_template = water_physics_template(a)   # splash: a water volume per water model
                 conv.particle_fire = parse_particle_fire(getattr(a, "particle_fire", ""))
                 conv.candle_style = getattr(a, "candle_style", "skyrim")
                 if getattr(a, "candle_exposure", None) is not None:
@@ -956,6 +977,25 @@ def model_water(objects, bases, placed, items, cell_min, cell_max, form=None, ov
 
 
 WATER_EDID_SUFFIX = "_Water"
+# owner 2026-11-26: "still so green", wants blue; three water types side by side in Whiterun (types the owner has not
+# compared yet: WaterOceanClear, WaterClearSterile; WaterOceanDark is the one picked for Tamriel's rivers)
+WATER_TYPE_PROBE = "wrwaterpool=0560CF;wrtreecirclewater=062BE5;0560D0"
+
+
+def water_type_for(spec: str, name: str) -> str:
+    """The WATR (hex) for a water model from --water-type: "" (the template's own), one hex FormID, or
+    "pattern=hex;...;default hex" (first pattern found in the model's name, case-insensitive, else the default)."""
+    default = ""
+    for part in (p.strip() for p in (spec or "").split(";")):
+        if not part:
+            continue
+        if "=" in part:
+            pat, hexid = (x.strip() for x in part.split("=", 1))
+            if pat.lower() in name.lower():
+                return hexid
+        else:
+            default = part
+    return default
 
 
 def model_water_exact(objects, bases, placed, items, water_type="") -> dict:
@@ -983,8 +1023,10 @@ def model_water_exact(objects, bases, placed, items, water_type="") -> dict:
                   "water_template": skyrimsea.WATER16M}
             if wm.get("bounds"):
                 nb["bounds"] = wm["bounds"]
-            if water_type:
-                nb["water_type"] = water_type
+            wt = water_type_for(water_type, wm["model"])
+            if wt:
+                nb["water_type"] = wt
+                rep.setdefault("types", {})[edid] = wt
             base_of[b["key"]] = len(objects["bases"])
             objects["bases"].append(nb)
             rep["bases"] += 1
@@ -1048,10 +1090,13 @@ def cmd_stage(a):
                   f"shapes; {wr['sloped']:,} sloped water shapes left out"
                   + (f"; {wr['tilted']} tilted references left without water" if wr["tilted"] else ""))
     else:
-        wr = model_water_exact(objects, bases, placed, items, getattr(a, "water_type", "") or "")
+        spec = getattr(a, "water_type", "") or ""
+        wr = model_water_exact(objects, bases, placed, items, WATER_TYPE_PROBE if spec == "probe" else spec)
         if wr["refs"]:
             print(f"water: {wr['refs']:,} references of {wr['bases']} water models, each a copy of the vanilla water "
                   f"activator {wr['template']} (water type: {wr['water_type']})")
+            for edid, wt in sorted((wr.get("types") or {}).items()):
+                print(f"  {edid}: WATR {wt}")
     if a.interiors:
         n_ld, missing = mark_load_doors(objects, a.interiors)
         print(f"load doors into the interiors: {n_ld} placed as persistent DOOR references"
@@ -1286,7 +1331,8 @@ def main(argv=None):
                     help="stage: Skyrim water as squares of scaled vanilla 16 m water pieces (the first way) instead of "
                          "each model's own water surface on a copy of the vanilla water activator")
     ap.add_argument("--water-type", default="",
-                    help="stage: WATR FormID (hex, Starfield.esm) for the water activators; default the vanilla "
+                    help="stage: WATR FormID (hex, Starfield.esm) for the water activators, or per model "
+                         "'pattern=hex;...;default' (water_type_for; 'probe' = WATER_TYPE_PROBE); default the vanilla "
                          "activator's own (WaterClearLake 01C0CC)")
     ap.add_argument("--no-spin", action="store_true",
                     help="stage: leave turning parts (the mill water wheel) out instead of placing them on a copy of "

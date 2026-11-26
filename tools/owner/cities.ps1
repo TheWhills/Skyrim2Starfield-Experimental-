@@ -24,6 +24,9 @@ param(
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$Texconv = "C:\Modding\tools\texconv.exe",
+    # water type of the cities' water (make_skyrim_objects.py stage --water-type): "probe" = three types side by side in
+    # Whiterun (pool WaterOceanClear, Gildergreen ring WaterClearSterile, the rest WaterOceanDark), or one WATR hex
+    [string]$WaterType = "probe",
     [switch]$NoInstall,
     [switch]$Uninstall
 )
@@ -70,7 +73,7 @@ foreach ($c in $Cities) {
     python -I scripts\terrain\make_skyrim_objects.py convert --work $w --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume
     if ($LASTEXITCODE -ne 0) { Fail "$c convert" }
     Step "$c 4/6 stage + plugin"
-    python -I scripts\terrain\make_skyrim_objects.py stage --work $w --terrain $terrain --out $out --sf-esm "$SF\Data\Starfield.esm"
+    python -I scripts\terrain\make_skyrim_objects.py stage --work $w --terrain $terrain --out $out --sf-esm "$SF\Data\Starfield.esm" --water-type $WaterType
     if ($LASTEXITCODE -ne 0) { Fail "$c stage" }
     Step "$c 5/6 check (a city on terraces fails 'object origins sit on the terrain': expected)"
     python -I scripts\terrain\make_skyrim_objects.py check --out $out | Select-String -Pattern "^\s+(ok|FAIL)"

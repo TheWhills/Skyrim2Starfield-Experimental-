@@ -336,9 +336,36 @@ def clip_vertex_alpha(s: nifmod.Fo4Shape, lo: float, hi: Optional[float] = None)
 # First way, 2026-11-26 (owner's test: tiled squares of scaled Water16mClearLake pieces, small ones far-green and a
 # patchwork): water_squares, kept as stage --water-squares. SLOPED shapes (streams down steps) go into the water model
 # too (a probe: water on a sloped mesh is unverified; the vanilla Waterfall_Outside_02.mat probe drew nothing).
-WATER_FLAT_UNITS = 24.0            # z range (game units) up to which a water shape counts as flat (WRStairsStreamL: 10)
+WATER_EFFECT = r"fxwhitewater|fxfluid|fxwatertile|fxwaterfall|fxrapid|fxfoam"   # water effect textures (foam, falls)
+WATER_FLAT_UNITS = 24.0           # z range (game units) up to which a water shape counts as flat (WRStairsStreamL: 10)
 WATER_SUFFIX = "_water"
 WATER_MATERIAL = "Materials\\Water\\WaterPlaceholder.mat"          # vanilla Water16m.nif's own
+
+
+# Splash / "in water" (2026-11-26, owner: no splash stepping in): vanilla Water\Water16m.nif's physics is one plain
+# hknpBoxShape body on the root node, 16 x 16 m from the surface down 16 m (Water16m1mDepth: 1 m) - the box template
+# sfcollision.box_blob patches (verified: check_template passes, read_box (0, 0, -8) +- (8, 8, 8)). A water model gets
+# the same: the vanilla water blob (its collision filter = water) as a box over its flat surfaces, WATER_DEPTH_M deep.
+WATER_DEPTH_M = 1.5
+WATER_PHYSICS_NIF = "meshes/water/water16m.nif"
+
+
+def water_volume(shapes, template: bytes, depth_m: float = WATER_DEPTH_M) -> Optional[bytes]:
+    """The vanilla water box blob reshaped to cover the given (flat) water shapes: their footprint's bounds in the
+    model (metres), from the highest surface down depth_m. None without shapes."""
+    from . import sfcollision
+    pts = []
+    for s in shapes:
+        R, t, sc = s.rotation, s.translation, s.scale
+        pts += [tuple((sc * sum(R[3 * a + k] * v[k] for k in range(3)) + t[a]) * UNIT for a in range(3))
+                for v in s.positions]
+    if not pts:
+        return None
+    lo = [min(p[a] for p in pts) for a in range(3)]
+    hi = [max(p[a] for p in pts) for a in range(3)]
+    top = hi[2]
+    return sfcollision.box_blob(template, ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, top - depth_m / 2),
+                                ((hi[0] - lo[0]) / 2, (hi[1] - lo[1]) / 2, depth_m / 2))
 
 
 def is_water_shader(src, shader_ref) -> bool:
@@ -400,7 +427,7 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
                        collision_template: Optional[bytes], report: dict, landscape: bool = False,
                        sf_mesh_template: Optional[bytes] = None,
                        stair_layer: Optional[int] = STAIR_HELPER_LAYER, allow_empty: bool = False,
-                       animated_node: Optional[bytes] = None) -> Dict[str, bytes]:
+                       animated_node: Optional[bytes] = None, root_collision: Optional[bytes] = None) -> Dict[str, bytes]:
     """sf_mesh_template (a vanilla Starfield multi-shape physics blob, meshcollision.UNIVERSAL_TEMPLATE_NIF): Skyrim's
     own collision becomes native Starfield mesh bodies (native_collision, with stair ramps on stair_layer); boxes are
     the fallback, with the reason in report["native_error"]."""
@@ -446,7 +473,9 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
         overlap = all(cl[a] <= hi[a] + 0.5 and ch[a] >= lo[a] - 0.5 for a in range(3))
         report["collision_overlaps_render"] = overlap
     node = out_name.rsplit("/", 1)[-1].encode()
+    # root_collision: one physics body on the root node, as vanilla Water\Water16m.nif's water volume
     out = sfnif.build_static_nif(node, static_shapes, child_collision_blobs=blobs,
+                                 **({"collision_blob": root_collision} if root_collision is not None else {}),
                                  **({"animated_node": animated_node} if animated_node else {}))
     files[f"meshes/{out_name}.nif"] = nifmod.serialize(out)
     return files
@@ -675,7 +704,9 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             return self.neutral
         kind = src.type_of(s.shader_ref)
         if kind == "BSEffectShaderProperty":          # fire / candle flames: effect material; glow, fog, magic: skipped
-            return self.skyrim_flame_material(src, s.shader_ref) if self.fire else None
+            m = self.skyrim_flame_material(src, s.shader_ref) if self.fire else None
+            return m or (self.skyrim_water_effect_material(src, s.shader_ref)
+                         if getattr(self, "water_effects", True) else None)
         if skyrimnif.refraction(src, s.shader_ref):  # heat haze / refraction: not translated, like effect shaders
             return None
         paths = swap_textures(skyrimnif.texture_set(src, s.shader_ref),
@@ -701,6 +732,22 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
         if mat is None and blend and not test:
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral
+
+    def skyrim_water_effect_material(self, src, shader_ref) -> Optional[str]:
+        """Skyrim's moving water effects (2026-11-26, owner: the streams lack Skyrim's flow, no waterfalls): foam on the
+        streams (FXWhiteWater01), waterfall sheets (FXfluidTile01), the Wind District fall (FXwaterTile01) are effect
+        shaders with a scrolling texture faded by vertex alpha. They become the same scrolling effect material as the
+        flames (FlameMixin.flame_material: Skyrim's own UV scroll controller, vertex colour blend), kind "water": a dim
+        emittance (skyrimfire.EMITTANCE). None for any other effect (glow, fog, magic stay skipped)."""
+        try:
+            info = skyrimfire.effect_shader(src, shader_ref)
+        except Exception:                                           # noqa: BLE001
+            return None
+        if not re.search(WATER_EFFECT, info.get("source") or "", re.I):
+            return None
+        return self.flame_material(info["source"], **skyrimfire.bake_params(info),
+                                   scroll=skyrimfire.uv_scroll(info["controllers"]), kind="water",
+                                   vertex_color=info["vertex_alpha"])
 
     def _threshold_material(self, mat: str, ref: int) -> Optional[str]:
         """The cutout material `mat` (skyrim_material: materials\\<prefix>\\<stem>.mat over textures\\<prefix>\\<stem>_*)
@@ -844,7 +891,7 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             if not shapes and not editor_shapes and not spin_shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
-            water, water_shapes = [], []              # Skyrim water shapes: a water model of their own (below)
+            water, water_shapes, flat_water = [], [], []   # Skyrim water shapes: a water model of their own (below)
             if not skin_bone:
                 for i, s in enumerate(shapes):
                     if not is_water_shader(src, s.shader_ref):
@@ -857,6 +904,8 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                         water.append({"sloped": True, "shape": (s.name or b"").decode("latin-1"),
                                       "z_range": round(max(zs) - min(zs), 1)})
                     water_shapes.append(s)
+                    if "sloped" not in water[-1]:
+                        flat_water.append(s)
                     mats[i] = None                    # not in the model itself
             water_only = bool(water) and all(m is None or is_water_shader(src, s.shader_ref)
                                              for s, m in zip(shapes, mats))
@@ -899,10 +948,14 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                 files.update(self._spin_model(src, spin, spin_shapes, out_name + SPIN_SUFFIX, res))
             if water_shapes:                          # the water surfaces as their own model (a water activator's)
                 wrep = {}
+                tpl = getattr(self, "water_physics_template", None)
+                volume = water_volume(flat_water, tpl) if tpl and flat_water else None
                 files.update(convert_static_sse(src, water_shapes, out_name + WATER_SUFFIX,
-                                                [WATER_MATERIAL] * len(water_shapes), None, wrep))
+                                                [WATER_MATERIAL] * len(water_shapes), None, wrep,
+                                                root_collision=volume))
                 res["water_model"] = {"model": (out_name + WATER_SUFFIX).replace("/", "\\") + ".nif",
-                                      "bounds": wrep.get("render_bounds_m"), "shapes": len(water_shapes)}
+                                      "bounds": wrep.get("render_bounds_m"), "shapes": len(water_shapes),
+                                      "volume": volume is not None}
             for relp, data in files.items():
                 p = os.path.join(self.staging, *relp.split("/"))
                 os.makedirs(os.path.dirname(p), exist_ok=True)

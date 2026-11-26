@@ -666,3 +666,9 @@ waterfall. **Now:** each model's water shapes are a water model of their own on 
 (TerrainOverlays `water_template`), one per reference (11 instead of 422 pieces); vanilla Water16m.nif is a plane with
 WaterPlaceholder.mat and the look is the activator's WTFM (verified). Waterfalls are effect meshes: next. Installed;
 **not seen in game yet**.
+
+**Owner's test (2026-11-26):** one piece per surface works (pool fixed, ring better); no splash, too green, sloped
+water nearly invisible without Skyrim's flow. **Now:** a water volume per water model (the vanilla water box blob,
+1.5 m deep), Skyrim's foam and waterfalls as scrolling effect materials (the flames' builder, kind "water"; waterfall
+models selected), three water types side by side (pool WaterOceanClear, ring WaterClearSterile, rest WaterOceanDark).
+Installed; **not seen in game yet**.

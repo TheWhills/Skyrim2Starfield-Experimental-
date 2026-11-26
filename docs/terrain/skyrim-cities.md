@@ -241,6 +241,33 @@ issues", no waterfall, and Starfield's water looks green in the sun (wanted: blu
   bluer look is either another of them (`--water-type`) or our own WATR cloned with other colours.
 Installed 2026-11-26. **In game unverified.**
 
+### Water, third round: splash, foam and waterfalls, a colour test (2026-11-26)
+Owner: the Gildergreen's water "looks better, though it doesn't splash ... flowing not in the direction Skyrim's
+does"; the pool fixed (verified in game: one water piece per surface works) "though still so green"; the sloped water
+"almost invisible ... doesn't have the flowing speed or effect of Skyrim's" (Skyrim screenshots: white foam running
+down the channels, waterfalls into the pool and out of the wall grate).
+* **Splash** (supported hypothesis, unverified in game): vanilla Water16m.nif's physics is one hknpBoxShape body on the
+  root, 16 m deep under the surface (Water16m1mDepth: 1 m) and passes sfcollision.check_template (verified). A water
+  model now carries the same: the vanilla water blob (read from the game's archives at convert time) reshaped by
+  `sfcollision.box_blob` over its flat surfaces' footprint, from the surface down 1.5 m (`skyrimconvert.water_volume`).
+  Sloped streams get none.
+* **Foam and waterfalls:** Skyrim's flow look is effect shapes on top of the water: FXWhiteWater01 foam in the stream
+  models, FXfluidTile01 sheets in effects\FXWaterfallThin*.nif (MovableStatics, skipped as effect meshes until now),
+  FxRapidsRingHeavy. They become the flames' scrolling effect material (`skyrim_water_effect_material`, kind "water":
+  Skyrim's own UV scroll controller, vertex-alpha fade, emittance 600 / exposure 4, a first value) and the waterfall /
+  rapids models are selected with the water (`exterior.WATER_EFFECT_MODEL_RE`). Whiterun: 7 water effect materials,
+  FXWaterfallThin128 / 256 / 512 and FxRapidsRingHeavy converted; FXWaterfallSkirtSlope (mist only, FXFogHeavy) stays
+  out.
+* **Flow direction:** a Starfield water type has one LinearVelocity (WaterOceanClear 0.25, -0.15, WaterClearLake 0):
+  one direction per type, not along a channel; Skyrim's sense of flow is the scrolling foam, now converted.
+* **Colour test** (`cities.ps1 -WaterType probe`, `make_skyrim_objects.py stage --water-type
+  'pattern=hex;...;default'`): the pool WaterOceanClear 0560CF, the Gildergreen's ring WaterClearSterile 062BE5,
+  everything else WaterOceanDark 0560D0 (the owner's pick for Tamriel's rivers). Starfield's water colour comes from the
+  type's absorption / scattering and phytoplankton / sediment / yellow-matter curves (SfInspect form: RiverAbsorptionCurve,
+  PhytoplanktonCurve, ...; DNAM 152 bytes, 16 decoded by Mutagen): a bluer type of our own is the next step if none
+  of the three is right.
+Installed 2026-11-26. **In game unverified.**
+
 ### The other cities (plan, with numbers from Skyrim.esm)
 | City | Land | Own LAND | Gate pairs (Skyrim) | Plan |
 |---|---|---|---|---|

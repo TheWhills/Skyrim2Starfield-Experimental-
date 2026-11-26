@@ -566,7 +566,7 @@ EFFECT_TEMPLATE_MAT = "Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat"   #
 # brightness = base x Skyrim's emissive multiple x EMITTANCE_SCALE (the multiple was baked into the colour before and
 # clipped hearth flames to white; owner 2026-11-15: hearth cores white-hot beside Skyrim's orange)
 # 2026-11-15 v3 in game: hearth particle cards read as "intense straight clots": dimmer, and the ring wider
-EMITTANCE_SCALE = {"hearth": 0.3, "candle": 1.0}
+EMITTANCE_SCALE = {"hearth": 0.3, "candle": 1.0, "water": 1.0}
 RING = 0.85                          # flame card ring radius / emitter radius (v2 / v3: 0.55)
 # flame styles (owner 2026-11-15, after v3: "maybe it is better to use Starfield's flame"): "skyrim" = Skyrim's
 # textures on the cards (flames v3); "starfield" = the same cards (Skyrim's places, sizes, timing) playing Starfield's
@@ -711,7 +711,11 @@ STARFIELD_FLAMES = {"hearth": ("Materials/Effects/Fires/FiresGeneric_Sm_01_14x14
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},
              # 2026-11-15 (owner, in game): FireCandleFlame's fixed 75000 blew the candle cards out to white; candles
              # now take the hearth's adaptive setting until tuned
-             "candle": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"}}
+             "candle": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},
+             # 2026-11-26: Skyrim's water foam / waterfalls (skyrimconvert.skyrim_water_effect_material) on the same
+             # additive effect template, far dimmer than a fire (white water in daylight, not a glow at night); a first
+             # value, to tune in game
+             "water": {"LuminousEmittance": "600", "AdaptiveEmittance": "true", "ExposureOffset": "4"}}
 
 
 def _curve(points, loop_seconds: float) -> dict:

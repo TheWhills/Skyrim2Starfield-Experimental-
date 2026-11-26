@@ -391,4 +391,13 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   WTFM 01C0CC, BGSLodOwnerComponent (REFL, template "Reduction", base distance 40.0), KWDA 0C598C: **verified**.
 - Scaled-down placeable water pieces turn to their distant (green) look close up: **supported hypothesis** (owner's
   screenshots: the ring's small squares green from a few metres, big pieces near only).
-- Our own model on a copy of the vanilla water activator draws as water: **unresolved** (installed).
+- Our own model on a copy of the vanilla water activator draws as water: **verified** in game (owner 2026-11-26: the
+  pool and the Gildergreen's ring; the sloped streams nearly invisible).
+- Vanilla water physics: Water16m.nif bhkPhysicsSystem = one hknpBoxShape (6,168 bytes, passes
+  sfcollision.check_template), box (0, 0, -8) +- (8, 8, 8); Water16m1mDepth (0, 0, -0.5) +- (8, 8, 0.5); QuadDepth
+  32 m: **verified**. That a reshaped copy gives splash / swimming: **unresolved** (installed).
+- WATR: LinearVelocity per type (WaterOceanClear 0.25, -0.15, 0; WaterClearLake 0), colour from absorption /
+  scattering / phytoplankton / sediment / yellow-matter curves (CURV FormIDs 2C3BC4..2C3BCA shared by the types read);
+  DNAM 152 bytes, Mutagen 0.55 decodes 16: **verified** (SfInspect form).
+- Skyrim's moving water look in Whiterun: FXWhiteWater01 foam shapes in the stream models, FXfluidTile01 sheets in
+  effects\FXWaterfallThin*.nif with U/V offset controllers and vertex alpha: **verified** (NIFs).

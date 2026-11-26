@@ -13,6 +13,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "src"))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts", "terrain"))
 
 from fo4sf import btd, nif as nifmod, skyrimland, skyrimnif, skyrimrefs  # noqa: E402
@@ -220,6 +221,39 @@ class WaterTests(unittest.TestCase):
         from fo4sf import sfnif, skyrimconvert as sc
         # vanilla Water\Water16m.nif: NiIntegerExtraData "MaterialID" 0xA456F487 next to WaterPlaceholder.mat
         self.assertEqual(sfnif.material_id(sc.WATER_MATERIAL), 0xA456F487)
+
+    def test_water_volume_is_a_box_under_the_surface(self):
+        from fo4sf import sfcollision, skyrimconvert as sc
+        from test_collision import fake_template
+        # a 1024 x 512 unit surface at z 70 units (1 m), offset by its shape translation
+        s = shape([(0, 0, 70), (1024, 0, 70), (1024, 512, 70), (0, 512, 70)], [(0, 1, 2), (0, 2, 3)],
+                  translation=(-512.0, 0.0, 0.0))
+        c, h = sfcollision.read_box(sc.water_volume([s], fake_template(), depth_m=1.5))
+        for got, want in zip(c + h, (0.0, 256 / 70, 1.0 - 0.75, 512 / 70, 256 / 70, 0.75)):
+            self.assertAlmostEqual(got, want, places=4)
+        self.assertIsNone(sc.water_volume([], fake_template()))
+
+    def test_water_type_per_model(self):
+        import make_skyrim_objects as so
+        spec = so.WATER_TYPE_PROBE
+        self.assertEqual(so.water_type_for(spec, "skyrim\\...\\wrwaterpool01_water.nif"), "0560CF")
+        self.assertEqual(so.water_type_for(spec, "skyrim\\...\\WRTreeCircleWater01_water.nif"), "062BE5")
+        self.assertEqual(so.water_type_for(spec, "skyrim\\clutter\\horsetrough01_water.nif"), "0560D0")
+        self.assertEqual(so.water_type_for("", "x"), "")
+        self.assertEqual(so.water_type_for("0560CF", "x"), "0560CF")
+
+    def test_water_effects(self):
+        import re
+        from fo4sf import exterior, skyrimconvert as sc
+        for tex in ("textures\\effects\\FXWhiteWater01.dds", "textures\\effects\\FXfluidTile01.dds"):
+            self.assertTrue(re.search(sc.WATER_EFFECT, tex, re.I), tex)
+        for tex in ("textures\\effects\\FXFogHeavy.dds", "textures\\effects\\FXFireAtlas02.dds"):
+            self.assertFalse(re.search(sc.WATER_EFFECT, tex, re.I), tex)
+        fall = {"type": "MovableStatic", "model": "Effects\\FXWaterfallThin256x128.nif"}
+        fog = {"type": "MovableStatic", "model": "Effects\\FXFogHeavy01.nif"}
+        self.assertEqual(exterior.classify(fall, ("MovableStatic",))[1], "effect")
+        self.assertEqual(exterior.classify(fall, ("MovableStatic",), water=True)[0], "convert")
+        self.assertEqual(exterior.classify(fog, ("MovableStatic",), water=True)[1], "effect")
 
     def test_water_planes_are_selected_for_skyrim_only(self):
         from fo4sf import exterior
