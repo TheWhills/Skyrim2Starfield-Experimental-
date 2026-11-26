@@ -192,6 +192,35 @@ class WaterTests(unittest.TestCase):
         self.assertAlmostEqual(r["scale"], 1120 * 2 / 70 / 16, places=4)   # 32 m of water from a 16 m piece
         self.assertEqual(r["rot"][:2], [0.0, 0.0])
 
+    def test_water_models_ride_on_their_references(self):
+        import make_skyrim_objects as so
+        bases = [{"key": "pool", "edid": "SKY_Pool", "source": "pool.nif"}, {"key": "rock", "edid": "SKY_Rock"}]
+        items = {"pool": {"water_model": {"model": "skyrim\\pool_water.nif", "bounds": [[-1, -1, 0], [1, 1, 0]]}},
+                 "rock": {}}
+        placed = [{"src": "A", "base": 0, "cell": [1, 2], "pos": [10.0, 20.0, 5.0], "rot": [0.0, 0.0, 1.0],
+                   "scale": 2.0, "disabled": False},
+                  {"src": "B", "base": 0, "cell": [3, 4], "pos": [1.0, 2.0, 3.0], "rot": [0.0, 0.0, 0.0],
+                   "scale": 1.0, "disabled": True},
+                  {"src": "C", "base": 1, "cell": [0, 0], "pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0],
+                   "scale": 1.0, "disabled": False},
+                  {"src": "A#spin", "spin_of": "A", "base": 0, "cell": [1, 2], "pos": [0, 0, 0], "rot": [0, 0, 0],
+                   "scale": 1.0}]
+        objects = {"bases": [{"edid": "SKY_Pool"}, {"edid": "SKY_Rock"}], "refs": []}
+        rep = so.model_water_exact(objects, bases, placed, items, water_type="0560D0")
+        self.assertEqual((rep["bases"], rep["refs"]), (1, 2))
+        wb = objects["bases"][2]
+        self.assertEqual((wb["edid"], wb["model"], wb["water_template"], wb["water_type"]),
+                         ("SKY_Pool_Water", "skyrim\\pool_water.nif", "039FD6", "0560D0"))
+        a, b = objects["refs"]
+        self.assertEqual((a["base"], a["pos"], a["rot"], a["scale"], a["cell"]),
+                         (2, [10.0, 20.0, 5.0], [0.0, 0.0, 1.0], 2.0, [1, 2]))
+        self.assertTrue(b["disabled"])
+
+    def test_water_material_is_vanillas(self):
+        from fo4sf import sfnif, skyrimconvert as sc
+        # vanilla Water\Water16m.nif: NiIntegerExtraData "MaterialID" 0xA456F487 next to WaterPlaceholder.mat
+        self.assertEqual(sfnif.material_id(sc.WATER_MATERIAL), 0xA456F487)
+
     def test_water_planes_are_selected_for_skyrim_only(self):
         from fo4sf import exterior
         r = {"type": "Activator", "model": "Water\\Water1024.nif"}

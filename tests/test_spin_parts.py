@@ -241,10 +241,12 @@ class SpinPartsScriptTests(unittest.TestCase):
         self.assertIn("$env:SPIN_PARTS", ps)
         to = open(os.path.join(ROOT, "dotnet", "TerrainOverlays", "Program.cs"), encoding="utf-8").read()
         self.assertIn('TryGetProperty("anim_template"', to)
-        for src in (cs, to):                       # the rate: the template STAT's own Properties (PRPS) entry
+        # the turning part's own branch (TerrainOverlays also clones a vanilla ACTI, for water: "water_template")
+        spin_branch = to[to.index('TryGetProperty("anim_template"'):to.index("mod.Statics.Add(spin)")]
+        for src, branch in ((cs, cs), (to, spin_branch)):   # the rate: the template STAT's own Properties (PRPS) entry
             self.assertIn('GetProperty("Properties")', src)
             self.assertIn("SpinRate(", src)
-            self.assertNotIn("Activators.FirstOrDefault", src)
+            self.assertNotIn("Activators.FirstOrDefault", branch)
 
 
 if __name__ == "__main__":

@@ -660,3 +660,9 @@ on the base (ACTI WNAM); the converter drew it with the neutral material. **Now:
 placeable water (Water16mClearLake, as Tamriel's rivers) packed into squares, per reference (422 pieces in Whiterun);
 sloped streams keep their mesh with vanilla Waterfall_Outside_02.mat (probe); Water1024 planes converted too.
 tests/test_whiterun_fixes.py WaterTests. Installed; **not seen in game yet**.
+
+**Owner's test of the squares (2026-11-26):** water shows, but far pieces green and the ring a patchwork of squares; no
+waterfall. **Now:** each model's water shapes are a water model of their own on a copy of the vanilla water activator
+(TerrainOverlays `water_template`), one per reference (11 instead of 422 pieces); vanilla Water16m.nif is a plane with
+WaterPlaceholder.mat and the look is the activator's WTFM (verified). Waterfalls are effect meshes: next. Installed;
+**not seen in game yet**.

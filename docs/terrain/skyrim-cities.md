@@ -216,6 +216,31 @@ Whiterun: 422 water pieces on 8 references; installed 2026-11-26. **In game unve
 pieces are 0.15 - 0.5 m: scale 0.01 - 0.03), the look of the sloped probe. Riverwood's troughs: their fixed model ships
 in the city archive (no more white) but their water pieces come with the exterior's next build.
 
+### Water, second way: each Skyrim water surface on a copy of the vanilla water activator (2026-11-26)
+Owner's test of the squares: water shows, but "the end has a different coloration that only goes away when you're
+right next to it", the Gildergreen's water looks different near and far "and has these weird square / diamond
+issues", no waterfall, and Starfield's water looks green in the sun (wanted: blue, later).
+* **Why the squares failed** (supported hypothesis): every piece is its own water object with the activator's LOD
+  component (ACTI 039FD6 REFL: BGSLodOwnerComponent, template "Reduction", base distance 40); far pieces draw their
+  distant look (flat green), and scaled-down pieces (the ring's 281 squares, 0.3 - 2 m) switch to it almost at once.
+* **What vanilla water is** (verified: Starfield - Meshes01.ba2, Starfield.esm): `Water\Water16m.nif` is a plane
+  BSGeometry with NiIntegerExtraData "MaterialID" 0xA456F487 and `Materials\Water\WaterPlaceholder.mat` (+ a physics
+  body); the look comes from the activator's water type WTFM (01C0CC WaterClearLake), not from the mesh.
+* **Now:** the converter writes each model's water shapes as their own model `<model>_water.nif` (Skyrim's exact
+  surfaces, WaterPlaceholder.mat, same MaterialID, no collision: no swimming), and stage places it with every
+  reference of its model as a copy of Water16mClearLake (TerrainOverlays `water_template`: WTFM, LOD component,
+  keywords kept; our model and bounds; `--water-type <WATR hex>` for another water type). Whiterun: 11 references of 10
+  water models instead of 422 squares. The sloped streams go into the water models too (a probe: water on a sloped mesh
+  is unverified; the vanilla Waterfall_Outside_02.mat probe drew nothing in game). `stage --water-squares` keeps the
+  first way.
+* **Waterfalls** are a separate thing: Skyrim's FXWaterfall* / FXWaterfallSkirtSlope effect meshes (BSEffectShader,
+  FXfluidTile01 scrolling, vertex-alpha fades, mist particles), skipped as effect meshes; they need an effect material
+  of their own (next).
+* **Blue water:** the water type decides the colour; Starfield.esm has 15 WATR (WaterClear 000018, WaterClearLake
+  01C0CC, WaterOceanClear 0560CF, WaterOceanDark 0560D0, WaterOceanAlgae 0560D1, WaterClearSterile 062BE5, ...). A
+  bluer look is either another of them (`--water-type`) or our own WATR cloned with other colours.
+Installed 2026-11-26. **In game unverified.**
+
 ### The other cities (plan, with numbers from Skyrim.esm)
 | City | Land | Own LAND | Gate pairs (Skyrim) | Plan |
 |---|---|---|---|---|

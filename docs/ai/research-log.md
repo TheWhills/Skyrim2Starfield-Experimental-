@@ -384,4 +384,11 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   WRStairsStreamLACT 085FC8, HorseTrough01 0F762D): **verified** (Skyrim.esm, NIFs). Starfield has no mesh water
   material in ContentResources (48,459 .mat; water-named ones are effects, puddles, refraction tanks); real water is
   WATR via placeable water activators: **supported hypothesis**. Vanilla effect material on a converted mesh for sloped
-  streams (Waterfall_Outside_02.mat): **unresolved** (probe installed).
+  streams (Waterfall_Outside_02.mat): drew nothing in game (owner 2026-11-26: the stepped channel empty).
+- Vanilla `Water\Water16m.nif`: NiNode, BSXFlags, bhkNPCollisionObject + bhkPhysicsSystem, one BSGeometry (4 vertices,
+  6 indices, flags 0x40) with NiIntegerExtraData "MaterialID" 0xA456F487 = sfnif.material_id of
+  `Materials\Water\WaterPlaceholder.mat`: **verified** (Starfield - Meshes01.ba2). ACTI Water16mClearLake 039FD6: MODL,
+  WTFM 01C0CC, BGSLodOwnerComponent (REFL, template "Reduction", base distance 40.0), KWDA 0C598C: **verified**.
+- Scaled-down placeable water pieces turn to their distant (green) look close up: **supported hypothesis** (owner's
+  screenshots: the ring's small squares green from a few metres, big pieces near only).
+- Our own model on a copy of the vanilla water activator draws as water: **unresolved** (installed).

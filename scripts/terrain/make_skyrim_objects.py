@@ -429,6 +429,8 @@ def cmd_convert(a):
             items[-1]["spin"] = dict(r["spin"], template=SPIN_TEMPLATE)
         if r.get("water"):                         # Skyrim water shapes: squares for placeable water (stage)
             items[-1]["water"] = r["water"]
+        if r.get("water_model"):                   # ... and their own model, a water activator's (stage)
+            items[-1]["water_model"] = r["water_model"]
         if (k + 1) % 200 == 0:
             print(f"  {k + 1:,} / {min(len(names), a.limit):,} models, {len(failures):,} failed, "
                   f"{time.time() - t0:.0f} s")
@@ -953,6 +955,46 @@ def model_water(objects, bases, placed, items, cell_min, cell_max, form=None, ov
     return rep
 
 
+WATER_EDID_SUFFIX = "_Water"
+
+
+def model_water_exact(objects, bases, placed, items, water_type="") -> dict:
+    """Skyrim's water surfaces as their own models (manifest item "water_model", skyrimconvert: "<model>_water.nif"),
+    each placed as a copy of the vanilla water activator Water16mClearLake (TerrainOverlays "water_template": its water
+    type WTFM, LOD settings and keywords, our model and bounds; "water_type": another WATR, hex) with every reference
+    of its model, at the same place. Appends bases and references to objects; returns counts."""
+    from fo4sf import skyrimsea
+    rep = {"bases": 0, "refs": 0, "template": skyrimsea.WATER16M, "water_type": water_type or "template's"}
+    base_of = {}
+    taken = {b["edid"].lower() for b in objects["bases"]}
+    for p in placed:
+        if "spin_of" in p:
+            continue
+        b = bases[p["base"]]
+        wm = (items.get(b["key"]) or {}).get("water_model")
+        if not wm:
+            continue
+        if b["key"] not in base_of:
+            edid = b["edid"] + WATER_EDID_SUFFIX
+            if edid.lower() in taken:
+                raise ValueError(f"duplicate base EditorID {edid}")
+            taken.add(edid.lower())
+            nb = {"edid": edid, "model": wm["model"], "source": b.get("source", "") + " (water)", "collision": "none",
+                  "water_template": skyrimsea.WATER16M}
+            if wm.get("bounds"):
+                nb["bounds"] = wm["bounds"]
+            if water_type:
+                nb["water_type"] = water_type
+            base_of[b["key"]] = len(objects["bases"])
+            objects["bases"].append(nb)
+            rep["bases"] += 1
+        objects["refs"].append({"src": f"{p['src']}{WATER_EDID_SUFFIX.lower()}", "base": base_of[b["key"]],
+                                "cell": list(p["cell"]), "pos": list(p["pos"]), "rot": list(p["rot"]),
+                                "scale": p["scale"], "disabled": bool(p.get("disabled"))})
+        rep["refs"] += 1
+    return rep
+
+
 def cmd_stage(a):
     t0 = time.time()
     prm, ov = terrain_overlay(a.terrain)
@@ -997,12 +1039,19 @@ def cmd_stage(a):
                                             "anim_speed")
                           if k in b} for b in bases],
                "refs": [{k: p[k] for k in ("src", "base", "cell", "pos", "rot", "scale", "disabled")} for p in placed]}
-    if not getattr(a, "no_water", False):
+    if getattr(a, "no_water", False):
+        pass
+    elif getattr(a, "water_squares", False):        # the first way: squares of scaled vanilla water pieces
         wr = model_water(objects, bases, placed, items, ov["cell_min"], ov["cell_max"])
         if wr["shapes"]:
             print(f"water: {wr['pieces']:,} vanilla water pieces ({wr['form']}) on {wr['refs']:,} references' flat water "
-                  f"shapes; {wr['sloped']:,} sloped water shapes drawn with {wr['sloped_material'] or '-'}"
+                  f"shapes; {wr['sloped']:,} sloped water shapes left out"
                   + (f"; {wr['tilted']} tilted references left without water" if wr["tilted"] else ""))
+    else:
+        wr = model_water_exact(objects, bases, placed, items, getattr(a, "water_type", "") or "")
+        if wr["refs"]:
+            print(f"water: {wr['refs']:,} references of {wr['bases']} water models, each a copy of the vanilla water "
+                  f"activator {wr['template']} (water type: {wr['water_type']})")
     if a.interiors:
         n_ld, missing = mark_load_doors(objects, a.interiors)
         print(f"load doors into the interiors: {n_ld} placed as persistent DOOR references"
@@ -1231,8 +1280,14 @@ def main(argv=None):
                     help="lod: do not list the LOD references as the world's large references (WRLD RNAM)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
     ap.add_argument("--no-water", action="store_true",
-                    help="select: leave Skyrim's placed water planes (Water\\*.nif) out as before; stage: no vanilla "
-                         "water pieces for the models' flat water shapes")
+                    help="select: leave Skyrim's placed water planes (Water\\*.nif) out as before; stage: no water for "
+                         "the models' water shapes")
+    ap.add_argument("--water-squares", action="store_true",
+                    help="stage: Skyrim water as squares of scaled vanilla 16 m water pieces (the first way) instead of "
+                         "each model's own water surface on a copy of the vanilla water activator")
+    ap.add_argument("--water-type", default="",
+                    help="stage: WATR FormID (hex, Starfield.esm) for the water activators; default the vanilla "
+                         "activator's own (WaterClearLake 01C0CC)")
     ap.add_argument("--no-spin", action="store_true",
                     help="stage: leave turning parts (the mill water wheel) out instead of placing them on a copy of "
                          f"the vanilla turning record {SPIN_TEMPLATE}")

@@ -363,6 +363,38 @@ if (Has(prm, "objects"))
             baseKeys.Add(rec.FormKey);
             nDoor++;
         }
+        else if (b.TryGetProperty("water_template", out var wtj) && wtj.ValueKind == JsonValueKind.String)
+        {
+            // Skyrim water surfaces (make_skyrim_objects.py stage, 2026-11-26): a copy of a vanilla placeable water
+            // activator (Water16mClearLake 039FD6: water type WTFM, LOD component, keywords) with our model, which
+            // holds Skyrim's exact water shapes laid out as Water\Water16m.nif (WaterPlaceholder.mat); "water_type":
+            // another WATR (hex FormID in Starfield.esm) for WTFM.
+            var tid = Convert.ToUInt32(wtj.GetString(), 16);
+            var wtpl = sf.Activators.FirstOrDefault(ac => ac.FormKey.ModKey == sfEsm && ac.FormKey.ID == tid)
+                       ?? throw new InvalidDataException($"water_template {tid:X6} is not an activator in Starfield.esm");
+            var water = (Mutagen.Bethesda.Starfield.Activator)wtpl.Duplicate(NewKey());
+            water.EditorID = edid;
+            water.Model = new Model { File = model };
+            if (b.TryGetProperty("bounds", out var wb) && wb.ValueKind == JsonValueKind.Array)
+                water.ObjectBounds = new ObjectBounds
+                {
+                    First = new P3Float(wb[0][0].GetSingle(), wb[0][1].GetSingle(), wb[0][2].GetSingle()),
+                    Second = new P3Float(wb[1][0].GetSingle(), wb[1][1].GetSingle(), wb[1][2].GetSingle()),
+                };
+            if (b.TryGetProperty("water_type", out var wty) && wty.ValueKind == JsonValueKind.String)
+            {
+                // WTFM: the link property's name differs between Mutagen versions (WaterType / Water): found by reflection
+                var wprop = typeof(Mutagen.Bethesda.Starfield.Activator).GetProperty("WaterType")
+                            ?? typeof(Mutagen.Bethesda.Starfield.Activator).GetProperty("Water")
+                            ?? throw new InvalidDataException("Mutagen Activator has no WaterType / Water link (WTFM)");
+                var link = wprop.GetValue(water) ?? throw new InvalidDataException("Activator water link is null");
+                link.GetType().GetMethod("SetTo", new[] { typeof(FormKey) })!
+                    .Invoke(link, new object[] { new FormKey(sfEsm, Convert.ToUInt32(wty.GetString(), 16)) });
+            }
+            mod.Activators.Add(water);
+            baseKeys.Add(water.FormKey);
+            nStat++;
+        }
         else if (b.TryGetProperty("anim_template", out var atj) && atj.ValueKind == JsonValueKind.String)
         {
             // turning part (make_skyrim_objects.py stage: the mill water wheel): a copy of a vanilla turning STAT whose

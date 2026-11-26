@@ -328,12 +328,17 @@ def clip_vertex_alpha(s: nifmod.Fo4Shape, lo: float, hi: Optional[float] = None)
 # Skyrim water inside models (2026-11-26, owner: Whiterun's streams, pools and the horse troughs drew white). Skyrim
 # draws a BSWaterShaderProperty shape as water of the type its base names (ACTI WNAM -> WATR: WRWaterPool01 074EEA,
 # WRStairsStreamLACT 085FC8, HorseTrough01 0F762D; verified in Skyrim.esm). The converter had no material for it (the
-# neutral one: white). A FLAT water shape becomes vanilla Starfield placeable water (Water16mClearLake, the pieces
-# verified for Tamriel's rivers): water_squares packs its footprint with squares, make_skyrim_objects stage places one
-# scaled piece per square and reference. A SLOPED one (streams down steps, a waterfall) keeps its mesh with a vanilla
-# flowing-water effect material (SLOPED_WATER_MATERIAL; a probe: unverified in game).
+# neutral one: white). Now the water shapes leave the model and become a model of their own, "<model>_water.nif":
+# Skyrim's exact surfaces with Starfield's water placeholder material, no collision, laid out as vanilla
+# Water\Water16m.nif is (a plane BSGeometry + MaterialID + "Materials\Water\WaterPlaceholder.mat"; the look comes from the
+# activator's water type WTFM, not the mesh: verified, Starfield - Meshes01.ba2 and Starfield.esm ACTI 039FD6).
+# make_skyrim_objects stage places it as a copy of the vanilla water activator (TerrainOverlays "water_template").
+# First way, 2026-11-26 (owner's test: tiled squares of scaled Water16mClearLake pieces, small ones far-green and a
+# patchwork): water_squares, kept as stage --water-squares. SLOPED shapes (streams down steps) go into the water model
+# too (a probe: water on a sloped mesh is unverified; the vanilla Waterfall_Outside_02.mat probe drew nothing).
 WATER_FLAT_UNITS = 24.0            # z range (game units) up to which a water shape counts as flat (WRStairsStreamL: 10)
-SLOPED_WATER_MATERIAL = "Materials\\Effects\\Environmental\\Waterfall_Outside_02.mat"   # 2LayerEffect: foam + warp
+WATER_SUFFIX = "_water"
+WATER_MATERIAL = "Materials\\Water\\WaterPlaceholder.mat"          # vanilla Water16m.nif's own
 
 
 def is_water_shader(src, shader_ref) -> bool:
@@ -839,25 +844,25 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             if not shapes and not editor_shapes and not spin_shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
-            water = []                                # Skyrim water shapes: placeable water / a flowing material
+            water, water_shapes = [], []              # Skyrim water shapes: a water model of their own (below)
             if not skin_bone:
                 for i, s in enumerate(shapes):
                     if not is_water_shader(src, s.shader_ref):
                         continue
                     zs = [s.scale * sum(s.rotation[6 + k] * v[k] for k in range(3)) + s.translation[2]
                           for v in s.positions] or [0.0]
-                    if max(zs) - min(zs) <= WATER_FLAT_UNITS:
+                    if max(zs) - min(zs) <= WATER_FLAT_UNITS:   # squares too: stage --water-squares (the first way)
                         water.append(dict(water_squares(s), shape=(s.name or b"").decode("latin-1")))
-                        mats[i] = None
                     else:
-                        mats[i] = getattr(self, "sloped_water_material", SLOPED_WATER_MATERIAL) or None
                         water.append({"sloped": True, "shape": (s.name or b"").decode("latin-1"),
-                                      "z_range": round(max(zs) - min(zs), 1), "material": mats[i]})
+                                      "z_range": round(max(zs) - min(zs), 1)})
+                    water_shapes.append(s)
+                    mats[i] = None                    # not in the model itself
             water_only = bool(water) and all(m is None or is_water_shader(src, s.shader_ref)
                                              for s, m in zip(shapes, mats))
             va_report = {}
             shapes, mats = self._vertex_alpha_cut(src, shapes, mats, va_report)
-            flame_shapes =sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
+            flame_shapes = sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
             shapes = [skyrimfire.normalize_card_uvs(s) if m in getattr(self, "_layered", ()) else s for s, m in zip(shapes, mats)]
             doubled = too_big = 0
             for i, s in enumerate(shapes):
@@ -892,6 +897,12 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                                            allow_empty=editor_shapes > 0 or bool(spin_shapes) or bool(water))
             if spin is not None:
                 files.update(self._spin_model(src, spin, spin_shapes, out_name + SPIN_SUFFIX, res))
+            if water_shapes:                          # the water surfaces as their own model (a water activator's)
+                wrep = {}
+                files.update(convert_static_sse(src, water_shapes, out_name + WATER_SUFFIX,
+                                                [WATER_MATERIAL] * len(water_shapes), None, wrep))
+                res["water_model"] = {"model": (out_name + WATER_SUFFIX).replace("/", "\\") + ".nif",
+                                      "bounds": wrep.get("render_bounds_m"), "shapes": len(water_shapes)}
             for relp, data in files.items():
                 p = os.path.join(self.staging, *relp.split("/"))
                 os.makedirs(os.path.dirname(p), exist_ok=True)
