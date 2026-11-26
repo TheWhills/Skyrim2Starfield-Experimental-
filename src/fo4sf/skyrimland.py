@@ -105,8 +105,11 @@ class SkyrimLand:
             self.default_land, self.default_water = world_dnam(w["world_fields"])
             self.parent, self.parent_flags = world_parent(w["world_fields"])
             self.grids, self.edids, self.cells, self.water = {}, {}, set(), {}
+            self.land_hide = {}                       # {(cx, cy): XCLC land hide bits} of this world's own cells
             for xy, c in w["cells"].items():
                 self.cells.add(xy)
+                if c.get("land_hide"):
+                    self.land_hide[xy] = c["land_hide"]
                 if c.get("flags", 0) & 0x2:              # cell DATA "has water": XCLW or the world's default height
                     self.water[xy] = c.get("water") if c.get("water") is not None else self.default_water
                 if c["edid"]:
@@ -213,6 +216,39 @@ class SkyrimLand:
 
 
 FALLOFF_CELLS = 4.0               # outside the LAND rectangle: blend from the edge height to the fill over 4 cells (234 m)
+
+
+QUAD_UNITS = 2048.0      # a Skyrim cell (4096 units) has 2 x 2 land quadrants
+
+
+def hidden_quadrants(land_hide) -> set:
+    """{(qx, qy)} on Skyrim's quadrant grid (2048 units, qx = floor(x / 2048)) of every quadrant a cell's XCLC land
+    hide bits hide: bit 0 SW, 1 SE, 2 NW, 3 NE (as LAND's BTXT quadrants 0..3; supported hypothesis 2026-11-26:
+    WhiterunWorld's floating references fall in hidden quadrants 920 / 1,229 times in this order, 717 and 767 in the
+    two others)."""
+    return {(cx * 2 + (q & 1), cy * 2 + (q >> 1)) for (cx, cy), m in land_hide.items() for q in range(4) if m >> q & 1}
+
+
+def hidden_sample_mask(shape, x0_m, y0_m, spacing_m, quads, units_per_m=70.0):
+    """Boolean [rows, cols] of a height grid whose sample (r, c) sits at (x0_m + c * spacing_m, y0_m + r * spacing_m)
+    in Skyrim units / units_per_m: True where the land is hidden. A sample on a quadrant border counts as hidden only
+    when every quadrant meeting there is hidden (a visible quadrant keeps its whole edge)."""
+    if not quads:
+        return np.zeros(shape, bool)
+    tol = 1e-6
+    fx = (x0_m + np.arange(shape[1]) * spacing_m) * units_per_m / QUAD_UNITS
+    fy = (y0_m + np.arange(shape[0]) * spacing_m) * units_per_m / QUAD_UNITS
+    xa, xb = np.floor(fx - tol).astype(np.int64), np.floor(fx + tol).astype(np.int64)
+    ya, yb = np.floor(fy - tol).astype(np.int64), np.floor(fy + tol).astype(np.int64)
+    qx0 = min(min(q[0] for q in quads), int(xa.min())) - 1
+    qy0 = min(min(q[1] for q in quads), int(ya.min())) - 1
+    nx = max(max(q[0] for q in quads), int(xb.max())) - qx0 + 2
+    ny = max(max(q[1] for q in quads), int(yb.max())) - qy0 + 2
+    H = np.zeros((ny, nx), bool)
+    for qx, qy in quads:
+        H[qy - qy0, qx - qx0] = True
+    xa, xb, ya, yb = xa - qx0, xb - qx0, ya - qy0, yb - qy0
+    return (H[np.ix_(ya, xa)] & H[np.ix_(ya, xb)] & H[np.ix_(yb, xa)] & H[np.ix_(yb, xb)])
 
 
 def falloff_weight(d, length):

@@ -559,17 +559,23 @@ def cmd_build(a, rest):
     if a.height_offset:
         print(f"overlays_params.json: terrain and objects lifted {a.height_offset:g} m")
     if a.terrain_from:
-        rep = crop_from(prm, a.out, a.terrain_from)
+        rep = crop_from(prm, a.out, a.terrain_from, land=land, hidden_depth=a.hidden_land_depth)
         print(f"terrain cut from {rep['source']} cells x {rep['source_cells']['x']} y {rep['source_cells']['y']}: "
               f"heights vs this build's own: median {rep['height_diff_m']['median']:.3f} m, max "
               f"{rep['height_diff_m']['max']:.2f} m; no LTEX overrides of its own ({rep['ltex_overrides_dropped']} "
               f"dropped)")
+        hl = rep["hidden_land"]
+        print(f"land hidden by the city's cells: {hl['quadrants']} Skyrim quadrants, {hl['samples']:,} samples lowered "
+              f"{hl['depth_m']:g} m ({hl['clipped']} at the height range's floor)")
     with open(pp, "w", encoding="utf-8") as f:
         json.dump(prm, f, indent=1)
     return res
 
 
-def crop_from(prm, out, staging):
+HIDDEN_LAND_DEPTH_M = 15.0     # Whiterun's floor meshes stand up to 7 m above the land (median per cell)
+
+
+def crop_from(prm, out, staging, land=None, hidden_depth=HIDDEN_LAND_DEPTH_M):
     """--terrain-from: replace this overlay's terrain file (and its copies) with the same cells of the staged exterior's
     terrain (2026-11-25: Whiterun on Tamriel's land as installed, with every ground fix made to Tamriel since: blend,
     tiling, grass slots). The overlay must be built --like that exterior (same height offset) on whole 100 m cells.
@@ -599,6 +605,17 @@ def crop_from(prm, out, staging):
     if cut.heights_raw.shape != own.heights_raw.shape:
         sys.exit(f"--terrain-from: cut {cut.heights_raw.shape} != this overlay's {own.heights_raw.shape}")
     diff = np.abs(cut.heights_m() - own.heights_m())
+    hidden = {"quadrants": 0, "samples": 0, "depth_m": float(hidden_depth), "clipped": 0}
+    if land is not None and land.land_hide and hidden_depth > 0:
+        # Skyrim draws no land in the quadrants a city cell hides (XCLC; 2026-11-26 Whiterun: all of (5,-2) and (6,-1),
+        # parts of 5 more): its floor meshes are the ground there, and Tamriel's land, drawn, came up through the roads
+        # (owner's screenshots). Lowered out of sight; the other quadrants keep Tamriel's land exactly.
+        quads = skyrimland.hidden_quadrants(land.land_hide)
+        mask = skyrimland.hidden_sample_mask(cut.heights_raw.shape, x0 * 100.0, y0 * 100.0,
+                                             100.0 / btd.CELL_SAMPLES, quads)
+        want = cut.heights_m()[mask] - hidden_depth
+        cut.heights_raw[mask] = btd.quantize(want, cut.hmin, cut.hmax)
+        hidden.update(quadrants=len(quads), samples=int(mask.sum()), clipped=int((want < cut.hmin).sum()))
     data = btd.write(cut)
     for rel in [o["btd_file"]] + list(o.get("btd_copies") or []):
         with open(os.path.join(out, rel), "wb") as f:
@@ -609,7 +626,7 @@ def crop_from(prm, out, staging):
            "source_cells": {"x": [x0, x1], "y": [y0, y1]},
            "height_diff_m": {"median": float(np.median(diff)), "p99": float(np.percentile(diff, 99)),
                              "max": float(diff.max())},
-           "ltex_overrides_dropped": dropped}
+           "ltex_overrides_dropped": dropped, "hidden_land": hidden}
     prm["terrain_from"] = rep
     return rep
 
@@ -872,6 +889,10 @@ def main(argv=None):
                          "file this overlay is cut from, cell for cell (a walled city on its parent's land): Tamriel's "
                          "heights, textures, blend and grass slots as installed; no ground textures or LTEX overrides of "
                          "its own (Tamriel's plugin carries them)")
+    ap.add_argument("--hidden-land-depth", type=float, default=HIDDEN_LAND_DEPTH_M,
+                    help="build --terrain-from: metres the cut land is lowered under the quadrants the city's own cells "
+                         "hide (XCLC land hide flags: Skyrim draws no land there, the city's floor meshes are the "
+                         "ground); 0 = keep it")
     raw = sys.argv[1:] if argv is None else list(argv)
     raw, like = expand_like(raw)
     a, rest = ap.parse_known_args(join_coordinates(raw))

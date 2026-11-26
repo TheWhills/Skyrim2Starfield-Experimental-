@@ -211,6 +211,37 @@ def _parse_ref(data: bytes):
     return r
 
 
+def disabled_by_parent(refs) -> dict:
+    """{formkey: enable-parent formkey} of the references Skyrim starts DISABLED through their enable parent (XESP): a
+    child is enabled when its parent is (or, with the "opposite" flag 0x1, when its parent is not); the parent's own
+    state follows the same rule up the chain, a reference without a parent is enabled unless Initially Disabled. A
+    parent missing from `refs` leaves its children as they are. 2026-11-26 (owner's Whiterun): the Battle for
+    Whiterun's barricades, rubble and smoke hang on XMarker 0376E0 (Initially Disabled), the destroyed Grey-Mane house
+    on 0FC90B, Jorrvaskr's funeral on 0BBCEA, repair scaffolding on 0FC8F1; all were placed as if enabled."""
+    by = {r.get("formkey"): r for r in refs if r.get("formkey")}
+    memo = {}
+
+    def enabled(fk, depth=0):
+        if fk in memo:
+            return memo[fk]
+        r = by.get(fk)
+        if r is None or depth > 64:
+            return None                                 # unknown (outside the export) or a loop
+        memo[fk] = None                                 # cycle guard while resolving
+        ep = r.get("enable_parent")
+        p = enabled(ep["reference"], depth + 1) if ep else None
+        on = (p != bool(ep.get("flags", 0) & 1)) if p is not None else not r.get("disabled")
+        memo[fk] = on
+        return on
+
+    out = {}
+    for fk, r in by.items():
+        ep = r.get("enable_parent")
+        if ep and enabled(fk) is False and enabled(ep["reference"]) is not None:
+            out[fk] = ep["reference"]
+    return out
+
+
 def export_world(esm: str, world: str = "Tamriel", cells=None, plugin_name: str = "Skyrim.esm",
                  alt_plugins=LOAD_ORDER) -> dict:
     """The schema-v2 export of every placed reference in the worldspace (or only exterior cells inside the inclusive

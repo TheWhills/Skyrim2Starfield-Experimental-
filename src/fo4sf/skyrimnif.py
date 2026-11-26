@@ -442,7 +442,42 @@ def alpha_test(n, alpha_ref) -> Tuple[bool, bool, int]:
     return bool(flags & 0x200), bool(flags & 0x1), thr
 
 
-SLSF1_VERTEX_ALPHA = 0x8              # Shader Flags 1 bit 3: the vertex colour's alpha multiplies the texture's alpha
+_IDENTITY_AV = struct.pack("<3f9ff", 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0)
+
+
+def clear_root_transform(n) -> list:
+    """Set the model's root node(s) (NiNode-derived blocks no node lists as a child) to the identity transform, in place,
+    and return [(block, (t, R, s))] of those that were not. Skyrim draws a placed model without its root node's own
+    transform (verified 2026-11-26, owner's Whiterun: WRCastleBridge01.nif's BSFadeNode turns it 90 deg about Z; without
+    that turn the bridge's long axis lies on the line to Dragonsreach's door, 45 deg, and its end meets
+    WRCastleEntrance01 within 1 unit; with it the bridge lies across that line, 167 units off, as the owner saw in
+    game). 22 of Whiterun's 309 models have such a root (house bases WRBreezeBase, WRDrunkenHuntsmanBase, ...)."""
+    nodes = [i for i in range(len(n.blocks)) if n.type_of(i).endswith("Node") and n.type_of(i) != "BSFaceGenNiNode"]
+    children = set()
+    for i in nodes:
+        try:
+            children.update(nifmod.node_children(n, i))
+        except struct.error:
+            pass
+    out = []
+    for i in nodes:
+        if i in children:
+            continue
+        blk = n.blocks[i]
+        try:
+            t, r, s = nifmod._av_transform(blk)
+        except struct.error:
+            continue
+        if all(abs(a - b) < 1e-6 for a, b in zip(t + r + (s,), (0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1))):
+            continue
+        _, nextra = struct.unpack_from("<iI", blk, 0)
+        p = 8 + 4 * nextra + 8
+        n.blocks[i] = blk[:p] + _IDENTITY_AV + blk[p + len(_IDENTITY_AV):]
+        out.append((i, (t, r, s)))
+    return out
+
+
+SLSF1_VERTEX_ALPHA = 0x8             # Shader Flags 1 bit 3: the vertex colour's alpha multiplies the texture's alpha
 SLSF2_VERTEX_COLORS = 0x20            # Shader Flags 2 bit 5: the shape's vertex colours are used
 SLSF2_TREE_ANIM = 0x20000000          # Shader Flags 2 bit 29: leaves swaying (BSLeafAnimNode); vertex alpha = sway weight
 

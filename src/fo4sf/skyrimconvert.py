@@ -736,6 +736,11 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             if raw is None:
                 raise FileNotFoundError("mesh not in the Skyrim archives or loose files")
             src = nifmod.parse(raw)
+            if not skin_bone:                         # placed models: Skyrim ignores the root node's own transform
+                cleared = skyrimnif.clear_root_transform(src)
+                if cleared:
+                    res["root_transform_cleared"] = True
+                    self.stats["root_transforms_cleared"] = self.stats.get("root_transforms_cleared", 0) + 1
             shapes = skyrimnif.trishapes(src)
             if alt_textures:
                 self._alt_by_block = alt_texture_blocks(shapes, alt_textures)

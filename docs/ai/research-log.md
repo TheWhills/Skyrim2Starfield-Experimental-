@@ -368,3 +368,14 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
 - Starfield .mat AlphaSettingsComponent can take the vertex colour (Blender UseVertexColor, VertexColorChannel Alpha:
   DecalLabels01.mat, LeafDebrisPile01.mat): **verified** that it exists; how it combines with the opacity map
   **unresolved** (not used: the converter cuts the geometry instead).
+
+## 2026-11-26 Skyrim: land hide flags, enable parents, root transforms (Claude)
+- Skyrim CELL XCLC is 12 bytes: x, y, then land hide flags (bits 0-3, one per quadrant): **verified** (Skyrim.esm:
+  WhiterunWorld 7 cells with bits set, 0x53d40f etc.; Tamriel none near Whiterun). Bit order SW, SE, NW, NE:
+  **supported hypothesis** (floating references fall in hidden quadrants 920 / 1,229 in this order vs 717 / 767).
+- The city BTD's sample (r, c) sits at shared metres (x0 * 100 + c * 100 / 128, y0 * 100 + r * 100 / 128), cells_cw
+  x0 / y0: **verified** (median 4 mm against Tamriel's LAND; half a sample off gives 6 - 7 cm).
+- Skyrim draws a placed model without its root node's transform: **verified** for WRCastleBridge01 (meets
+  WRCastleEntrance01 within 1 unit only without it); assumed for the other 21 Whiterun models with a root transform.
+- XESP enable parents: Whiterun's siege set hangs on initially disabled XMarker 0376E0 (106 references, 18 more with
+  "opposite"): **verified** (export of Skyrim.esm).

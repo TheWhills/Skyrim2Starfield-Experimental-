@@ -637,3 +637,17 @@ grass: Skyrim draws 37.6 % of it). 105 shapes in Whiterun's models (walls' moss,
 (Tree_Anim: vertex alpha = sway) left alone. The city archive now also packs files whose contents differ from Tamriel's
 copy, so shared models (walls, rocks) show the fix while the city is installed. Rebuilt and reinstalled 2026-11-26
 with Starfield closed (94 shapes cut; archive 158 MB, 44 files newer than Tamriel's copy). **Not seen in game yet.**
+
+## 2026-11-26: Whiterun, second look: hidden land, civil-war state, root transforms (Claude)
+
+**Owner:** land where the road should be, civil-war spikes, Dragonsreach's bridge turned the wrong way.
+
+**Causes (verified, Skyrim.esm and the NIFs):** (1) Whiterun's cells hide the land in 18 quadrants (XCLC land hide
+flags); our cut drew Tamriel's land there. (2) The siege objects, a destroyed house, a funeral and scaffolding are
+children of initially disabled enable parents; selection only read each reference's own flag. (3) Skyrim ignores a
+placed model's root-node transform; the converter applied it (WRCastleBridge01 turned 90 deg, 22 models in Whiterun).
+
+**Fixes:** the cut land is lowered 15 m under hidden quadrants; selection leaves out references whose enable parent
+starts them disabled (174); the converter clears root transforms of placed models. tests/test_whiterun_fixes.py.
+Rebuilt and reinstalled. **Not seen in game yet.** Correction: the 2026-11-25 entry's "ground meshes" explanation was
+only part of it: the land showing through the roads was the hidden land (1).

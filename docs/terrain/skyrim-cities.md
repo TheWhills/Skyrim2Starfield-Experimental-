@@ -166,6 +166,33 @@ district": earth and moss lying over the market's cobbles and filling a stair in
   terrain", expected). City archive 1,406 files, 158 MB (was 977, 152 MB), of which 44 replace an older copy in
   Tamriel's archives; 1,239 files (538 MB) left to Tamriel's. **In game unverified.**
 
+### In game, second look (owner, 2026-11-26)
+"This patch on land where the road should be, also spikes from when it's in the civil war state that we don't need.
+Bridge is the wrong direction near Dragonsreach." Three causes, all in Skyrim's data:
+* **Land over the roads: Skyrim hides it** (verified): WhiterunWorld's CELL XCLC carries land hide flags (third u32,
+  bits 0-3 = quadrants SW, SE, NW, NE): all four quadrants of (5,-2) and (6,-1), parts of (5,-3), (5,-1), (6,-3),
+  (6,-2), (7,-1); Tamriel's cells have none. Skyrim draws no land there; the floor meshes are the ground. The cut terrain
+  drew Tamriel's land, which came up through the roads. Now `make_skyrim_overlay.py --terrain-from` lowers the cut land
+  under those 18 quadrants by `--hidden-land-depth` (15 m; 25,163 samples), every other sample stays Tamriel's exactly.
+  Bit order: supported hypothesis (LAND's own quadrant order; 920 of the 1,229 references floating > 1 m above the land
+  fall in hidden quadrants this way, 717 / 767 in the other orders). Where Skyrim has no mesh over a hidden quadrant it
+  shows a hole; here that is a 15 m pit.
+* **Civil-war spikes: enable parents** (verified): the Battle for Whiterun's barricades (StockadeBarricade01Activator),
+  rubble, smoke and closed shutters hang on XMarker 0376E0 (Initially Disabled); the destroyed Grey-Mane house on
+  0FC90B, Jorrvaskr's funeral on 0BBCEA, repair scaffolding on 0FC8F1, the dead Gildergreen on 046284. Selection used
+  each reference's own flag only, so all were placed as if enabled. `skyrimrefs.disabled_by_parent` resolves the chain
+  (child on = parent on, or off with "opposite"); `make_skyrim_objects.py select` leaves those out (skip reason
+  `disabled_by_parent`: 174 in Whiterun). The market stalls on 0376E0 with "opposite" stay. Applies to the exterior's
+  next build too.
+* **Bridge turned: the root node's transform** (verified): WRCastleBridge01.nif's BSFadeNode turns it 90 deg about Z.
+  Skyrim ignores a placed model's root transform: without the turn the bridge lies on the line to Dragonsreach's door
+  and meets WRCastleEntrance01 within 1 unit; with it, it lies across, 167 units off. The converter clears root
+  transforms on every placed model (`skyrimnif.clear_root_transform`; worn models keep theirs): 22 of Whiterun's
+  models, among them the house bases WRBreezeBase and WRDrunkenHuntsmanBase (ground pieces turned 90 / 60 deg),
+  benches, a sign, food.
+Rebuilt and reinstalled 2026-11-26 (Starfield closed): 283 models, 864 references; archive 1,513 files, 159 MB (57
+newer than Tamriel's copy). **In game unverified.**
+
 ### The other cities (plan, with numbers from Skyrim.esm)
 | City | Land | Own LAND | Gate pairs (Skyrim) | Plan |
 |---|---|---|---|---|

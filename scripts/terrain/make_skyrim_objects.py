@@ -127,7 +127,15 @@ def cmd_export(a):
 def cmd_select(a):
     exp = load(os.path.join(a.work, "export.json"))
     _prm, ov = terrain_overlay(a.terrain)
+    # left out: what Skyrim starts disabled through its enable parent (the Battle for Whiterun's barricades, a
+    # destroyed house next to the intact one, ...; skyrimrefs.disabled_by_parent)
+    exported = len(exp["refs"])                      # the stage step's accounting counts every exported reference
+    off = skyrimrefs.disabled_by_parent(exp["refs"] + exp.get("deferred_refs", []))
+    parked = [exterior.skip_entry(r, "disabled_by_parent", f"enable parent {off[r['formkey']]} starts disabled")
+              for r in exp["refs"] if r.get("formkey") in off]
+    exp = dict(exp, refs=[r for r in exp["refs"] if r.get("formkey") not in off])
     sub, skipped = exterior.select(exp, skyrimrefs.CONVERT_TYPES)
+    skipped = parked + skipped
     cmin, cmax = ov["cell_min"], ov["cell_max"]
     by_model, outside = {}, 0
     for r in to_local(sub["refs"], ov):
@@ -140,7 +148,7 @@ def cmd_select(a):
     models = [by_model[k] for k in sorted(by_model)]
     save(os.path.join(a.work, "selected.json"), sub)
     save(os.path.join(a.work, "convert_input.json"), {"schema_version": 2, "cell": "skyrim_objects", "refs": models})
-    rep = {"refs": len(exp["refs"]), "deferred": len(exp["deferred_refs"]), "to_convert": len(sub["refs"]),
+    rep = {"refs": exported, "deferred": len(exp["deferred_refs"]), "to_convert": len(sub["refs"]),
            "models": len(models), "skipped": len(skipped), "skip_reasons": exterior.reason_counts(skipped),
            "outside_overlay": outside, "convert_types": list(skyrimrefs.CONVERT_TYPES), "skipped_refs": skipped}
     save(os.path.join(a.work, "selection.json"), rep)
