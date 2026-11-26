@@ -1,4 +1,4 @@
-"""Skyrim (Special Edition) static models -> Starfield NIF + .mesh + .mat + DDS, on top of pipeline.Converter.
+﻿"""Skyrim (Special Edition) static models -> Starfield NIF + .mesh + .mat + DDS, on top of pipeline.Converter.
 
 What is reused unchanged: Starfield mesh / NIF writing (convert_static.shape_to_mesh, sfnif.build_static_nif), texture
 conversion and caps (Converter._convert_texture_set: colour BC1, normal BC5, roughness BC4, opacity BC4), the cloned
@@ -323,6 +323,72 @@ def clip_vertex_alpha(s: nifmod.Fo4Shape, lo: float, hi: Optional[float] = None)
     keep = {k: [v[i] for i in used] for k, v in out.items()}
     return dataclasses.replace(s, triangles=[tuple(new[i] for i in t) for t in tris],
                                **{k: keep.get(k, []) for k in ("positions", "uvs", "normals", "tangents", "colors")})
+
+
+# Skyrim water inside models (2026-11-26, owner: Whiterun's streams, pools and the horse troughs drew white). Skyrim
+# draws a BSWaterShaderProperty shape as water of the type its base names (ACTI WNAM -> WATR: WRWaterPool01 074EEA,
+# WRStairsStreamLACT 085FC8, HorseTrough01 0F762D; verified in Skyrim.esm). The converter had no material for it (the
+# neutral one: white). A FLAT water shape becomes vanilla Starfield placeable water (Water16mClearLake, the pieces
+# verified for Tamriel's rivers): water_squares packs its footprint with squares, make_skyrim_objects stage places one
+# scaled piece per square and reference. A SLOPED one (streams down steps, a waterfall) keeps its mesh with a vanilla
+# flowing-water effect material (SLOPED_WATER_MATERIAL; a probe: unverified in game).
+WATER_FLAT_UNITS = 24.0            # z range (game units) up to which a water shape counts as flat (WRStairsStreamL: 10)
+SLOPED_WATER_MATERIAL = "Materials\\Effects\\Environmental\\Waterfall_Outside_02.mat"   # 2LayerEffect: foam + warp
+
+
+def is_water_shader(src, shader_ref) -> bool:
+    return 0 <= shader_ref < len(src.blocks) and src.type_of(shader_ref) == "BSWaterShaderProperty"
+
+
+def water_squares(s: nifmod.Fo4Shape, max_squares: int = 300, cell: Optional[float] = None) -> dict:
+    """A flat water shape's surface as squares: {"z", "squares": [[cx, cy, side], ...], "area", "covered"} in model
+    units (the shape's world transform in the model applied). The footprint (union of its triangles seen from above)
+    is rasterised on a grid of `cell` units (default: a twelfth of its smaller side, 4..24); squares only cover grid cells
+    entirely inside it (no water past Skyrim's edge), the largest first, until max_squares."""
+    import numpy as np
+    R, t, sc = s.rotation, s.translation, s.scale
+    P = np.array([[sc * sum(R[3 * a + k] * v[k] for k in range(3)) + t[a] for a in range(3)] for v in s.positions])
+    T = np.array(s.triangles, dtype=np.int64).reshape(-1, 3)
+    lo, hi = P[:, :2].min(0), P[:, :2].max(0)
+    size = hi - lo
+    g = cell or float(min(24.0, max(4.0, min(size) / 12.0)))
+    if not cell and min(size) > 0:                    # a whole number of cells across the smaller side
+        g = float(min(size)) / max(1, int(np.ceil(min(size) / g - 1e-9)))
+    nx, ny = max(1, int(np.ceil(size[0] / g))), max(1, int(np.ceil(size[1] / g)))
+    xs, ys = lo[0] + np.arange(nx + 1) * g, lo[1] + np.arange(ny + 1) * g
+    cx, cy = (xs[:-1] + xs[1:]) / 2, (ys[:-1] + ys[1:]) / 2
+
+    def inside(qx, qy):
+        """[len(qy), len(qx)] True where the point lies in some triangle (edges count, 1e-6 slack)."""
+        X, Y = np.meshgrid(qx, qy)
+        hit = np.zeros(X.shape, bool)
+        for a, b, c in T:
+            (x1, y1), (x2, y2), (x3, y3) = P[a, :2], P[b, :2], P[c, :2]
+            d = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3)
+            if abs(d) < 1e-12:
+                continue
+            l1 = ((y2 - y3) * (X - x3) + (x3 - x2) * (Y - y3)) / d
+            l2 = ((y3 - y1) * (X - x3) + (x1 - x3) * (Y - y3)) / d
+            hit |= (l1 >= -1e-6) & (l2 >= -1e-6) & (1 - l1 - l2 >= -1e-6)
+        return hit
+    corners, centres = inside(xs, ys), inside(cx, cy)
+    free = centres & corners[:-1, :-1] & corners[1:, :-1] & corners[:-1, 1:] & corners[1:, 1:]
+    full = int(inside(cx, cy).sum())
+    squares = []
+    while free.any() and len(squares) < max_squares:
+        dp = np.zeros((ny + 1, nx + 1), np.int64)        # largest square ending at each cell (top-right corner)
+        for j in range(ny):
+            for i in range(nx):
+                if free[j, i]:
+                    dp[j + 1, i + 1] = 1 + min(dp[j, i + 1], dp[j + 1, i], dp[j, i])
+        k = int(dp.max())
+        j, i = np.unravel_index(int(dp.argmax()), dp.shape)
+        j0, i0 = j - k, i - k
+        free[j0:j, i0:i] = False
+        squares.append([float(lo[0] + (i0 + k / 2) * g), float(lo[1] + (j0 + k / 2) * g), float(k * g)])
+    covered = sum(sq[2] ** 2 for sq in squares)
+    return {"z": float(np.median(P[:, 2])), "squares": [[round(v, 3) for v in sq] for sq in squares],
+            "area": round(full * g * g, 1), "covered": round(covered, 1), "cell": round(g, 3)}
 
 
 def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
@@ -773,6 +839,22 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             if not shapes and not editor_shapes and not spin_shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
+            water = []                                # Skyrim water shapes: placeable water / a flowing material
+            if not skin_bone:
+                for i, s in enumerate(shapes):
+                    if not is_water_shader(src, s.shader_ref):
+                        continue
+                    zs = [s.scale * sum(s.rotation[6 + k] * v[k] for k in range(3)) + s.translation[2]
+                          for v in s.positions] or [0.0]
+                    if max(zs) - min(zs) <= WATER_FLAT_UNITS:
+                        water.append(dict(water_squares(s), shape=(s.name or b"").decode("latin-1")))
+                        mats[i] = None
+                    else:
+                        mats[i] = getattr(self, "sloped_water_material", SLOPED_WATER_MATERIAL) or None
+                        water.append({"sloped": True, "shape": (s.name or b"").decode("latin-1"),
+                                      "z_range": round(max(zs) - min(zs), 1), "material": mats[i]})
+            water_only = bool(water) and all(m is None or is_water_shader(src, s.shader_ref)
+                                             for s, m in zip(shapes, mats))
             va_report = {}
             shapes, mats = self._vertex_alpha_cut(src, shapes, mats, va_report)
             flame_shapes =sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
@@ -791,7 +873,7 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                 own, own_mats = self.model_flames(src)
                 cards, card_mats = cards + own, card_mats + own_mats
                 shapes, mats = list(shapes) + cards, list(mats) + card_mats
-            if mats and all(m is None for m in mats):
+            if mats and all(m is None for m in mats) and not water:
                 raise ValueError("only effect-shader / refraction shapes, skipped")
             if not shapes and skin_bone:
                 raise ValueError("only editor-marker geometry")
@@ -801,11 +883,13 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             if skin_bone:
                 files = convert_skinned_sse(shapes, out_name, mats, skin_bone, report)
             else:
-                files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
+                # a model that is only water (a pool, the Gildergreen's ring) keeps no collision: nobody walks on it
+                files = convert_static_sse(src, shapes, out_name, mats,
+                                           None if water_only else self.collision_template, report,
                                            landscape=bool(LANDSCAPE_RE.search(nif_name)),
-                                           sf_mesh_template=self.sf_mesh_template,
+                                           sf_mesh_template=None if water_only else self.sf_mesh_template,
                                            stair_layer=self.stair_layer,
-                                           allow_empty=editor_shapes > 0 or bool(spin_shapes))
+                                           allow_empty=editor_shapes > 0 or bool(spin_shapes) or bool(water))
             if spin is not None:
                 files.update(self._spin_model(src, spin, spin_shapes, out_name + SPIN_SUFFIX, res))
             for relp, data in files.items():
@@ -821,7 +905,7 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                        flame_shapes=flame_shapes, flame_cards=len(cards),
                        sf_effects=self.model_fire_effects(src) if self.fire and not skin_bone else [],
                        addon_nodes=len(skyrimfire.addon_nodes(src)), editor_marker_shapes=editor_shapes,
-                       **va_report, **hook_report)
+                       **({"water": water} if water else {}), **va_report, **hook_report)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"

@@ -1,6 +1,7 @@
 """Owner's Whiterun test 2026-11-26 (synthetic): land the city's cells hide (XCLC), references Skyrim starts disabled
 through their enable parent, and models whose root node carries a transform Skyrim ignores."""
 import json
+import math
 import os
 import struct
 import sys
@@ -146,6 +147,56 @@ class RootTransformTests(unittest.TestCase):
         self.assertEqual((t, r, s), ((0.0, 0.0, 0.0), tuple(float(v) for v in quarter), 1.0))
         self.assertEqual(len(n.blocks[0]), len(node([1])))
         self.assertEqual(skyrimnif.clear_root_transform(n), [])  # identity now: nothing to do
+
+
+def shape(positions, triangles, translation=(0, 0, 0)):
+    return nifmod.Fo4Shape(name=b"WATER", translation=translation, rotation=(1, 0, 0, 0, 1, 0, 0, 0, 1), scale=1.0,
+                           shader_ref=0, alpha_ref=-1, skin_ref=-1, positions=positions, uvs=[], normals=[], tangents=[],
+                           colors=[], triangles=triangles, skinned=False)
+
+
+class WaterTests(unittest.TestCase):
+    def test_squares_stay_inside_the_footprint(self):
+        from fo4sf import skyrimconvert as sc
+        # an L: 1024 x 512 plus 512 x 512 on top of its left half, at z 100 (+ the shape's own 16)
+        pts = [(0, 0, 100), (1024, 0, 100), (1024, 512, 100), (512, 512, 100), (512, 1024, 100), (0, 1024, 100)]
+        tris = [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 4, 5)]
+        w = sc.water_squares(shape(pts, tris, translation=(0, 0, 16)))
+        self.assertEqual(w["z"], 116.0)
+        self.assertGreater(w["covered"] / (1024 * 512 + 512 * 512), 0.97)   # the inner corner falls between grid lines
+        for cx, cy, side in w["squares"]:
+            for x in (cx - side / 2, cx + side / 2):
+                for y in (cy - side / 2, cy + side / 2):
+                    inside_l = (0 <= x <= 1024 and 0 <= y <= 512) or (0 <= x <= 512 and 0 <= y <= 1024)
+                    self.assertTrue(inside_l, (cx, cy, side))
+        self.assertGreater(max(sq[2] for sq in w["squares"]), 480.0)       # the largest square: most of 512
+
+    def test_pieces_follow_the_reference(self):
+        import make_skyrim_objects as so
+        bases = [{"key": "pool", "edid": "SKY_Pool"}]
+        items = {"pool": {"water": [{"z": 70.0, "squares": [[140.0, 0.0, 1120.0]]},
+                                    {"sloped": True, "material": "Materials\\W.mat"}]}}
+        placed = [{"src": "A", "base": 0, "pos": [10.0, 20.0, 5.0], "rot": [0.0, 0.0, math.pi / 2], "scale": 2.0,
+                   "disabled": False},
+                  {"src": "B", "base": 0, "pos": [0.0, 0.0, 0.0], "rot": [0.5, 0.0, 0.0], "scale": 1.0,
+                   "disabled": False}]
+        objects = {"bases": [{"edid": "SKY_Pool", "model": "m.nif"}], "refs": []}
+        rep = so.model_water(objects, bases, placed, items, -9, 8, overlap=1.0)
+        self.assertEqual((rep["pieces"], rep["refs"], rep["tilted"], rep["sloped"]), (1, 1, 1, 2))
+        self.assertEqual(objects["bases"][1]["vanilla"], "039FD6")
+        r = objects["refs"][0]
+        # (140, 0, 70) units x scale 2 = (4, 0, 2) m, turned a quarter clockwise (Bethesda z): +x -> -y
+        self.assertAlmostEqual(r["pos"][0], 10.0, places=4)
+        self.assertAlmostEqual(r["pos"][1], 16.0, places=4)
+        self.assertAlmostEqual(r["pos"][2], 7.0, places=4)
+        self.assertAlmostEqual(r["scale"], 1120 * 2 / 70 / 16, places=4)   # 32 m of water from a 16 m piece
+        self.assertEqual(r["rot"][:2], [0.0, 0.0])
+
+    def test_water_planes_are_selected_for_skyrim_only(self):
+        from fo4sf import exterior
+        r = {"type": "Activator", "model": "Water\\Water1024.nif"}
+        self.assertEqual(exterior.classify(r, ("Activator",))[1], "water")
+        self.assertEqual(exterior.classify(r, ("Activator",), water=True)[0], "convert")
 
 
 if __name__ == "__main__":

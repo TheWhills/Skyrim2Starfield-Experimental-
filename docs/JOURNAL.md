@@ -651,3 +651,12 @@ placed model's root-node transform; the converter applied it (WRCastleBridge01 t
 starts them disabled (174); the converter clears root transforms of placed models. tests/test_whiterun_fixes.py.
 Rebuilt and reinstalled. **Not seen in game yet.** Correction: the 2026-11-25 entry's "ground meshes" explanation was
 only part of it: the land showing through the roads was the hidden land (1).
+
+## 2026-11-26 (later): Whiterun's water (Claude)
+
+**Owner:** "It all looks right now" (hidden land, civil-war state, bridge: verified in game); the streams are white, as
+Riverwood's troughs. **Cause (verified):** Skyrim's water is a BSWaterShaderProperty shape in the model with a water type
+on the base (ACTI WNAM); the converter drew it with the neutral material. **Now:** flat water shapes become vanilla
+placeable water (Water16mClearLake, as Tamriel's rivers) packed into squares, per reference (422 pieces in Whiterun);
+sloped streams keep their mesh with vanilla Waterfall_Outside_02.mat (probe); Water1024 planes converted too.
+tests/test_whiterun_fixes.py WaterTests. Installed; **not seen in game yet**.

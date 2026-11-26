@@ -379,3 +379,9 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   WRCastleEntrance01 within 1 unit only without it); assumed for the other 21 Whiterun models with a root transform.
 - XESP enable parents: Whiterun's siege set hangs on initially disabled XMarker 0376E0 (106 references, 18 more with
   "opposite"): **verified** (export of Skyrim.esm).
+- Owner's in-game check of the three fixes above: "It all looks right now" (2026-11-26): **verified** in game.
+- Skyrim water in models: BSWaterShaderProperty shapes, the water type on the base (ACTI WNAM: WRWaterPool01 074EEA,
+  WRStairsStreamLACT 085FC8, HorseTrough01 0F762D): **verified** (Skyrim.esm, NIFs). Starfield has no mesh water
+  material in ContentResources (48,459 .mat; water-named ones are effects, puddles, refraction tanks); real water is
+  WATR via placeable water activators: **supported hypothesis**. Vanilla effect material on a converted mesh for sloped
+  streams (Waterfall_Outside_02.mat): **unresolved** (probe installed).

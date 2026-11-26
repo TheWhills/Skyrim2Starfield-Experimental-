@@ -193,6 +193,29 @@ Bridge is the wrong direction near Dragonsreach." Three causes, all in Skyrim's 
 Rebuilt and reinstalled 2026-11-26 (Starfield closed): 283 models, 864 references; archive 1,513 files, 159 MB (57
 newer than Tamriel's copy). **In game unverified.**
 
+### Water: streams, pools, troughs (2026-11-26)
+Owner: "It all looks right now" (the second look's fixes, verified in game); the streams are white, as Riverwood's
+troughs. **How Skyrim does it** (verified, Skyrim.esm and the NIFs): the city's water is Activators whose WNAM names a
+water type (WRWaterPool01 074EEA, WRStairsStreamLACT and WRTreeCircleWater01ACT 085FC8, HorseTrough01 0F762D); their
+models hold a BSWaterShaderProperty shape for the surface (9 such shapes in Whiterun's models), white foam as effect
+shapes (FXWhiteWater01) on top; two plain water planes Water1024WR (Water\Water1024.nif) were skipped by selection. The
+converter had no material for the water shader: the neutral one, white.
+**Now** (`skyrimconvert`: `is_water_shader`, `water_squares`; `make_skyrim_objects.model_water`):
+* a FLAT water shape (z range <= 24 units) is not drawn; its footprint is packed with squares (grid of 1/12 of its
+  smaller side, 4..24 units; squares only where the footprint is), and stage places Starfield's own placeable water on
+  each square of each reference: Water16mClearLake 039FD6 (the piece Tamriel's rivers use, verified in game 2026-10-18)
+  scaled to the square, at Skyrim's level, turned with the reference. Coverage: WRWaterPool01 96 %, the stream steps
+  98 - 99 %, horse trough and Water1024 100 %, the Gildergreen's ring 83 %, the stream exit 73 % (curved edges under
+  stone). Water1024WR planes are now selected and converted the same way (Skyrim only; FO4 keeps skipping them).
+* a SLOPED one (WRGreatHousePlatform01River01, WRMainRoadPlainsRiver01, WRStairsWater01River01: 3 - 6 m drops) keeps
+  Skyrim's mesh with vanilla `Materials\Effects\Environmental\Waterfall_Outside_02.mat` (2LayerEffect: foam + warp
+  normal) referenced as it is (as hair cards use vanilla hair materials): **a probe**, look unverified; purely visual.
+* a model that is only water (pool, ring) gets no collision. Foam effect shapes stay out (non-fire effects are not
+  translated).
+Whiterun: 422 water pieces on 8 references; installed 2026-11-26. **In game unverified**: tiny scales (a trough's
+pieces are 0.15 - 0.5 m: scale 0.01 - 0.03), the look of the sloped probe. Riverwood's troughs: their fixed model ships
+in the city archive (no more white) but their water pieces come with the exterior's next build.
+
 ### The other cities (plan, with numbers from Skyrim.esm)
 | City | Land | Own LAND | Gate pairs (Skyrim) | Plan |
 |---|---|---|---|---|

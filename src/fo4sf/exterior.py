@@ -67,8 +67,9 @@ def mesh_of(key: str) -> str:
     return key.split("|", 1)[0]                       # |alt: textures, |snow: snow_bake.py
 
 
-def classify(ref: dict, convert_types=CONVERT_TYPES) -> Tuple[str, Optional[str], str]:
-    """('convert', None, '') or ('skip', reason code, detail) for one exported reference."""
+def classify(ref: dict, convert_types=CONVERT_TYPES, water: bool = False) -> Tuple[str, Optional[str], str]:
+    """('convert', None, '') or ('skip', reason code, detail) for one exported reference. water: placed water planes
+    are converted too (Skyrim, 2026-11-26: the converter turns their water shapes into placeable water)."""
     t, model = ref.get("type") or "?", ref.get("model") or ""
     if t in TYPE_REASONS:
         return "skip", "type_not_translated", TYPE_REASONS[t]
@@ -82,16 +83,16 @@ def classify(ref: dict, convert_types=CONVERT_TYPES) -> Tuple[str, Optional[str]
         return "skip", "editor_marker", f"editor marker model {model}"
     if EFFECTS_RE.search(model):
         return "skip", "effect", f"effect mesh (fog, light beam or particles) {model}"
-    if WATER_RE.search(model):
+    if WATER_RE.search(model) and not water:
         return "skip", "water", f"placed water plane {model}: no water translation yet (as a static it is an opaque sheet)"
     return "convert", None, ""
 
 
-def select(export: dict, convert_types=CONVERT_TYPES) -> Tuple[dict, List[dict]]:
+def select(export: dict, convert_types=CONVERT_TYPES, water: bool = False) -> Tuple[dict, List[dict]]:
     """(cell JSON with only the references to convert, [skipped entries]) for convert_batch --cell-json."""
     keep, skipped = [], []
     for r in export["refs"]:
-        action, code, detail = classify(r, convert_types)
+        action, code, detail = classify(r, convert_types, water)
         if action == "convert":
             keep.append(r)
         else:

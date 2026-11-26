@@ -134,7 +134,7 @@ def cmd_select(a):
     parked = [exterior.skip_entry(r, "disabled_by_parent", f"enable parent {off[r['formkey']]} starts disabled")
               for r in exp["refs"] if r.get("formkey") in off]
     exp = dict(exp, refs=[r for r in exp["refs"] if r.get("formkey") not in off])
-    sub, skipped = exterior.select(exp, skyrimrefs.CONVERT_TYPES)
+    sub, skipped = exterior.select(exp, skyrimrefs.CONVERT_TYPES, water=not getattr(a, "no_water", False))
     skipped = parked + skipped
     cmin, cmax = ov["cell_min"], ov["cell_max"]
     by_model, outside = {}, 0
@@ -427,6 +427,8 @@ def cmd_convert(a):
             items[-1]["sf_effects"] = r["sf_effects"]
         if r.get("spin"):                          # a turning part, its own model (skyrimconvert._spin_model)
             items[-1]["spin"] = dict(r["spin"], template=SPIN_TEMPLATE)
+        if r.get("water"):                         # Skyrim water shapes: squares for placeable water (stage)
+            items[-1]["water"] = r["water"]
         if (k + 1) % 200 == 0:
             print(f"  {k + 1:,} / {min(len(names), a.limit):,} models, {len(failures):,} failed, "
                   f"{time.time() - t0:.0f} s")
@@ -897,6 +899,60 @@ def mark_load_doors(objects: dict, interiors: str) -> tuple:
     return marked, sorted(want - seen)
 
 
+MODEL_WATER_EDID = "SKY_ObjectWaterVanilla"
+MODEL_WATER_SRC = "object_water:"
+
+
+def model_water(objects, bases, placed, items, cell_min, cell_max, form=None, overlap=1.01) -> dict:
+    """Vanilla placeable water (skyrimsea.WATER16M, a 16 m square centred on its origin) on every flat water shape of
+    the placed models (manifest item "water", skyrimconvert.water_squares): per reference and square one piece at the
+    square's centre and level, scaled to its side (x overlap), turned with the reference. A reference tilted about x / y
+    keeps none (a tilted water plane). Appends one base and the references to objects; returns counts."""
+    from fo4sf import skyrimsea
+    form = form or skyrimsea.WATER16M
+    rep = {"form": form, "pieces": 0, "refs": 0, "shapes": 0, "sloped": 0, "sloped_material": "", "tilted": 0}
+    bi = None
+    for p in placed:
+        if "spin_of" in p:
+            continue
+        item = items.get(bases[p["base"]]["key"])
+        water = (item or {}).get("water") or []
+        if not water:
+            continue
+        rep["shapes"] += len(water)
+        flat = [w for w in water if not w.get("sloped")]
+        for w in water:
+            if w.get("sloped"):
+                rep["sloped"] += 1
+                rep["sloped_material"] = w.get("material") or rep["sloped_material"]
+        if not flat:
+            continue
+        rot, scale, pos = [float(v) for v in p["rot"]], float(p["scale"]), p["pos"]
+        if abs(rot[0]) > 0.02 or abs(rot[1]) > 0.02:
+            rep["tilted"] += 1
+            continue
+        if bi is None:
+            bi = len(objects["bases"])
+            objects["bases"].append({"edid": MODEL_WATER_EDID, "vanilla": form, "model": "",
+                                     "source": "generated: placeable water for Skyrim water shapes", "collision": "none"})
+        m = exterior.ref_matrix(rot)
+        rep["refs"] += 1
+        for w in flat:
+            for cx, cy, side in w["squares"]:
+                v = (cx * scale / 70.0, cy * scale / 70.0, w["z"] * scale / 70.0)
+                x, y, z = (pos[k] + sum(m[3 * k + j] * v[j] for j in range(3)) for k in range(3))
+                cell = tg.sf_cell_of(x, y)
+                if not (cell_min <= cell[0] <= cell_max and cell_min <= cell[1] <= cell_max):
+                    continue
+                objects["refs"].append({"src": f"{MODEL_WATER_SRC}{p['src']}:{rep['pieces']}", "base": bi,
+                                        "cell": list(cell), "pos": [round(x, 4), round(y, 4), round(z, 4)],
+                                        "rot": [0.0, 0.0, round(rot[2], 6)],
+                                        "scale": round(side * scale / 70.0 / 16.0 * overlap, 5),
+                                        "disabled": bool(p.get("disabled"))})
+                rep["pieces"] += 1
+    return rep
+
+
 def cmd_stage(a):
     t0 = time.time()
     prm, ov = terrain_overlay(a.terrain)
@@ -941,6 +997,12 @@ def cmd_stage(a):
                                             "anim_speed")
                           if k in b} for b in bases],
                "refs": [{k: p[k] for k in ("src", "base", "cell", "pos", "rot", "scale", "disabled")} for p in placed]}
+    if not getattr(a, "no_water", False):
+        wr = model_water(objects, bases, placed, items, ov["cell_min"], ov["cell_max"])
+        if wr["shapes"]:
+            print(f"water: {wr['pieces']:,} vanilla water pieces ({wr['form']}) on {wr['refs']:,} references' flat water "
+                  f"shapes; {wr['sloped']:,} sloped water shapes drawn with {wr['sloped_material'] or '-'}"
+                  + (f"; {wr['tilted']} tilted references left without water" if wr["tilted"] else ""))
     if a.interiors:
         n_ld, missing = mark_load_doors(objects, a.interiors)
         print(f"load doors into the interiors: {n_ld} placed as persistent DOOR references"
@@ -988,6 +1050,8 @@ def check(out):
 
     need(obj["world"] == ov["world"], f"objects.json names the overlay world {ov['world']}")
     for b in obj["bases"]:
+        if b.get("vanilla"):                         # a vanilla base placed as it is (placeable water): no model of ours
+            continue
         p = os.path.join(data, "meshes", *b["model"].replace("\\", "/").split("/"))
         if not os.path.isfile(p):
             missing.append(b["model"])
@@ -1010,7 +1074,9 @@ def check(out):
                             gone.add(g)
         for s in m.strings:
             t = s.decode("latin-1")
-            if t.lower().endswith(".mat") and not os.path.isfile(os.path.join(data, *t.replace("\\", "/").split("/"))):
+            own = t.replace("/", "\\").lower().startswith(f"materials\\{ASSET_PREFIX}\\")   # vanilla ones are the game's
+            if t.lower().endswith(".mat") and own and \
+                    not os.path.isfile(os.path.join(data, *t.replace("\\", "/").split("/"))):
                 gone.add(t)
     need(not gone, f"every geometry and material file a model names exists (missing {sorted(gone)[:5]})")
     texmiss = set()
@@ -1164,6 +1230,9 @@ def main(argv=None):
     ap.add_argument("--no-large-refs", action="store_true",
                     help="lod: do not list the LOD references as the world's large references (WRLD RNAM)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
+    ap.add_argument("--no-water", action="store_true",
+                    help="select: leave Skyrim's placed water planes (Water\\*.nif) out as before; stage: no vanilla "
+                         "water pieces for the models' flat water shapes")
     ap.add_argument("--no-spin", action="store_true",
                     help="stage: leave turning parts (the mill water wheel) out instead of placing them on a copy of "
                          f"the vanilla turning record {SPIN_TEMPLATE}")
