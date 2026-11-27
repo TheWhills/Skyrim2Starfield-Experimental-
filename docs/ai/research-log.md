@@ -413,3 +413,11 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
 - Starfield water activators: Water16m1mDepthFountain 03084F and NA_Hard_CanalA_Pool_* set WaterMaterial
   materials/water/watersmooth.mat with WaterClearSterile 062BE5; Water16mClearLake 039FD6 sets none: **verified**
   (SfInspect form). That the fountain's settings soften the wading splash: **unresolved** (installed).
+- Starfield SoundMarker records (234F7D, 07BAD7, 02BD83, 0A2581) hold object bounds, the sound reference (SMLS) and two
+  unknown ints, no volume; a placed reference has no volume either as far as known: **supported hypothesis** (SfInspect
+  form; REFR not searched for one). Whiterun's 38 mapped markers sit 5 - 10 m apart: **verified** (export.json); 20 m
+  thinning leaves 9.
+- Sloped stream WATER vertex alpha: WRStairsWater01River01 0..50 (mean 20), WRMainRoadPlainsRiver01 0..63 (mean 21);
+  WRTerWind01Waterfall01 WATER 0..127 (mean 79), RGB (70, 102, 110): **verified** (NIFs, probe_uv). The converted sheet
+  material (fxwatertile01_b550d9b7.mat) has AlphaBlenderSettings UseVertexColor true and AlphaTestThreshold 0.1:
+  **verified**; that this cut the streams' sheet to nothing: **supported hypothesis** (owner: nothing visible).

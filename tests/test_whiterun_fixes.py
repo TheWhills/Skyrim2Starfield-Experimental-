@@ -319,6 +319,20 @@ class SlopedWaterTests(unittest.TestCase):
                                   False, True, 55)])
         self.assertEqual(sc.WATER_DEPTH_M, 1.0)                  # as the fountain's 1 m water
 
+    def test_sloped_sheet_vertex_alpha_raised_to_the_falls_level(self):
+        from fo4sf import skyrimconvert as sc
+        import dataclasses
+        names = [f.name for f in dataclasses.fields(nifmod.Fo4Shape)]
+        s = nifmod.Fo4Shape(**{n: None for n in names})
+        s = dataclasses.replace(s, colors=[(255, 255, 255, 0), (255, 255, 255, 20), (200, 210, 220, 50),
+                                           (255, 255, 255, 100)])
+        out = sc.sloped_sheet_alpha(s)
+        # the stairs stream's mean 20 / max 50 -> about the Wind District fall's mean 79; RGB kept, clamped at 255
+        self.assertEqual(out.colors, [(255, 255, 255, 0), (255, 255, 255, 80), (200, 210, 220, 200),
+                                      (255, 255, 255, 255)])
+        bare = dataclasses.replace(s, colors=[])
+        self.assertIs(sc.sloped_sheet_alpha(bare), bare)        # no vertex colours: unchanged
+
 
 class SoundTests(unittest.TestCase):
     def test_skyrim_sound_markers_become_vanilla_ones(self):
@@ -343,6 +357,23 @@ class SoundTests(unittest.TestCase):
         a = objects["refs"][0]
         self.assertEqual((a["base"], a["pos"], a["cell"], a["rot"]), (1, [10.0, -20.0, 1.0], [0, -1], [0.0, 0.0, 1.0]))
         self.assertEqual(len({b["edid"] for b in objects["bases"]}), 3)
+
+    def test_close_sound_markers_are_thinned_larger_first(self):
+        from fo4sf import skyrimsound
+
+        def ref(fk, edid, x):
+            return {"formkey": fk, "type": "SoundMarker", "base_editor_id": edid, "pos": [x * 70.0, 0.0, 0.0],
+                    "rot": [0.0, 0.0, 0.0], "disabled": 0}
+        # a stream marker every 5 m, a waterfall among them, and one stream 30 m on
+        refs = [ref("S0", "AMBWaterStreamSmallWhiterunLP", 0.0), ref("S1", "AMBWaterStreamSmallWhiterunLP", 5.0),
+                ref("W", "AMBWaterfallSmallLP", 10.0), ref("S2", "AMBWaterStreamSmallWhiterunLP", 15.0),
+                ref("S3", "AMBWaterStreamSmallWhiterunLP", 40.0)]
+        objects = {"bases": [], "refs": []}
+        rep = skyrimsound.place(objects, refs, -4, 4, "SKY_")
+        self.assertEqual(rep["placed_src"], {"W", "S3"})
+        self.assertEqual(rep["thinned"], 3)
+        rep = skyrimsound.place({"bases": [], "refs": []}, refs, -4, 4, "SKY_", spacing=0)
+        self.assertEqual(len(rep["placed_src"]), 5)
 
 
 if __name__ == "__main__":

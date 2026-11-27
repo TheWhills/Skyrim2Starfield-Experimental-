@@ -227,6 +227,14 @@ def swap_textures(paths: list, alt: Optional[list]) -> list:
     return out
 
 
+def sloped_sheet_alpha(s: nifmod.Fo4Shape, gain: Optional[float] = None) -> nifmod.Fo4Shape:
+    """A sloped water shape's vertex alpha raised to the lit water sheet's level (SLOPED_WATER_ALPHA_GAIN); RGB kept."""
+    if not s.colors:
+        return s
+    gain = SLOPED_WATER_ALPHA_GAIN if gain is None else gain
+    return dataclasses.replace(s, colors=[tuple(c[:3]) + (min(255, int(round(c[3] * gain))),) for c in s.colors])
+
+
 def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
     """The shape plus a mirrored copy of every triangle (reversed winding, normals negated, tangents kept so the
     recomputed handedness flips with the normal): a double-sided Skyrim surface as plain one-sided Starfield geometry,
@@ -343,6 +351,11 @@ WATER_SUFFIX = "_water"
 SLOPED_WATER_DIFFUSE = "textures\\effects\\FXwaterTile01.dds"
 SLOPED_WATER_NORMAL = "textures\\effects\\FXwaterTile02_n.dds"
 SLOPED_WATER_ALPHA_REF = 55
+# 2026-11-27, owner: "didnt see anything on the sloped water". The streams' WATER vertex alpha is Skyrim's water shader's
+# (WRStairsWater01River01 0..50, mean 20; WRMainRoadPlainsRiver01 0..63, mean 21), far under the Wind District fall
+# sheet's (0..127, mean 79; verified, the NIFs): with the sheet's vertex-alpha blend and its alpha test (0.1) nearly
+# every pixel was cut. Their vertex alpha is scaled by this to the fall's level (clamped at 255).
+SLOPED_WATER_ALPHA_GAIN = 4.0
 WATER_MATERIAL = "Materials\\Water\\WaterPlaceholder.mat"          # vanilla Water16m.nif's own
 
 
@@ -918,6 +931,7 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                         if sheet:                     # Skyrim's lit water sheet, in the model itself (no water object)
                             water[-1]["sheet"] = sheet
                             mats[i] = sheet
+                            shapes[i] = sloped_sheet_alpha(s)
                             continue
                     water_shapes.append(s)
                     if "sloped" not in water[-1]:

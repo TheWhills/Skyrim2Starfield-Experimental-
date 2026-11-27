@@ -679,3 +679,11 @@ markers placed as vanilla Starfield ones (`fo4sf.skyrimsound`), the rocks' foam 
 sequence, sloped water drawn with Skyrim's lit water sheet (the Wind District fall's) under its scrolling foam instead
 of Starfield water, and the water models copies of the fountain's shallow water (03084F, watersmooth.mat, 1 m).
 Installed; **not seen in game yet**.
+
+**Owner's test (2026-11-27):** the water sounds "wayyy too loud". **Now:** Skyrim's sound markers thinned to one per
+20 m (larger sound kept): 38 -> 9 (`skyrimsound.place(spacing=)`, `stage --sound-spacing`); Starfield has no
+per-reference sound volume. Staged; installed once Starfield is closed; **not heard in game yet**.
+
+**Owner (2026-11-27):** nothing visible on the sloped streams. Their vertex alpha (mean 20/255) is a quarter of the
+Wind District fall sheet's (79/255) and the sheet alpha-tests at 0.1: scaled by 4 (`skyrimconvert.sloped_sheet_alpha`).
+Rebuilt and installed with the sound thinning; **not seen in game yet**.

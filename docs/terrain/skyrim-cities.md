@@ -279,6 +279,11 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   marker closest in kind (`SOUND_MAP`: The Well's waterfalls 234F7D / 234F7F, New Atlantis's water A - D 07BAD7 /
   07BADA / 07BB27 / 07BB2A, Akila's sewer grate 1E2870; FormIDs verified with SfInspect `list SoundMarker`, how each
   sounds unverified); disabled ones and those outside the overlay stay out (`stage --no-sounds`: none).
+  **2026-11-27, owner: "its wayyy too loud".** Skyrim places its short loops every 5 - 10 m (8 round the
+  Gildergreen's ring, 15 down the Plains District stream); 38 Starfield loops stacked. No per-reference volume exists
+  for a Starfield sound marker (the SOUN record holds only its Wwise event: SfInspect `form`), so they are thinned: a
+  marker within 20 m of one already kept is left out, the larger sound first (`SOUND_MAP` order): 38 -> 9 (falls x1,
+  splatter x2, rapids medium x1, rapids x3, small streams x2). `stage --sound-spacing <m>` (0 = all).
 * **The rocks' foam** (WRRapidRocks01): its V Offset controller is driven through a NiControllerManager; the controller
   holds only a blend interpolator, the keys (0 -> -1 in 5.333 s) sit on the NiControllerSequence's interpolator
   (verified, the NIF). `skyrimfire.sequence_interpolators` reads them: the foam scrolls as in Skyrim.
@@ -288,6 +293,11 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   sheet Skyrim's own Wind District fall uses (WRTerWind01Waterfall01 "WATER": FXwaterTile01 + FXwaterTile02_n, alpha
   blend; part of the fall the owner liked), in the model itself, no water object; the foam scrolls above it (the
   water mesh's UVs run along the flow as the foam's: verified). No splash on them, as before.
+  **2026-11-27, owner: "didnt see anything on the sloped water"** (Skyrim: a clear sheet with white streaks over the
+  stone). The streams' WATER vertex alpha is made for Skyrim's water shader (WRStairsWater01River01 0..50, mean 20;
+  WRMainRoadPlainsRiver01 0..63, mean 21), the fall's sheet's is 0..127, mean 79 (verified, the NIFs); the sheet
+  material blends by vertex alpha and alpha-tests at 0.1, so nearly every pixel was cut (supported hypothesis). The
+  sloped shapes' vertex alpha is now scaled by `SLOPED_WATER_ALPHA_GAIN` 4 (clamped 255) to the fall's level.
 * **Softer splash** (supported hypothesis, unverified): the water models are now copies of Water16m1mDepthFountain
   03084F, Bethesda's own shallow city water (1 m deep, the calmer `materials/water/watersmooth.mat`, WaterClearSterile;
   New Atlantis's canal pools use the same material) instead of the lake piece 039FD6 (no water material of its own); the

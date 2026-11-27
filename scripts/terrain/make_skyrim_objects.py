@@ -1107,11 +1107,13 @@ def cmd_stage(a):
         from fo4sf import skyrimsound
         exp = load(os.path.join(a.work, "export.json"))
         sr = skyrimsound.place(objects, to_local(exp["refs"], ov), ov["cell_min"], ov["cell_max"], EDID_PREFIX,
-                               disabled=set(skyrimrefs.disabled_by_parent(exp["refs"] + exp.get("deferred_refs", []))))
+                               disabled=set(skyrimrefs.disabled_by_parent(exp["refs"] + exp.get("deferred_refs", []))),
+                               spacing=getattr(a, "sound_spacing", skyrimsound.SPACING_M))
         skipped = [s_ for s_ in skipped if s_.get("formkey") not in sr["placed_src"]]
         if sr["placed"]:
             print(f"sounds: {sum(sr['placed'].values())} Skyrim sound markers as vanilla Starfield ones "
                   f"({', '.join(f'{k} x{v}' for k, v in sorted(sr['placed'].items()))}); "
+                  f"{sr['thinned']} within {getattr(a, 'sound_spacing', skyrimsound.SPACING_M):g} m of a kept one, "
                   f"{sr['disabled']} disabled in Skyrim, {sr['outside']} outside the overlay")
     if a.interiors:
         n_ld, missing = mark_load_doors(objects, a.interiors)
@@ -1356,6 +1358,9 @@ def main(argv=None):
     ap.add_argument("--no-sounds", action="store_true",
                     help="stage: leave Skyrim's sound markers out (default: those in skyrimsound.SOUND_MAP placed as "
                          "vanilla Starfield sound markers)")
+    ap.add_argument("--sound-spacing", type=float, default=20.0,
+                    help="stage: metres; a Skyrim sound marker this close to one already placed is left out (Skyrim "
+                         "places its short loops every 5-10 m, Starfield's carry further and stack; 0 places all)")
     ap.add_argument("--no-spin", action="store_true",
                     help="stage: leave turning parts (the mill water wheel) out instead of placing them on a copy of "
                          f"the vanilla turning record {SPIN_TEMPLATE}")
