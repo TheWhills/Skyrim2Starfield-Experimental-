@@ -713,3 +713,8 @@ game yet**.
 **Owner:** "now theyre all superrrr bright" (the emissive shader model without its emittance settings). **Now:**
 water effects built from a scene-lit vanilla effect material (BitsAsh.mat, shader model 1LayerEffect) with a flat
 normal map. Rebuilt; **not seen in game yet**.
+
+**Owner:** the scene-lit water effects "look quite strange now, and dissapear from certain angle and lighting".
+**Now:** back to the emissive template (the daytime look the owner liked), lit by the scene as well (no
+EmissiveOnlyEffect) and with a third of the glow, for less at night; no material can switch by time of day
+(verified). Rebuilt; **not seen in game yet**.

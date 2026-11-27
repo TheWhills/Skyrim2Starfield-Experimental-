@@ -593,21 +593,19 @@ EFFECT_TEMPLATE_MAT = "Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat"   #
 # brightness = base x Skyrim's emissive multiple x EMITTANCE_SCALE (the multiple was baked into the colour before and
 # clipped hearth flames to white; owner 2026-11-15: hearth cores white-hot beside Skyrim's orange)
 # 2026-11-15 v3 in game: hearth particle cards read as "intense straight clots": dimmer, and the ring wider
-EMITTANCE_SCALE = {"hearth": 0.3, "candle": 1.0, "water": 1.0}
-# 2026-11-27, owner on Whiterun's water effects (foam, waterfalls, the streams' layer): "all of these glow in the dark A
-# LOT". The fire template is EmissiveOnlyEffect with an adaptive emittance (brighter as the eye adapts to the dark);
-# vanilla water effects are lit by the scene instead: Materials/Water/Waterfall01.mat has neither EmissiveOnlyEffect
-# nor a LayeredEmissivityComponent, RainRippleWater.mat no EmissiveOnlyEffect (verified, ContentResources.zip). Kinds
-# here are built that way: no EmissiveOnlyEffect, no emissivity component (lit as in vanilla: supported hypothesis).
-LIT_KINDS = frozenset({"water"})
-# 2026-11-27, owner after the first try (fire template with its emissivity removed): "now theyre all superrrr bright".
-# The template's shader model is 1LayerEffectEmissive; without its emittance settings it fell back to a far brighter
-# default. Scene-lit vanilla effects use the 1LayerEffect shader model (140 vanilla materials; verified,
-# ContentResources.zip): LIT_KINDS are built from BitsAsh.mat (1LayerEffect; Albedo / Normal / Opacity; a flat normal
-# map), keeping the fire template's blend (SourceSoftAdditive) and soft edge (0.35 m) unless asked otherwise.
-LIT_EFFECT_TEMPLATE_MAT = "Materials/Effects/BitsAsh.mat"
-LIT_DEFAULT_BLEND = "SourceSoftAdditive"
-LIT_DEFAULT_SOFT_M = 0.35
+# 2026-11-27, Whiterun's water effects (foam, waterfalls, the streams' layer), three tries in game:
+#  1. emissive only (the fire template: EmissiveOnlyEffect, adaptive emittance 600): good by day, but "all of these glow
+#     in the dark A LOT" (an adaptive emittance keeps the same apparent brightness as the eye adapts to the dark);
+#  2. the emissivity component removed: "now theyre all superrrr bright" (the 1LayerEffectEmissive shader model's
+#     default emittance);
+#  3. scene-lit only (vanilla BitsAsh.mat, 1LayerEffect, flat normal): "look quite strange now, and dissapear from
+#     certain angle and lighting".
+# No vanilla material switches with the time of day (the only BSBind controllers in the 48,459 ContentResources
+# materials are float / colour curves, timers and lerps: verified). So HYBRID_KINDS keep the emissive template and its
+# adaptive emittance at a third (EMITTANCE_SCALE) and drop EmissiveOnlyEffect, so the scene lights them as well: bright
+# in daylight from the sun, a dim glow left at night (supported hypothesis until seen in game).
+EMITTANCE_SCALE = {"hearth": 0.3, "candle": 1.0, "water": 1.0 / 3.0}
+HYBRID_KINDS = frozenset({"water"})
 RING = 0.85                          # flame card ring radius / emitter radius (v2 / v3: 0.55)
 # flame styles (owner 2026-11-15, after v3: "maybe it is better to use Starfield's flame"): "skyrim" = Skyrim's
 # textures on the cards (flames v3); "starfield" = the same cards (Skyrim's places, sizes, timing) playing Starfield's
@@ -843,14 +841,10 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
             comps.append(c)
         o["Components"] = comps
     root = mat["Objects"][0]["Components"]
-    if kind in LIT_KINDS:                    # scene-lit as vanilla water effects (LIT_KINDS): no self-lit glow
-        root[:] = [c for c in root if c.get("Type") != "BSMaterial::LayeredEmissivityComponent"]
+    if kind in HYBRID_KINDS:                 # lit by the scene too, plus a dim glow (HYBRID_KINDS)
         for c in root:
             if c.get("Type") == "BSMaterial::EffectSettingsComponent":
-                for k in ("EmissiveOnlyEffect", "BackLightingEnable", "BacklightingScale"):
-                    c["Data"].pop(k, None)
-        blend = blend or LIT_DEFAULT_BLEND
-        soft_depth = LIT_DEFAULT_SOFT_M if soft_depth is None else soft_depth
+                c["Data"].pop("EmissiveOnlyEffect", None)
     em = dict(EMITTANCE[kind])
     em["LuminousEmittance"] = f"{float(em['LuminousEmittance']) * multiple * EMITTANCE_SCALE[kind]:g}"
     if exposure is not None:

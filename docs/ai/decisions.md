@@ -2969,3 +2969,11 @@ and did not move; the owner's screenshots of Skyrim show a grey-blue moving laye
 template's) cannot darken the stone under it. **Alternatives:** the lit sheet (`sloped_water` "sheet", kept);
 Starfield water on the slope (drew a dark film or nothing); a vanilla waterfall material (the Waterfall_Outside_02
 probe drew nothing).
+
+## 2026-11-27: Skyrim water effects: emissive template, lit by the scene too, a third of the glow (Claude)
+**Decision:** Skyrim water effects (foam, waterfalls, the streams' flowing layer) keep the emissive fire template
+without EmissiveOnlyEffect and with a third of its adaptive emittance. **Why:** emissive only glowed at night (owner);
+scene-lit only (vanilla BitsAsh.mat, 1LayerEffect) looked wrong and vanished at some angles (owner); removing the
+emittance settings made them very bright; no vanilla material control switches with the time of day (verified).
+**Alternatives:** emissive only at full strength (`EMITTANCE_SCALE["water"]` = 1, EmissiveOnlyEffect kept: the
+daytime look, with the night glow); scene-lit only (removed).

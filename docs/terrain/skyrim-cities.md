@@ -339,6 +339,13 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   normal map (`textures/skyrim/effects/_flat_normal.dds`), keeping the fire template's SourceSoftAdditive blend and
   0.35 m soft edge unless the caller sets them (the streams' layer: AlphaBlend, no soft edge). Lit by the scene:
   supported hypothesis until seen by day and at night.
+  **Owner: "effects look quite strange now, and dissapear from certain angle and lighting"** (scene-lit only: warm
+  tints, gone at some angles, the stair channels invisible under a flashlight). No vanilla material switches with the
+  time of day (the 48,459 ContentResources materials use only float / colour curves, timers and lerps as controllers:
+  verified). Water effects are now a hybrid (`skyrimfire.HYBRID_KINDS`): the emissive fire template again (the look
+  the owner liked by day), without EmissiveOnlyEffect so the scene lights them too, and its adaptive emittance at a
+  third (600 -> 200): bright in sunlight, a dim glow left at night (supported hypothesis). The BitsAsh / flat-normal
+  route is removed.
 * **Colour (owner, 2026-11-27):** "the upper pool is a much better color than the lower one". Upper: the Water1024
   pair (357 m), WaterOceanDark 0560D0; lower: WRWaterPool01 (347 m), WaterOceanClear 0560CF. `--water-type city`
   (WATER_TYPE_CITY, now the default of tools/owner/cities.ps1): WaterOceanDark everywhere but the Gildergreen's ring
