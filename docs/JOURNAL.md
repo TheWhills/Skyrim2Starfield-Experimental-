@@ -693,3 +693,7 @@ lower one"; loudness fine. **Now:** water effect materials take the soft edge on
 stream foam, 2 cm over the stone, had faded to ~6 % under the template's 35 cm soft edge); Whiterun's water all
 WaterOceanDark (the upper pool's) except the Gildergreen ring (`--water-type city`, cities.ps1's default). Rebuilt and
 installed; **not seen in game yet**.
+
+**Owner (2026-11-27, later still):** the stair channels show now; the main road stream by the gate is still faint.
+Its foam's vertex alpha is half the stairs': raised to the stairs' mean for streams drawn with the water sheet.
+Rebuilt and installed; **not seen in game yet**.

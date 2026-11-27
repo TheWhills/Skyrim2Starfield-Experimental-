@@ -307,6 +307,12 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   (C0000078). `water_effect_soft_depth`: the template's soft edge only where Skyrim's shader has Soft_Effect, else none
   (the candles' soft edge was the same problem, 2026-11-21). The water sheet itself is near white (FXwaterTile01, mean
   229) at about a third opacity and does not scroll: the moving white in Skyrim's streams is the foam.
+  **Owner, after that:** the stair channels show; the main road stream (WRMainRoadPlainsRiver01, from the wall grate
+  past the gate and under the bridge) "doesnt look as good or visible compared to skyrim". It sits on its bed as the
+  stairs' does (water 1 cm, foam 5 cm, medians over WRMainRoadPlains, measured), but its foam's vertex alpha (Foam02:
+  0..200, mean 66; 50..100 along its length) is half the stairs' (mean 138), and in the arches' shade the lit sheet
+  goes dark. The foam of a model with a sloped water sheet is now raised to the stairs' mean (`raise_alpha_mean`,
+  `SHEET_FOAM_ALPHA_MEAN` 138; never lowered), about x2 on the main road.
 * **Colour (owner, 2026-11-27):** "the upper pool is a much better color than the lower one". Upper: the Water1024
   pair (357 m), WaterOceanDark 0560D0; lower: WRWaterPool01 (347 m), WaterOceanClear 0560CF. `--water-type city`
   (WATER_TYPE_CITY, now the default of tools/owner/cities.ps1): WaterOceanDark everywhere but the Gildergreen's ring

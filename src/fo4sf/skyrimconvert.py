@@ -246,6 +246,24 @@ def sloped_sheet_alpha(s: nifmod.Fo4Shape, gain: Optional[float] = None) -> nifm
     return dataclasses.replace(s, colors=[tuple(c[:3]) + (min(255, int(round(c[3] * gain))),) for c in s.colors])
 
 
+# 2026-11-27, owner on the main road stream and the water under the bridge by the gate: "doesnt look as good or visible
+# compared to skyrim". Its foam's vertex alpha (WRMainRoadPlainsRiver01 Foam02: 0..200, mean 66) is half the stair
+# stream's (WRStairsWater01River01 foam: mean 138), which the owner saw working; in the arches' shade the lit sheet
+# under it goes dark, so the foam carries the look. The foam of a model with a sloped water sheet is raised to this
+# mean (never lowered; clamped at 255).
+SHEET_FOAM_ALPHA_MEAN = 138.0
+
+
+def raise_alpha_mean(s: nifmod.Fo4Shape, target: float = SHEET_FOAM_ALPHA_MEAN) -> nifmod.Fo4Shape:
+    """The shape with its vertex alpha scaled so its mean reaches target (unchanged when already there)."""
+    if not s.colors:
+        return s
+    mean = sum(c[3] for c in s.colors) / len(s.colors)
+    if mean <= 0 or mean >= target:
+        return s
+    return sloped_sheet_alpha(s, target / mean)
+
+
 def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
     """The shape plus a mirrored copy of every triangle (reversed winding, normals negated, tangents kept so the
     recomputed handedness flips with the normal): a double-sided Skyrim surface as plain one-sided Starfield geometry,
@@ -948,6 +966,12 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                     if "sloped" not in water[-1]:
                         flat_water.append(s)
                     mats[i] = None                    # not in the model itself
+            sheets = {w["sheet"] for w in water if w.get("sheet")}
+            if sheets:                                    # the stream's foam over the sheet: as strong as the stairs'
+                for i, s in enumerate(shapes):
+                    m = mats[i]
+                    if m and m not in sheets and "\\effects\\" in m.lower() and re.search(WATER_EFFECT, m, re.I):
+                        shapes[i] = raise_alpha_mean(s)
             water_only = bool(water) and all(m is None or is_water_shader(src, s.shader_ref)
                                              for s, m in zip(shapes, mats))
             va_report = {}

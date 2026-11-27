@@ -358,6 +358,12 @@ class SlopedWaterTests(unittest.TestCase):
                                       (255, 255, 255, 255)])
         bare = dataclasses.replace(s, colors=[])
         self.assertIs(sc.sloped_sheet_alpha(bare), bare)        # no vertex colours: unchanged
+        # a sheet stream's foam raised to the stairs' foam mean (138), never lowered
+        foam = dataclasses.replace(s, colors=[(200, 200, 200, 0), (200, 200, 200, 69), (200, 200, 200, 129)])
+        self.assertEqual([c[3] for c in sc.raise_alpha_mean(foam).colors], [0, 144, 255])   # mean 66: x 138 / 66
+        strong = dataclasses.replace(s, colors=[(1, 2, 3, 140), (1, 2, 3, 150)])
+        self.assertIs(sc.raise_alpha_mean(strong), strong)
+        self.assertIs(sc.raise_alpha_mean(bare), bare)
 
 
 class SoundTests(unittest.TestCase):

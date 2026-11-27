@@ -427,3 +427,7 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   Skyrim effect flags1: stream foam A0000038 (Soft_Effect clear), rapid rocks C0000078 (set): **verified**.
 - Whiterun water heights: Water1024 x2 at 357.2 m (WaterOceanDark in the probe), WRWaterPool01 at 347.1 m
   (WaterOceanClear): **verified** (objects.json); the owner's "upper pool" read as the former.
+- WRMainRoadPlainsRiver01 on WRMainRoadPlains: water 1.0 cm, foam 5.4 cm (medians) above the bed: **verified**
+  (world-space point-in-triangle over the placed refs). Vertex alpha along it: WATER 11..31, Foam02 48..103 (stairs
+  foam 127..151): **verified**. That the low foam alpha is why it looks faint: **supported hypothesis** (owner's
+  screenshots, stair channels with the same materials now visible).
