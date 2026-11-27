@@ -339,6 +339,10 @@ def clip_vertex_alpha(s: nifmod.Fo4Shape, lo: float, hi: Optional[float] = None)
 WATER_EFFECT = r"fxwhitewater|fxfluid|fxwatertile|fxwaterfall|fxrapid|fxfoam"   # water effect textures (foam, falls)
 WATER_FLAT_UNITS = 24.0           # z range (game units) up to which a water shape counts as flat (WRStairsStreamL: 10)
 WATER_SUFFIX = "_water"
+# a sloped water shape's material (SkyrimConverter.sloped_water_material): the Wind District fall's lit water sheet
+SLOPED_WATER_DIFFUSE = "textures\\effects\\FXwaterTile01.dds"
+SLOPED_WATER_NORMAL = "textures\\effects\\FXwaterTile02_n.dds"
+SLOPED_WATER_ALPHA_REF = 55
 WATER_MATERIAL = "Materials\\Water\\WaterPlaceholder.mat"          # vanilla Water16m.nif's own
 
 
@@ -346,7 +350,7 @@ WATER_MATERIAL = "Materials\\Water\\WaterPlaceholder.mat"          # vanilla Wat
 # hknpBoxShape body on the root node, 16 x 16 m from the surface down 16 m (Water16m1mDepth: 1 m) - the box template
 # sfcollision.box_blob patches (verified: check_template passes, read_box (0, 0, -8) +- (8, 8, 8)). A water model gets
 # the same: the vanilla water blob (its collision filter = water) as a box over its flat surfaces, WATER_DEPTH_M deep.
-WATER_DEPTH_M = 1.5
+WATER_DEPTH_M = 1.0                   # as Water16m1mDepthFountain (make_skyrim_objects.WATER_TEMPLATE), was 1.5
 WATER_PHYSICS_NIF = "meshes/water/water16m.nif"
 
 
@@ -733,6 +737,13 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral
 
+    def sloped_water_material(self) -> Optional[str]:
+        """The material of a SLOPED Skyrim water shape (2026-11-26, owner: on the stair streams Starfield's water drew a
+        dark film or nothing, and the foam on it did not show): Skyrim's own lit water sheet, the one its Wind District
+        fall draws its water with (WRTerWind01Waterfall01.nif "WATER": FXwaterTile01 + FXwaterTile02_n, alpha blend;
+        verified in game as part of that fall, 2026-11-26), on the stream's mesh. The foam above it scrolls as in Skyrim."""
+        return self.skyrim_material(SLOPED_WATER_DIFFUSE, SLOPED_WATER_NORMAL, False, True, SLOPED_WATER_ALPHA_REF)
+
     def skyrim_water_effect_material(self, src, shader_ref) -> Optional[str]:
         """Skyrim's moving water effects (2026-11-26, owner: the streams lack Skyrim's flow, no waterfalls): foam on the
         streams (FXWhiteWater01), waterfall sheets (FXfluidTile01), the Wind District fall (FXwaterTile01) are effect
@@ -903,6 +914,11 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                     else:
                         water.append({"sloped": True, "shape": (s.name or b"").decode("latin-1"),
                                       "z_range": round(max(zs) - min(zs), 1)})
+                        sheet = self.sloped_water_material() if getattr(self, "sloped_water", "sheet") == "sheet"                             else None
+                        if sheet:                     # Skyrim's lit water sheet, in the model itself (no water object)
+                            water[-1]["sheet"] = sheet
+                            mats[i] = sheet
+                            continue
                     water_shapes.append(s)
                     if "sloped" not in water[-1]:
                         flat_water.append(s)

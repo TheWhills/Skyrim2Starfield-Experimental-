@@ -401,3 +401,15 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   DNAM 152 bytes, Mutagen 0.55 decodes 16: **verified** (SfInspect form).
 - Skyrim's moving water look in Whiterun: FXWhiteWater01 foam shapes in the stream models, FXfluidTile01 sheets in
   effects\FXWaterfallThin*.nif with U/V offset controllers and vertex alpha: **verified** (NIFs).
+- Whiterun places its water sounds as SOUN markers next to the falls and streams (AMBWaterfallSmallLP,
+  AMBWaterfallSplatterSmall, AMBWaterfallRapidsSmall / Medium2D, AMBWaterStream01 / 02 / SmallWhiterunLP, AMBWaterDrain01LP,
+  AMBSewerGrateLP), not in the fall meshes: **verified** (export.json). Starfield.esm sound markers AMB_TheWell_Waterfall_01
+  / 02 234F7D / 234F7F, AMB_Ext_City_New_Atlantis_Water_A..D 07BAD7 / 07BADA / 07BB27 / 07BB2A,
+  AMBExtCityAkilaWaterSewerGrate_marker 1E2870 exist: **verified** (SfInspect list); how they sound: **unresolved**.
+- WRRapidRocks01's foam scroll is in a NiControllerSequence (controller -> NiBlendFloatInterpolator; the sequence's
+  controlled block -> NiFloatInterpolator, V Offset 0 -> -1 over 5.333 s): **verified** (NIF, 29-byte controlled blocks).
+- Skyrim's sloped stream water meshes have UVs running along the flow like their foam's (least-squares dv/dpos
+  parallel): **verified**. Starfield water on them hides the foam above: **supported hypothesis** (owner's screenshots).
+- Starfield water activators: Water16m1mDepthFountain 03084F and NA_Hard_CanalA_Pool_* set WaterMaterial
+  materials/water/watersmooth.mat with WaterClearSterile 062BE5; Water16mClearLake 039FD6 sets none: **verified**
+  (SfInspect form). That the fountain's settings soften the wading splash: **unresolved** (installed).

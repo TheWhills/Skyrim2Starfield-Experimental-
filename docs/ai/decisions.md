@@ -2950,3 +2950,13 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - Alternatives: Starfield's AlphaBlenderSettings UseVertexColor (exists in vanilla; its combination with the opacity map
   is unverified, would need an in-game probe first); dropping whole triangles under the threshold (jagged edges); leaving
   the shared models to Tamriel's next convert (Whiterun's walls would keep their moss sheet meanwhile).
+
+## 2026-11-26: sloped Skyrim water as Skyrim's lit water sheet, not Starfield water
+- Decision: a sloped Skyrim water shape keeps its mesh with the lit, alpha-blended FXwaterTile01 / FXwaterTile02_n
+  material of Skyrim's own Wind District fall, in the model itself; flat water stays Starfield water (copies of the
+  vanilla fountain water 03084F).
+- Why: Starfield water on a slope drew a dark film or nothing and hid the scrolling foam (owner's screenshots); the
+  sheet is a look the owner already accepted on that fall, and needs no new material type.
+- Alternatives: a scrolling effect sheet (FXfluidTile01, as the waterfalls: emissive, would glow at night); vanilla
+  Waterfall_Outside_02.mat (drew nothing in game); Starfield water stepped into flat pieces along the slope (stairs of
+  water where Skyrim's runs smoothly).

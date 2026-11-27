@@ -210,8 +210,13 @@ class WaterTests(unittest.TestCase):
         rep = so.model_water_exact(objects, bases, placed, items, water_type="0560D0")
         self.assertEqual((rep["bases"], rep["refs"]), (1, 2))
         wb = objects["bases"][2]
+        # the fountain's shallow water by default (owner: the lake piece's splash too strong in shallow water)
         self.assertEqual((wb["edid"], wb["model"], wb["water_template"], wb["water_type"]),
-                         ("SKY_Pool_Water", "skyrim\\pool_water.nif", "039FD6", "0560D0"))
+                         ("SKY_Pool_Water", "skyrim\\pool_water.nif", "03084F", "0560D0"))
+        again = {"bases": [{"edid": "SKY_Pool"}, {"edid": "SKY_Rock"}], "refs": []}
+        so.model_water_exact(again, bases, placed, items, template="039FD6")
+        self.assertEqual(again["bases"][2]["water_template"], "039FD6")
+        self.assertNotIn("water_type", again["bases"][2])
         a, b = objects["refs"]
         self.assertEqual((a["base"], a["pos"], a["rot"], a["scale"], a["cell"]),
                          (2, [10.0, 20.0, 5.0], [0.0, 0.0, 1.0], 2.0, [1, 2]))
@@ -260,6 +265,84 @@ class WaterTests(unittest.TestCase):
         r = {"type": "Activator", "model": "Water\\Water1024.nif"}
         self.assertEqual(exterior.classify(r, ("Activator",))[1], "water")
         self.assertEqual(exterior.classify(r, ("Activator",), water=True)[0], "convert")
+
+
+def float_data(keys):
+    return struct.pack("<II", len(keys), 2) + b"".join(struct.pack("<ffff", t, v, 0, 0) for t, v in keys)
+
+
+def shader_float_controller(nxt, target, interp, var, stop):
+    # NiTimeController (next, flags, frequency, phase, start, stop, target) + interpolator + controlled variable
+    return struct.pack("<iHffffi", nxt, 104, 1.0, 0.0, 0.0, stop, target) + struct.pack("<iI", interp, var)
+
+
+class SequenceScrollTests(unittest.TestCase):
+    def test_scroll_from_a_controller_sequence(self):
+        from fo4sf import skyrimfire
+        # WRRapidRocks01's foam: the shader's V Offset controller holds a blend interpolator; the keys (0 -> -1 over
+        # 5.333 s) are on the NiControllerSequence's interpolator for that controller
+        blocks = [
+            shader_float_controller(-1, 6, 1, 8, 5.333),              # 0: V Offset, blend interpolator
+            b"\0" * 10,                                                # 1: NiBlendFloatInterpolator
+            struct.pack("<fi", -3.4e38, 3),                            # 2: NiFloatInterpolator -> 3
+            float_data([(0.0, 0.0), (5.333, -1.0)]),                   # 3: NiFloatData
+            struct.pack("<iII", 0, 1, 0) + struct.pack("<iiB5i", 2, 0, 0, 0, 0, 0, 0, -1)
+            + struct.pack("<fiIfffii", 1.0, -1, 0, 1.0, 0.0, 5.333, -1, -1) + struct.pack("<H", 0),  # 4: sequence
+        ]
+        n = FakeNif(blocks, ["BSEffectShaderPropertyFloatController", "NiBlendFloatInterpolator",
+                             "NiFloatInterpolator", "NiFloatData", "NiControllerSequence"])
+        self.assertEqual(skyrimfire.sequence_interpolators(n), {0: 2})
+        ctrls = skyrimfire.controllers(n, 0)
+        self.assertEqual((ctrls[0]["variable"], ctrls[0]["interpolator"]), ("V Offset", "NiFloatInterpolator"))
+        self.assertEqual(skyrimfire.uv_scroll(ctrls), ("V", -1.0, 5.333))
+
+    def test_no_sequence_no_scroll(self):
+        from fo4sf import skyrimfire
+        n = FakeNif([shader_float_controller(-1, 6, 1, 8, 5.333), b"\0" * 10],
+                    ["BSEffectShaderPropertyFloatController", "NiBlendFloatInterpolator"])
+        self.assertIsNone(skyrimfire.uv_scroll(skyrimfire.controllers(n, 0)))
+
+
+class SlopedWaterTests(unittest.TestCase):
+    def test_sloped_water_is_the_wind_falls_lit_sheet(self):
+        from fo4sf import skyrimconvert as sc
+        calls = []
+
+        class Conv:
+            def skyrim_material(self, *args):
+                calls.append(args)
+                return "materials\\skyrim\\effects\\fxwatertile01_x.mat"
+        self.assertEqual(sc.SkyrimConverter.sloped_water_material(Conv()),
+                         "materials\\skyrim\\effects\\fxwatertile01_x.mat")
+        # WRTerWind01Waterfall01.nif "WATER": FXwaterTile01 + FXwaterTile02_n, alpha blend (no test), threshold 55
+        self.assertEqual(calls, [("textures\\effects\\FXwaterTile01.dds", "textures\\effects\\FXwaterTile02_n.dds",
+                                  False, True, 55)])
+        self.assertEqual(sc.WATER_DEPTH_M, 1.0)                  # as the fountain's 1 m water
+
+
+class SoundTests(unittest.TestCase):
+    def test_skyrim_sound_markers_become_vanilla_ones(self):
+        from fo4sf import skyrimsound
+
+        def ref(fk, edid, pos=(0.0, 0.0, 0.0), disabled=0, t="SoundMarker", rot=(0.0, 0.0, 0.0)):
+            return {"formkey": fk, "type": t, "base_editor_id": edid, "pos": list(pos), "rot": list(rot),
+                    "disabled": disabled}
+        refs = [ref("A", "AMBWaterfallSmallLP", (700.0, -1400.0, 70.0), rot=(0.0, 0.0, 1.0)),
+                ref("B", "AMBWaterfallSmallLP", (7000.0, 0.0, 0.0)),        # 100 m east: outside cells -1..0
+                ref("C", "AMBTavernExteriorLP"),                             # not mapped: stays skipped
+                ref("D", "AMBSewerGrateLP"),
+                ref("E", "AMBSewerGrateLP", disabled=1),                     # initially disabled
+                ref("F", "AMBSewerGrateLP"),                                 # disabled through its enable parent
+                ref("G", "AMBSewerGrateLP", t="Static")]
+        objects = {"bases": [{"edid": "SKY_Rock"}], "refs": []}
+        rep = skyrimsound.place(objects, refs, -1, 0, "SKY_", disabled={"F"})
+        self.assertEqual(rep["placed"], {"AMBWaterfallSmallLP": 1, "AMBSewerGrateLP": 1})
+        self.assertEqual((rep["outside"], rep["disabled"]), (1, 2))
+        self.assertEqual(rep["placed_src"], {"A", "D"})
+        self.assertEqual([b.get("vanilla") for b in objects["bases"]], [None, "234F7D", "1E2870"])
+        a = objects["refs"][0]
+        self.assertEqual((a["base"], a["pos"], a["cell"], a["rot"]), (1, [10.0, -20.0, 1.0], [0, -1], [0.0, 0.0, 1.0]))
+        self.assertEqual(len({b["edid"] for b in objects["bases"]}), 3)
 
 
 if __name__ == "__main__":

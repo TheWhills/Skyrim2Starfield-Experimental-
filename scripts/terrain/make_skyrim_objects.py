@@ -980,6 +980,11 @@ WATER_EDID_SUFFIX = "_Water"
 # owner 2026-11-26: "still so green", wants blue; three water types side by side in Whiterun (types the owner has not
 # compared yet: WaterOceanClear, WaterClearSterile; WaterOceanDark is the one picked for Tamriel's rivers)
 WATER_TYPE_PROBE = "wrwaterpool=0560CF;wrtreecirclewater=062BE5;0560D0"
+# the vanilla water activator each Skyrim water model is a copy of (2026-11-26, owner: the splash is "a bit aggressive
+# for walking through really shallow water"): Water16m1mDepthFountain, Bethesda's own shallow city water (1 m deep, the
+# calmer materials/water/watersmooth.mat, WaterClearSterile; New Atlantis's canal pools use the same material) instead
+# of the lake piece Water16mClearLake 039FD6 (verified: Starfield.esm, SfInspect form)
+WATER_TEMPLATE = "03084F"
 
 
 def water_type_for(spec: str, name: str) -> str:
@@ -998,13 +1003,12 @@ def water_type_for(spec: str, name: str) -> str:
     return default
 
 
-def model_water_exact(objects, bases, placed, items, water_type="") -> dict:
+def model_water_exact(objects, bases, placed, items, water_type="", template=WATER_TEMPLATE) -> dict:
     """Skyrim's water surfaces as their own models (manifest item "water_model", skyrimconvert: "<model>_water.nif"),
-    each placed as a copy of the vanilla water activator Water16mClearLake (TerrainOverlays "water_template": its water
-    type WTFM, LOD settings and keywords, our model and bounds; "water_type": another WATR, hex) with every reference
-    of its model, at the same place. Appends bases and references to objects; returns counts."""
-    from fo4sf import skyrimsea
-    rep = {"bases": 0, "refs": 0, "template": skyrimsea.WATER16M, "water_type": water_type or "template's"}
+    each placed as a copy of a vanilla water activator (`template`, hex; TerrainOverlays "water_template": its water
+    type WTFM, water material, LOD settings and keywords, our model and bounds; "water_type": another WATR, hex) with
+    every reference of its model, at the same place. Appends bases and references to objects; returns counts."""
+    rep = {"bases": 0, "refs": 0, "template": template, "water_type": water_type or "template's"}
     base_of = {}
     taken = {b["edid"].lower() for b in objects["bases"]}
     for p in placed:
@@ -1020,7 +1024,7 @@ def model_water_exact(objects, bases, placed, items, water_type="") -> dict:
                 raise ValueError(f"duplicate base EditorID {edid}")
             taken.add(edid.lower())
             nb = {"edid": edid, "model": wm["model"], "source": b.get("source", "") + " (water)", "collision": "none",
-                  "water_template": skyrimsea.WATER16M}
+                  "water_template": template}
             if wm.get("bounds"):
                 nb["bounds"] = wm["bounds"]
             wt = water_type_for(water_type, wm["model"])
@@ -1091,12 +1095,24 @@ def cmd_stage(a):
                   + (f"; {wr['tilted']} tilted references left without water" if wr["tilted"] else ""))
     else:
         spec = getattr(a, "water_type", "") or ""
-        wr = model_water_exact(objects, bases, placed, items, WATER_TYPE_PROBE if spec == "probe" else spec)
+        wr = model_water_exact(objects, bases, placed, items, WATER_TYPE_PROBE if spec == "probe" else spec,
+                               getattr(a, "water_template", None) or WATER_TEMPLATE)
         if wr["refs"]:
             print(f"water: {wr['refs']:,} references of {wr['bases']} water models, each a copy of the vanilla water "
                   f"activator {wr['template']} (water type: {wr['water_type']})")
             for edid, wt in sorted((wr.get("types") or {}).items()):
                 print(f"  {edid}: WATR {wt}")
+    # Skyrim's sound markers as vanilla Starfield ones (skyrimsound; the waterfalls' and streams' sounds)
+    if not getattr(a, "no_sounds", False) and os.path.isfile(os.path.join(a.work, "export.json")):
+        from fo4sf import skyrimsound
+        exp = load(os.path.join(a.work, "export.json"))
+        sr = skyrimsound.place(objects, to_local(exp["refs"], ov), ov["cell_min"], ov["cell_max"], EDID_PREFIX,
+                               disabled=set(skyrimrefs.disabled_by_parent(exp["refs"] + exp.get("deferred_refs", []))))
+        skipped = [s_ for s_ in skipped if s_.get("formkey") not in sr["placed_src"]]
+        if sr["placed"]:
+            print(f"sounds: {sum(sr['placed'].values())} Skyrim sound markers as vanilla Starfield ones "
+                  f"({', '.join(f'{k} x{v}' for k, v in sorted(sr['placed'].items()))}); "
+                  f"{sr['disabled']} disabled in Skyrim, {sr['outside']} outside the overlay")
     if a.interiors:
         n_ld, missing = mark_load_doors(objects, a.interiors)
         print(f"load doors into the interiors: {n_ld} placed as persistent DOOR references"
@@ -1333,7 +1349,13 @@ def main(argv=None):
     ap.add_argument("--water-type", default="",
                     help="stage: WATR FormID (hex, Starfield.esm) for the water activators, or per model "
                          "'pattern=hex;...;default' (water_type_for; 'probe' = WATER_TYPE_PROBE); default the vanilla "
-                         "activator's own (WaterClearLake 01C0CC)")
+                         "activator's own (the fountain's WaterClearSterile 062BE5)")
+    ap.add_argument("--water-template", default=WATER_TEMPLATE,
+                    help="stage: the vanilla water activator (hex, Starfield.esm) the water models are copies of "
+                         "(default the fountain's shallow water; 039FD6 = the lake piece of the first tests)")
+    ap.add_argument("--no-sounds", action="store_true",
+                    help="stage: leave Skyrim's sound markers out (default: those in skyrimsound.SOUND_MAP placed as "
+                         "vanilla Starfield sound markers)")
     ap.add_argument("--no-spin", action="store_true",
                     help="stage: leave turning parts (the mill water wheel) out instead of placing them on a copy of "
                          f"the vanilla turning record {SPIN_TEMPLATE}")

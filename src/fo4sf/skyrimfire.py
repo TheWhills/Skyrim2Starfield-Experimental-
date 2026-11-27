@@ -75,8 +75,31 @@ def float_keys(n, data_ref, limit=64) -> dict:
     return {"count": count, "type": ktype, "keys": keys}
 
 
+def sequence_interpolators(n) -> dict:
+    """{controller block: interpolator block} from every NiControllerSequence's controlled blocks (Skyrim SE layout:
+    name, count, grow-by, then per block interpolator ref, controller ref, priority byte, five string indexes = 29
+    bytes). A controller driven through a NiControllerManager holds only a NiBlendFloatInterpolator; its keys are on
+    the sequence's interpolator (verified: WRRapidRocks01.nif, rockRapid04's V Offset 0 -> -1 over 5.333 s)."""
+    out = {}
+    for i in range(len(n.blocks)):
+        if n.type_of(i) != "NiControllerSequence":
+            continue
+        b = n.blocks[i]
+        try:
+            count, = struct.unpack_from("<I", b, 4)
+            for k in range(min(count, 256)):
+                interp, ctrl = struct.unpack_from("<ii", b, 12 + 29 * k)
+                if 0 <= ctrl < len(n.blocks) and 0 <= interp < len(n.blocks):
+                    out[ctrl] = interp
+        except struct.error:
+            continue
+    return out
+
+
 def controllers(n, ref) -> list:
-    """A controller chain (next first): type, timing, interpolator, controlled variable, float keys."""
+    """A controller chain (next first): type, timing, interpolator, controlled variable, float keys. A controller
+    whose own interpolator is a blend one takes the keys of its sequence's interpolator (sequence_interpolators)."""
+    seq = None
     out, seen = [], set()
     while 0 <= ref < len(n.blocks) and ref not in seen:
         seen.add(ref)
@@ -91,6 +114,10 @@ def controllers(n, ref) -> list:
                 if "EffectShaderProperty" in t and len(b) >= p + 8:
                     var, = struct.unpack_from("<I", b, p + 4)
                     c["variable"] = CONTROLLED.get(var, var) if "Float" in t else var
+                if c["interpolator"] != "NiFloatInterpolator":
+                    seq = sequence_interpolators(n) if seq is None else seq
+                    if ref in seq and n.type_of(seq[ref]) == "NiFloatInterpolator":
+                        interp, c["interpolator"], c["sequence"] = seq[ref], "NiFloatInterpolator", True
                 if c["interpolator"] == "NiFloatInterpolator":
                     ib = n.blocks[interp]
                     c["value"], data = round(struct.unpack_from("<f", ib, 0)[0], 4), struct.unpack_from("<i", ib, 4)[0]

@@ -268,6 +268,32 @@ down the channels, waterfalls into the pool and out of the wall grate).
   of the three is right.
 Installed 2026-11-26. **In game unverified.**
 
+### Water, fourth round: sound, the rocks' foam, sloped streams, a softer splash (2026-11-26)
+Owner (in game): the waterfalls "came out really good, but they do need sound"; the Gildergreen's water "has sound and
+splashes (though the splashes are a bit aggressive for walking through really shallow water)" and its flow is not
+Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sloped water doesn't look right at all"
+(screenshots: the stair stream beside the steps dry, the main road stream a dark film). **Verified** in this round
+(offline): what the data says; everything in game unverified.
+* **Sound:** Skyrim's falls make no sound themselves; Whiterun places sound markers beside them (export: falls x7,
+  rapids x9, streams x18, drains / sewer grate x4). `fo4sf.skyrimsound` places each as the vanilla Starfield sound
+  marker closest in kind (`SOUND_MAP`: The Well's waterfalls 234F7D / 234F7F, New Atlantis's water A - D 07BAD7 /
+  07BADA / 07BB27 / 07BB2A, Akila's sewer grate 1E2870; FormIDs verified with SfInspect `list SoundMarker`, how each
+  sounds unverified); disabled ones and those outside the overlay stay out (`stage --no-sounds`: none).
+* **The rocks' foam** (WRRapidRocks01): its V Offset controller is driven through a NiControllerManager; the controller
+  holds only a blend interpolator, the keys (0 -> -1 in 5.333 s) sit on the NiControllerSequence's interpolator
+  (verified, the NIF). `skyrimfire.sequence_interpolators` reads them: the foam scrolls as in Skyrim.
+* **Sloped streams** (WRStairsWater01River01, WRMainRoadPlainsRiver01, WRGreatHousePlatform01River01): Starfield's water
+  on a sloped mesh drew a dark film or nothing, and the foam on it did not show (supported hypothesis: the water
+  surface draws over the translucent foam just above it). Their water shape now keeps Skyrim's mesh with the lit water
+  sheet Skyrim's own Wind District fall uses (WRTerWind01Waterfall01 "WATER": FXwaterTile01 + FXwaterTile02_n, alpha
+  blend; part of the fall the owner liked), in the model itself, no water object; the foam scrolls above it (the
+  water mesh's UVs run along the flow as the foam's: verified). No splash on them, as before.
+* **Softer splash** (supported hypothesis, unverified): the water models are now copies of Water16m1mDepthFountain
+  03084F, Bethesda's own shallow city water (1 m deep, the calmer `materials/water/watersmooth.mat`, WaterClearSterile;
+  New Atlantis's canal pools use the same material) instead of the lake piece 039FD6 (no water material of its own); the
+  water box is 1 m deep as the fountain's (was 1.5). `stage --water-template 039FD6` goes back. If the splash is still
+  too strong, the next lever is the activator's AllowDisplacements flag.
+
 ### The other cities (plan, with numbers from Skyrim.esm)
 | City | Land | Own LAND | Gate pairs (Skyrim) | Plan |
 |---|---|---|---|---|

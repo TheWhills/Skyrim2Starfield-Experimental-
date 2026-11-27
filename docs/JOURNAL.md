@@ -672,3 +672,10 @@ water nearly invisible without Skyrim's flow. **Now:** a water volume per water 
 1.5 m deep), Skyrim's foam and waterfalls as scrolling effect materials (the flames' builder, kind "water"; waterfall
 models selected), three water types side by side (pool WaterOceanClear, ring WaterClearSterile, rest WaterOceanDark).
 Installed; **not seen in game yet**.
+
+**Owner's test (2026-11-26):** the waterfalls good but silent; the ring's water has sound and splash (too strong for
+shallow water); the rocks' foam static; sloped streams wrong (dry or a dark film). **Now:** Skyrim's 40 water sound
+markers placed as vanilla Starfield ones (`fo4sf.skyrimsound`), the rocks' foam scroll read from its controller
+sequence, sloped water drawn with Skyrim's lit water sheet (the Wind District fall's) under its scrolling foam instead
+of Starfield water, and the water models copies of the fountain's shallow water (03084F, watersmooth.mat, 1 m).
+Installed; **not seen in game yet**.
