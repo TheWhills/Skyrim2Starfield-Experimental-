@@ -332,6 +332,13 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   brighter as the eye adapts to the dark); vanilla Materials/Water/Waterfall01.mat has neither EmissiveOnlyEffect nor a
   LayeredEmissivityComponent, RainRippleWater.mat no EmissiveOnlyEffect (verified, ContentResources.zip). Water effects
   (`skyrimfire.LIT_KINDS`) are now built that way, lit by the scene (supported hypothesis until seen at night).
+  **Wrong (owner: "now theyre all superrrr bright"):** removing the emittance settings from the fire template's
+  material left its shader model, 1LayerEffectEmissive, on a far brighter default. Scene-lit vanilla effects use the
+  1LayerEffect shader model (140 vanilla materials; verified). Water effects are now built from vanilla
+  Materials/Effects/BitsAsh.mat (1LayerEffect: Albedo / Normal / Opacity; `LIT_EFFECT_TEMPLATE_MAT`) with a flat
+  normal map (`textures/skyrim/effects/_flat_normal.dds`), keeping the fire template's SourceSoftAdditive blend and
+  0.35 m soft edge unless the caller sets them (the streams' layer: AlphaBlend, no soft edge). Lit by the scene:
+  supported hypothesis until seen by day and at night.
 * **Colour (owner, 2026-11-27):** "the upper pool is a much better color than the lower one". Upper: the Water1024
   pair (357 m), WaterOceanDark 0560D0; lower: WRWaterPool01 (347 m), WaterOceanClear 0560CF. `--water-type city`
   (WATER_TYPE_CITY, now the default of tools/owner/cities.ps1): WaterOceanDark everywhere but the Gildergreen's ring

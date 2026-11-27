@@ -600,6 +600,14 @@ EMITTANCE_SCALE = {"hearth": 0.3, "candle": 1.0, "water": 1.0}
 # nor a LayeredEmissivityComponent, RainRippleWater.mat no EmissiveOnlyEffect (verified, ContentResources.zip). Kinds
 # here are built that way: no EmissiveOnlyEffect, no emissivity component (lit as in vanilla: supported hypothesis).
 LIT_KINDS = frozenset({"water"})
+# 2026-11-27, owner after the first try (fire template with its emissivity removed): "now theyre all superrrr bright".
+# The template's shader model is 1LayerEffectEmissive; without its emittance settings it fell back to a far brighter
+# default. Scene-lit vanilla effects use the 1LayerEffect shader model (140 vanilla materials; verified,
+# ContentResources.zip): LIT_KINDS are built from BitsAsh.mat (1LayerEffect; Albedo / Normal / Opacity; a flat normal
+# map), keeping the fire template's blend (SourceSoftAdditive) and soft edge (0.35 m) unless asked otherwise.
+LIT_EFFECT_TEMPLATE_MAT = "Materials/Effects/BitsAsh.mat"
+LIT_DEFAULT_BLEND = "SourceSoftAdditive"
+LIT_DEFAULT_SOFT_M = 0.35
 RING = 0.85                          # flame card ring radius / emitter radius (v2 / v3: 0.55)
 # flame styles (owner 2026-11-15, after v3: "maybe it is better to use Starfield's flame"): "skyrim" = Skyrim's
 # textures on the cards (flames v3); "starfield" = the same cards (Skyrim's places, sizes, timing) playing Starfield's
@@ -839,7 +847,10 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
         root[:] = [c for c in root if c.get("Type") != "BSMaterial::LayeredEmissivityComponent"]
         for c in root:
             if c.get("Type") == "BSMaterial::EffectSettingsComponent":
-                c["Data"].pop("EmissiveOnlyEffect", None)
+                for k in ("EmissiveOnlyEffect", "BackLightingEnable", "BacklightingScale"):
+                    c["Data"].pop(k, None)
+        blend = blend or LIT_DEFAULT_BLEND
+        soft_depth = LIT_DEFAULT_SOFT_M if soft_depth is None else soft_depth
     em = dict(EMITTANCE[kind])
     em["LuminousEmittance"] = f"{float(em['LuminousEmittance']) * multiple * EMITTANCE_SCALE[kind]:g}"
     if exposure is not None:

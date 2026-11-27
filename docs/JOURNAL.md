@@ -709,3 +709,7 @@ game yet**.
 **Owner:** (flicker not mentioned again; unconfirmed) the layer could be whiter; all water effects glow at night.
 **Now:** the streams' tint half way to white; water effects lose the fire template's EmissiveOnlyEffect and emittance
 (as vanilla Waterfall01.mat), so the scene lights them. Rebuilt; **not seen in game yet**.
+
+**Owner:** "now theyre all superrrr bright" (the emissive shader model without its emittance settings). **Now:**
+water effects built from a scene-lit vanilla effect material (BitsAsh.mat, shader model 1LayerEffect) with a flat
+normal map. Rebuilt; **not seen in game yet**.

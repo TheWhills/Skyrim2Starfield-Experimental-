@@ -196,6 +196,27 @@ class EffectMaterialTest(unittest.TestCase):
         fx = [c["Data"] for c in water["Objects"][0]["Components"] if c["Type"] == "BSMaterial::EffectSettingsComponent"][0]
         self.assertNotIn("EmissiveOnlyEffect", fx)
         self.assertEqual(fx["BlendingMode"], "AlphaBlend")
+        # from a scene-lit 1LayerEffect template (BitsAsh's layout): the fire template's blend and soft edge kept,
+        # BitsAsh's back-lighting dropped, the flat normal in its Normal slot
+        ash = {"Import": ["Data\\MATERIALS\\Layered\\ShaderModels\\1LayerEffect.mat"], "Objects": [
+            {"Components": [{"Data": {"Name": "BitsAsh"}, "Index": 0, "Type": "BSComponentDB::CTName"},
+                            {"Data": {"BackLightingEnable": "true", "BacklightingScale": "0.511", "SoftEffect": "true",
+                                      "SoftFalloffDepth": "1"}, "Index": 0,
+                             "Type": "BSMaterial::EffectSettingsComponent"}],
+             "Parent": "Data\\MATERIALS\\Layered\\ShaderModels\\1LayerEffect.mat"},
+            {"Components": [{"Data": {"FileName": "Data\\Textures\\Effects\\Bits_Color.DDS"}, "Index": 0,
+                             "Type": "BSMaterial::MRTextureFile"},
+                            {"Data": {"FileName": "Data\\Textures\\Effects\\Bits_Normal.DDS"}, "Index": 1,
+                             "Type": "BSMaterial::MRTextureFile"}], "ID": "res:00000009:0005AC27:A461349B"}],
+            "Summary": {"Layer1": {"Textures": {"Albedo": {"File": "Data\\Textures\\Effects\\Bits_Color.DDS"},
+                                                "Normal": {"File": "Data\\Textures\\Effects\\Bits_Normal.DDS"}}}}}
+        lit = skyrimfire.effect_material(ash, "S2S_Flame_l", dict(self.FILES, Normal="Data\\textures\\skyrim\\effects\\_flat_normal.dds"),
+                                         kind="water")
+        fx = [c["Data"] for c in lit["Objects"][0]["Components"] if c["Type"] == "BSMaterial::EffectSettingsComponent"][0]
+        self.assertEqual(fx, {"SoftEffect": "true", "SoftFalloffDepth": "0.35", "BlendingMode": "SourceSoftAdditive"})
+        self.assertIn("_flat_normal.dds", str(lit))
+        self.assertNotIn("Bits_Normal", str(lit))
+        self.assertEqual(skyrimfire.LIT_EFFECT_TEMPLATE_MAT, "Materials/Effects/BitsAsh.mat")
         fire = skyrimfire.effect_material(fire_template(), "S2S_Flame_f", self.FILES, kind="hearth")
         root = fire["Objects"][0]["Components"]
         self.assertIn("BSMaterial::LayeredEmissivityComponent", [c["Type"] for c in root])

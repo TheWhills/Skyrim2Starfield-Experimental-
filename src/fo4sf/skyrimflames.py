@@ -113,11 +113,30 @@ class FlameMixin:
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 self._publish_texture(os.path.join(tmp, fn), dst, kind_)
                 files[kind_] = cm.game_path(f"{tex_rel}_{kind_}.dds")
-        if self._effect_template is None:
-            self._effect_template = cm.read_template_path(self.content_resources, skyrimfire.EFFECT_TEMPLATE_MAT)
-        mat = skyrimfire.effect_material(self._effect_template, "S2S_Flame_" + re.sub(r"[^a-z0-9]+", "_", stem),
+            lit = kind in skyrimfire.LIT_KINDS
+            if lit:                                   # a scene-lit effect needs a normal map: flat (x = y = 0)
+                flat_rel = f"textures/{self.prefix}/effects/_flat_normal.dds"
+                flat_dst = os.path.join(self.staging, *flat_rel.split("/"))
+                if not os.path.isfile(flat_dst):
+                    textures.write_rg8_snorm(os.path.join(tmp, "f_in.dds"), np.zeros((4, 4), np.int8),
+                                             np.zeros((4, 4), np.int8))
+                    textures.texconv(self.texconv, os.path.join(tmp, "f_in.dds"), tmp, "BC5_SNORM")
+                    os.makedirs(os.path.dirname(flat_dst), exist_ok=True)
+                    self._publish_texture(os.path.join(tmp, "f_in.dds"), flat_dst, "normal")
+                files["normal"] = cm.game_path(flat_rel)
+        if lit:
+            if getattr(self, "_lit_effect_template", None) is None:
+                self._lit_effect_template = cm.read_template_path(self.content_resources,
+                                                                  skyrimfire.LIT_EFFECT_TEMPLATE_MAT)
+            template = self._lit_effect_template
+        else:
+            if self._effect_template is None:
+                self._effect_template = cm.read_template_path(self.content_resources, skyrimfire.EFFECT_TEMPLATE_MAT)
+            template = self._effect_template
+        mat = skyrimfire.effect_material(template, "S2S_Flame_" + re.sub(r"[^a-z0-9]+", "_", stem),
                                          {"Albedo": files["color"], "Emissive": files["color"],
-                                          "Opacity": files["opacity"]},
+                                          "Opacity": files["opacity"],
+                                          **({"Normal": files["normal"]} if lit else {})},
                                          kind=kind, scroll=scroll, flicker=flicker, vertex_color=vertex_color,
                                          flipbook=flipbook, multiple=multiple, crossfade=crossfade,
                                          soft_depth=soft_depth, blend=blend)
