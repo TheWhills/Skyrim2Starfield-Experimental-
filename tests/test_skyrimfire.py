@@ -187,6 +187,21 @@ class EffectMaterialTest(unittest.TestCase):
         mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_x", self.FILES)
         self.assertNotIn("res:00000002:0005DB9C:A3FFF5AD", str(mat))
 
+    def test_water_effects_are_scene_lit_and_can_alpha_blend(self):
+        # owner 2026-11-27: the water effects "glow in the dark A LOT"; vanilla Waterfall01.mat: no EmissiveOnlyEffect,
+        # no emissivity component. Fire keeps both.
+        water = skyrimfire.effect_material(fire_template(), "S2S_Flame_w", self.FILES, kind="water", blend="AlphaBlend")
+        types = [c["Type"] for c in water["Objects"][0]["Components"]]
+        self.assertNotIn("BSMaterial::LayeredEmissivityComponent", types)
+        fx = [c["Data"] for c in water["Objects"][0]["Components"] if c["Type"] == "BSMaterial::EffectSettingsComponent"][0]
+        self.assertNotIn("EmissiveOnlyEffect", fx)
+        self.assertEqual(fx["BlendingMode"], "AlphaBlend")
+        fire = skyrimfire.effect_material(fire_template(), "S2S_Flame_f", self.FILES, kind="hearth")
+        root = fire["Objects"][0]["Components"]
+        self.assertIn("BSMaterial::LayeredEmissivityComponent", [c["Type"] for c in root])
+        fx = [c["Data"] for c in root if c["Type"] == "BSMaterial::EffectSettingsComponent"][0]
+        self.assertEqual((fx["EmissiveOnlyEffect"], fx["BlendingMode"]), ("true", "SourceSoftAdditive"))
+
 
 class AddonFlamesTest(unittest.TestCase):
     def test_cards_sit_at_each_addon_node_lifted_by_the_flame(self):

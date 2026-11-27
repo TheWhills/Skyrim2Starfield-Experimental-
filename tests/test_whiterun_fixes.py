@@ -366,7 +366,9 @@ class SlopedWaterTests(unittest.TestCase):
         source, kw = calls[0]
         self.assertEqual(source, "textures\\effects\\FXwaterTile01.dds")
         # the Wind District fall's own vertex tint on this texture; alpha-blended so it can darken; no foam: no scroll
-        self.assertEqual(kw["tint"], (70 / 255, 102 / 255, 110 / 255))
+        self.assertEqual(sc.SLOPED_WATER_FALL_TINT, (70 / 255, 102 / 255, 110 / 255))
+        # owner: "slightly more white than blue": half way to white
+        self.assertEqual(kw["tint"], (0.6373, 0.7, 0.7157))
         self.assertEqual((kw["blend"], kw["kind"], kw["soft_depth"], kw["vertex_color"], kw["scroll"]),
                          ("AlphaBlend", "water", 0.0, True, None))
 

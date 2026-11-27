@@ -326,6 +326,12 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   stream, 3 m tall: verified, the .mesh); the water lies 0..1.5 cm over the stone in places (median 1.0 cm, some points
   under the curb stones), close enough for the depth test to flip (supported hypothesis: z-fighting). A sloped water
   sheet and its foam are lifted 5 cm (`lift_shape`, `SHEET_LIFT_M`).
+  **Owner, next:** "could be slightly more white than blue", and the water effects (foam, waterfalls, the streams'
+  layer) "glow in the dark A LOT". The tint is now half way from the fall's to white (`SLOPED_WATER_WHITE_MIX` 0.5:
+  0.64, 0.70, 0.72). The glow: our water effects came from the fire template (EmissiveOnlyEffect, adaptive emittance:
+  brighter as the eye adapts to the dark); vanilla Materials/Water/Waterfall01.mat has neither EmissiveOnlyEffect nor a
+  LayeredEmissivityComponent, RainRippleWater.mat no EmissiveOnlyEffect (verified, ContentResources.zip). Water effects
+  (`skyrimfire.LIT_KINDS`) are now built that way, lit by the scene (supported hypothesis until seen at night).
 * **Colour (owner, 2026-11-27):** "the upper pool is a much better color than the lower one". Upper: the Water1024
   pair (357 m), WaterOceanDark 0560D0; lower: WRWaterPool01 (347 m), WaterOceanClear 0560CF. `--water-type city`
   (WATER_TYPE_CITY, now the default of tools/owner/cities.ps1): WaterOceanDark everywhere but the Gildergreen's ring

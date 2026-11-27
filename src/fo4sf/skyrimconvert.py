@@ -433,7 +433,10 @@ SLOPED_WATER_ALPHA_GAIN = 4.0
 # moving layer). Skyrim's Wind District fall tints the same FXwaterTile01 sheet with its vertex colour (70, 102, 110):
 # verified, the NIF. The sloped water becomes that tinted texture as an alpha-blended effect scrolling with its foam
 # (stage / convert attribute sloped_water: "flow", the default; "sheet" = the lit near-white sheet before).
-SLOPED_WATER_TINT = (70 / 255, 102 / 255, 110 / 255)
+SLOPED_WATER_FALL_TINT = (70 / 255, 102 / 255, 110 / 255)
+# owner, in game: "could be slightly more white than blue": half way from the fall's tint to white
+SLOPED_WATER_WHITE_MIX = 0.5
+SLOPED_WATER_TINT = tuple(round(c + (1.0 - c) * SLOPED_WATER_WHITE_MIX, 4) for c in SLOPED_WATER_FALL_TINT)
 SLOPED_WATER_BLEND = "AlphaBlend"      # a vanilla effect BlendingMode (Materials/Effects/Glows/AnisotropicFlare_AlphaBlend)
 WATER_MATERIAL = "Materials\\Water\\WaterPlaceholder.mat"          # vanilla Water16m.nif's own
 

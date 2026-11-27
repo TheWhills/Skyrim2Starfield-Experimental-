@@ -431,3 +431,8 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   (world-space point-in-triangle over the placed refs). Vertex alpha along it: WATER 11..31, Foam02 48..103 (stairs
   foam 127..151): **verified**. That the low foam alpha is why it looks faint: **supported hypothesis** (owner's
   screenshots, stair channels with the same materials now visible).
+- Vanilla water effect materials (ContentResources.zip): Waterfall01.mat EffectSettings {BlendingMode
+  DestinationInvertedSoftAdditive, SoftFalloffDepth 1.49}, no LayeredEmissivityComponent; RainRippleWater.mat
+  SourceSoftAdditive, no EmissiveOnlyEffect; WaterJetTile_Ribbon_01 adaptive emittance; FiresGeneric (our effect
+  template) EmissiveOnlyEffect true + adaptive emittance 5000: **verified**. Effect BlendingMode values in vanilla:
+  SourceSoftAdditive 254, Additive 220, AlphaBlend 3, DestinationInvertedSoftAdditive 3, others 1: **verified**.

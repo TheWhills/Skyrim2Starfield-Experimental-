@@ -705,3 +705,7 @@ scrolling with its foam at the same ground speed. Rebuilt and installed; **not s
 **Owner:** the moving blue-grey layer shows; a block in the middle of the main road stream flickers. **Now:** the
 sloped water sheet and its foam lifted 5 cm off the stone (z-fighting, supported hypothesis). Rebuilt; **not seen in
 game yet**.
+
+**Owner:** (flicker not mentioned again; unconfirmed) the layer could be whiter; all water effects glow at night.
+**Now:** the streams' tint half way to white; water effects lose the fire template's EmissiveOnlyEffect and emittance
+(as vanilla Waterfall01.mat), so the scene lights them. Rebuilt; **not seen in game yet**.
