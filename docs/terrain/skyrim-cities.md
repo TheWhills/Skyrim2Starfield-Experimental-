@@ -313,6 +313,14 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   0..200, mean 66; 50..100 along its length) is half the stairs' (mean 138), and in the arches' shade the lit sheet
   goes dark. The foam of a model with a sloped water sheet is now raised to the stairs' mean (`raise_alpha_mean`,
   `SHEET_FOAM_ALPHA_MEAN` 138; never lowered), about x2 on the main road.
+  **Owner: "a good deal better"**; the stretch toward the grate still looked dry (the near-white lit sheet goes dark
+  in shade, and does not move). The sloped water is now a moving, tinted layer (`sloped_flow_material`, attribute
+  `sloped_water` "flow", the default; "sheet" = the lit sheet): FXwaterTile01 as an effect material, **alpha-blended**
+  (`BlendingMode` AlphaBlend, a vanilla effect blend mode, AnisotropicFlare_AlphaBlend.mat; the template's
+  SourceSoftAdditive can only brighten), tinted with the Wind District fall sheet's own vertex colour (70, 102, 110;
+  verified, the NIF), scrolling with the model's foam at the same ground speed (`sheet_scroll`: the foam's axis, its
+  period x |grad foam UV| / |grad sheet UV|, sign by their directions). Unlit (the water effects' dim emittance), so
+  it stays visible in shade as Skyrim's reflecting water does. Unverified in game.
 * **Colour (owner, 2026-11-27):** "the upper pool is a much better color than the lower one". Upper: the Water1024
   pair (357 m), WaterOceanDark 0560D0; lower: WRWaterPool01 (347 m), WaterOceanClear 0560CF. `--water-type city`
   (WATER_TYPE_CITY, now the default of tools/owner/cities.ps1): WaterOceanDark everywhere but the Gildergreen's ring

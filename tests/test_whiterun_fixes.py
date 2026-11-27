@@ -345,6 +345,31 @@ class SlopedWaterTests(unittest.TestCase):
                                   False, True, 55)])
         self.assertEqual(sc.WATER_DEPTH_M, 1.0)                  # as the fountain's 1 m water
 
+    def test_sloped_water_flows_tinted_and_alpha_blended(self):
+        from fo4sf import skyrimconvert as sc
+        calls = []
+
+        class Conv(sc.SkyrimConverter):
+            def __init__(self):
+                pass
+
+            def flame_material(self, source, **kw):
+                calls.append((source, kw))
+                return "materials\\skyrim\\effects\\fxwatertile01_x.mat"
+
+        class Src:
+            def type_of(self, i):
+                return "BSLightingShaderProperty"
+        sheet = nifmod.Fo4Shape(**{f.name: None for f in __import__("dataclasses").fields(nifmod.Fo4Shape)})
+        sheet = __import__("dataclasses").replace(sheet, shader_ref=-1)
+        self.assertEqual(Conv().sloped_flow_material(Src(), sheet, [sheet]), "materials\\skyrim\\effects\\fxwatertile01_x.mat")
+        source, kw = calls[0]
+        self.assertEqual(source, "textures\\effects\\FXwaterTile01.dds")
+        # the Wind District fall's own vertex tint on this texture; alpha-blended so it can darken; no foam: no scroll
+        self.assertEqual(kw["tint"], (70 / 255, 102 / 255, 110 / 255))
+        self.assertEqual((kw["blend"], kw["kind"], kw["soft_depth"], kw["vertex_color"], kw["scroll"]),
+                         ("AlphaBlend", "water", 0.0, True, None))
+
     def test_sloped_sheet_vertex_alpha_raised_to_the_falls_level(self):
         from fo4sf import skyrimconvert as sc
         import dataclasses
@@ -361,6 +386,16 @@ class SlopedWaterTests(unittest.TestCase):
         # a sheet stream's foam raised to the stairs' foam mean (138), never lowered
         foam = dataclasses.replace(s, colors=[(200, 200, 200, 0), (200, 200, 200, 69), (200, 200, 200, 129)])
         self.assertEqual([c[3] for c in sc.raise_alpha_mean(foam).colors], [0, 144, 255])   # mean 66: x 138 / 66
+        # the flow layer scrolls with its foam at the same ground speed: one sheet V unit spans 1000 units of ground, one
+        # foam unit 500; the foam moves 500 units in 4 s, so the sheet's loop takes 8 s (period x g_foam / g_sheet)
+        pts = [(0.0, y, 0.0) for y in (0.0, 100.0)] + [(10.0, y, 0.0) for y in (0.0, 100.0)]
+        base = dataclasses.replace(s, positions=pts, rotation=(1, 0, 0, 0, 1, 0, 0, 0, 1), scale=1.0)
+        sheet = dataclasses.replace(base, uvs=[(0.0, p[1] * 0.001) for p in pts])
+        foam_uv = dataclasses.replace(base, uvs=[(0.0, p[1] * 0.002) for p in pts])
+        self.assertEqual(sc.sheet_scroll(sheet, foam_uv, ("V", -1.0, 4.0)), ("V", -1.0, 8.0))
+        against = dataclasses.replace(base, uvs=[(0.0, -p[1] * 0.002) for p in pts])
+        self.assertEqual(sc.sheet_scroll(sheet, against, ("V", -1.0, 4.0)), ("V", 1.0, 8.0))
+        self.assertEqual(sc.sheet_scroll(sheet, None, ("V", -1.0, 4.0)), ("V", -1.0, 4.0))
         strong = dataclasses.replace(s, colors=[(1, 2, 3, 140), (1, 2, 3, 150)])
         self.assertIs(sc.raise_alpha_mean(strong), strong)
         self.assertIs(sc.raise_alpha_mean(bare), bare)

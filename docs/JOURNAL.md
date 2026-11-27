@@ -697,3 +697,7 @@ installed; **not seen in game yet**.
 **Owner (2026-11-27, later still):** the stair channels show now; the main road stream by the gate is still faint.
 Its foam's vertex alpha is half the stairs': raised to the stairs' mean for streams drawn with the water sheet.
 Rebuilt and installed; **not seen in game yet**.
+
+**Owner:** the main road stream "does look a good deal better"; agreed to try a darker, bluer, moving water layer.
+**Now:** sloped water is FXwaterTile01 as an alpha-blended effect tinted with the Wind District fall's vertex colour,
+scrolling with its foam at the same ground speed. Rebuilt and installed; **not seen in game yet**.

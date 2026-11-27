@@ -804,7 +804,7 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
                     vertex_color: bool = False, flipbook: Optional[Tuple[int, int, float]] = None,
                     multiple: float = 1.0, crossfade: Optional[Tuple[float, int]] = None,
                     keep_emittance: bool = False, soft_depth: Optional[float] = None,
-                    exposure: Optional[float] = None) -> dict:
+                    exposure: Optional[float] = None, blend: Optional[str] = None) -> dict:
     """An emissive effect material cloned from the vanilla fire template (convert_material.build_from_template):
     files {"Albedo", "Emissive", "Opacity": game paths}; EMITTANCE[kind]; controllers for a UV scroll (axis, delta,
     seconds) and / or a flicker (loop seconds). flipbook (columns, rows, fps): the atlas plays as a looping flipbook
@@ -813,7 +813,8 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
     crossfade (period, phase): an OverallOpacity curve (crossfade_controller); keep_emittance: the template's own
     emissivity stays (a vanilla material used as it is); soft_depth (m): the EffectSettings SoftFalloffDepth (the
     template's 0.35 fades a small flame wherever anything is within 35 cm behind it), 0 = no soft edge; exposure: the
-    ExposureOffset instead of EMITTANCE[kind]'s."""
+    ExposureOffset instead of EMITTANCE[kind]'s; blend: the EffectSettings BlendingMode instead of the template's
+    SourceSoftAdditive (vanilla values: Additive, AlphaBlend, ...; additive can only brighten what is behind)."""
     from . import convert_material as cm
     mat = cm.build_from_template(template, name, files)
     for o in mat["Objects"]:
@@ -839,6 +840,8 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
             c["Data"].update(em)
         if c.get("Type") == "BSMaterial::EffectSettingsComponent" and vertex_color:
             c["Data"]["VertexColorBlend"] = "true"
+        if c.get("Type") == "BSMaterial::EffectSettingsComponent" and blend:
+            c["Data"]["BlendingMode"] = blend
         if c.get("Type") == "BSMaterial::EffectSettingsComponent" and soft_depth is not None:
             c["Data"].pop("SoftFalloffDepth", None)
             c["Data"].pop("SoftEffect", None)

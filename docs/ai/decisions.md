@@ -2960,3 +2960,12 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - Alternatives: a scrolling effect sheet (FXfluidTile01, as the waterfalls: emissive, would glow at night); vanilla
   Waterfall_Outside_02.mat (drew nothing in game); Starfield water stepped into flat pieces along the slope (stairs of
   water where Skyrim's runs smoothly).
+
+## 2026-11-27: sloped Skyrim water as a tinted, alpha-blended, scrolling effect (Claude)
+**Decision:** a sloped Skyrim water shape (streams down steps) is drawn with FXwaterTile01 as an effect material with
+BlendingMode AlphaBlend, tinted (70, 102, 110) / 255 (WRTerWind01Waterfall01 "WATER" vertex colour), scrolling with
+its model's foam at the same ground speed. **Why:** the lit near-white sheet (previous decision) went dark in shade
+and did not move; the owner's screenshots of Skyrim show a grey-blue moving layer. Additive blending (the effect
+template's) cannot darken the stone under it. **Alternatives:** the lit sheet (`sloped_water` "sheet", kept);
+Starfield water on the slope (drew a dark film or nothing); a vanilla waterfall material (the Waterfall_Outside_02
+probe drew nothing).

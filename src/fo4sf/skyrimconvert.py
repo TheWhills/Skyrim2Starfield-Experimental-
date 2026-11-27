@@ -238,6 +238,31 @@ def water_effect_soft_depth(info: dict) -> Optional[float]:
     return None if int(info.get("flags1") or 0) & SLSF1_SOFT_EFFECT else 0.0
 
 
+def uv_gradient(s: nifmod.Fo4Shape, axis: str):
+    """d(U or V) / d(position) of a shape (least squares, model space with the shape's transform), or None."""
+    import numpy as np
+    if not s.uvs or len(s.uvs) < 4 or len(s.uvs) != len(s.positions):
+        return None
+    rot = np.array(s.rotation, dtype=float).reshape(3, 3)
+    pos = (np.array(s.positions, dtype=float) * s.scale) @ rot.T
+    uv = np.array(s.uvs, dtype=float)[:, 0 if axis.upper() == "U" else 1]
+    g = np.linalg.lstsq(np.c_[pos, np.ones(len(pos))], uv, rcond=None)[0][:3]
+    return g if float(np.linalg.norm(g)) > 1e-9 else None
+
+
+def sheet_scroll(sheet, foam, foam_scroll):
+    """The sheet's UV scroll moving with its foam: the foam's axis, the period scaled so both move at the same ground
+    speed (their UVs stretch differently: WRStairsWater01River01 sheet dv/dpos 0.0011, foam 0.002 per unit), the sign
+    flipped when the two UV directions run against each other. The foam's scroll when a gradient is missing."""
+    import numpy as np
+    axis, delta, period = foam_scroll
+    gs, gf = uv_gradient(sheet, axis), (uv_gradient(foam, axis) if foam is not None else None)
+    if gs is None or gf is None:
+        return foam_scroll
+    sign = 1.0 if float(np.dot(gs, gf)) >= 0 else -1.0
+    return axis, delta * sign, round(period * float(np.linalg.norm(gf)) / float(np.linalg.norm(gs)), 3)
+
+
 def sloped_sheet_alpha(s: nifmod.Fo4Shape, gain: Optional[float] = None) -> nifmod.Fo4Shape:
     """A sloped water shape's vertex alpha raised to the lit water sheet's level (SLOPED_WATER_ALPHA_GAIN); RGB kept."""
     if not s.colors:
@@ -385,6 +410,12 @@ SLOPED_WATER_ALPHA_REF = 55
 # sheet's (0..127, mean 79; verified, the NIFs): with the sheet's vertex-alpha blend and its alpha test (0.1) nearly
 # every pixel was cut. Their vertex alpha is scaled by this to the fall's level (clamped at 255).
 SLOPED_WATER_ALPHA_GAIN = 4.0
+# 2026-11-27, owner: the stretch of the main road stream under the arches still looks dry ("lets try" a darker, bluer,
+# moving layer). Skyrim's Wind District fall tints the same FXwaterTile01 sheet with its vertex colour (70, 102, 110):
+# verified, the NIF. The sloped water becomes that tinted texture as an alpha-blended effect scrolling with its foam
+# (stage / convert attribute sloped_water: "flow", the default; "sheet" = the lit near-white sheet before).
+SLOPED_WATER_TINT = (70 / 255, 102 / 255, 110 / 255)
+SLOPED_WATER_BLEND = "AlphaBlend"      # a vanilla effect BlendingMode (Materials/Effects/Glows/AnisotropicFlare_AlphaBlend)
 WATER_MATERIAL = "Materials\\Water\\WaterPlaceholder.mat"          # vanilla Water16m.nif's own
 
 
@@ -786,6 +817,28 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
         verified in game as part of that fall, 2026-11-26), on the stream's mesh. The foam above it scrolls as in Skyrim."""
         return self.skyrim_material(SLOPED_WATER_DIFFUSE, SLOPED_WATER_NORMAL, False, True, SLOPED_WATER_ALPHA_REF)
 
+    def sloped_flow_material(self, src, sheet_shape, shapes) -> Optional[str]:
+        """The sloped water as a moving, tinted layer (2026-11-27, owner on the main road stream: the foam shows, the
+        stretch toward the grate still looks dry; Skyrim's water there is a grey-blue moving layer): the same texture
+        (FXwaterTile01) as an effect material, alpha-blended (not additive: it must be able to darken the stone),
+        tinted with the Wind District fall sheet's vertex colour (SLOPED_WATER_TINT), scrolling with the model's own
+        foam at the same ground speed (sheet_scroll). None when the effect cannot be built (the lit sheet then)."""
+        foam_scroll, foam = None, None
+        for f in shapes:
+            if f is sheet_shape or f.shader_ref < 0 or src.type_of(f.shader_ref) != "BSEffectShaderProperty":
+                continue
+            try:
+                info = skyrimfire.effect_shader(src, f.shader_ref)
+            except Exception:                                       # noqa: BLE001
+                continue
+            if re.search(WATER_EFFECT, info.get("source") or "", re.I):
+                foam_scroll, foam = skyrimfire.uv_scroll(info["controllers"]), f
+                if foam_scroll:
+                    break
+        scroll = sheet_scroll(sheet_shape, foam, foam_scroll) if foam_scroll else None
+        return self.flame_material(SLOPED_WATER_DIFFUSE, tint=SLOPED_WATER_TINT, scroll=scroll, kind="water",
+                                   vertex_color=True, soft_depth=0.0, blend=SLOPED_WATER_BLEND)
+
     def skyrim_water_effect_material(self, src, shader_ref) -> Optional[str]:
         """Skyrim's moving water effects (2026-11-26, owner: the streams lack Skyrim's flow, no waterfalls): foam on the
         streams (FXWhiteWater01), waterfall sheets (FXfluidTile01), the Wind District fall (FXwaterTile01) are effect
@@ -956,7 +1009,9 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                     else:
                         water.append({"sloped": True, "shape": (s.name or b"").decode("latin-1"),
                                       "z_range": round(max(zs) - min(zs), 1)})
-                        sheet = self.sloped_water_material() if getattr(self, "sloped_water", "sheet") == "sheet"                             else None
+                        mode = getattr(self, "sloped_water", "flow")
+                        sheet = (self.sloped_flow_material(src, s, shapes) if mode == "flow" else None) \
+                            or (self.sloped_water_material() if mode in ("flow", "sheet") else None)
                         if sheet:                     # Skyrim's lit water sheet, in the model itself (no water object)
                             water[-1]["sheet"] = sheet
                             mats[i] = sheet
