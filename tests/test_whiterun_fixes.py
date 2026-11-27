@@ -246,6 +246,32 @@ class WaterTests(unittest.TestCase):
         self.assertEqual(so.water_type_for(spec, "skyrim\\clutter\\horsetrough01_water.nif"), "0560D0")
         self.assertEqual(so.water_type_for("", "x"), "")
         self.assertEqual(so.water_type_for("0560CF", "x"), "0560CF")
+        # owner 2026-11-27: the upper pool's WaterOceanDark everywhere, the Gildergreen ring kept
+        city = so.WATER_TYPE_NAMED["city"]
+        self.assertEqual(so.water_type_for(city, r"skyrim\...\wrwaterpool01_water.nif"), "0560D0")
+        self.assertEqual(so.water_type_for(city, r"skyrim\...\water1024_water.nif"), "0560D0")
+        self.assertEqual(so.water_type_for(city, r"skyrim\...\WRTreeCircleWater01_water.nif"), "062BE5")
+        self.assertIs(so.WATER_TYPE_NAMED["probe"], so.WATER_TYPE_PROBE)
+
+    def test_water_effect_soft_edge_only_where_skyrim_is_soft(self):
+        from fo4sf import skyrimconvert as sc
+        self.assertEqual(sc.water_effect_soft_depth({"flags1": 0xA0000038}), 0.0)   # the streams' foam: none
+        self.assertIsNone(sc.water_effect_soft_depth({"flags1": 0xC0000078}))       # the rocks' foam: template's
+        calls = []
+
+        class Conv(sc.SkyrimConverter):
+            def __init__(self):
+                pass
+
+            def flame_material(self, source, **kw):
+                calls.append(kw)
+                return "m"
+        info = {"source": r"textures\effects\FXWhiteWater01.dds", "flags1": 0xA0000038, "controllers": [],
+                "vertex_alpha": True}
+        import unittest.mock as um
+        with um.patch.object(sc.skyrimfire, "effect_shader", return_value=info):
+            self.assertEqual(Conv().skyrim_water_effect_material(None, 0), "m")
+        self.assertEqual(calls[0]["soft_depth"], 0.0)
 
     def test_water_effects(self):
         import re

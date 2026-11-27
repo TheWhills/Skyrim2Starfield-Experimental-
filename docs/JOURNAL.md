@@ -687,3 +687,9 @@ per-reference sound volume. Staged; installed once Starfield is closed; **not he
 **Owner (2026-11-27):** nothing visible on the sloped streams. Their vertex alpha (mean 20/255) is a quarter of the
 Wind District fall sheet's (79/255) and the sheet alpha-tests at 0.1: scaled by 4 (`skyrimconvert.sloped_sheet_alpha`).
 Rebuilt and installed with the sound thinning; **not seen in game yet**.
+
+**Owner (2026-11-27, later):** the sloped streams still look empty; "the upper pool is a much better color than the
+lower one"; loudness fine. **Now:** water effect materials take the soft edge only where Skyrim's shader is soft (the
+stream foam, 2 cm over the stone, had faded to ~6 % under the template's 35 cm soft edge); Whiterun's water all
+WaterOceanDark (the upper pool's) except the Gildergreen ring (`--water-type city`, cities.ps1's default). Rebuilt and
+installed; **not seen in game yet**.

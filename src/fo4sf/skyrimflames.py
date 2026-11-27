@@ -41,15 +41,15 @@ class FlameMixin:
                        palette_alpha: bool = False, color_row: float = 1.0, alpha_row: float = 1.0,
                        tint=(1.0, 1.0, 1.0), scroll=None, kind: str = "hearth", flicker: Optional[float] = None,
                        vertex_color: bool = False, flipbook=None, multiple: float = 1.0,
-                       crossfade=None) -> Optional[str]:
+                       crossfade=None, soft_depth: Optional[float] = None) -> Optional[str]:
         """Convert (once) a Skyrim effect texture into a Starfield emissive effect material: palette baked in
         (skyrimfire.palette_bake), colour + emissive BC1 sRGB, opacity BC4; skyrimfire.effect_material with the
-        scroll / flicker / flipbook controllers."""
+        scroll / flicker / flipbook controllers. soft_depth: None keeps the template's soft edge (0.35 m), 0 none."""
         tint = tuple(float(t) for t in tint)
         ident = "|".join(str(x) for x in (source.lower(), greyscale.lower(), palette_color, palette_alpha,
                                           round(color_row, 3), round(alpha_row, 3), [round(v, 3) for v in tint],
                                           scroll, kind, flicker, vertex_color, flipbook, round(multiple, 3),
-                                          crossfade))
+                                          crossfade) + (() if soft_depth is None else (soft_depth,)))
         stem = os.path.splitext(os.path.basename(source.replace("\\", "/")))[0].lower() + "_" + \
             hashlib.sha1(ident.encode()).hexdigest()[:8]
         key = "fire:" + stem
@@ -58,7 +58,8 @@ class FlameMixin:
         try:
             self._materials[key] = self._write_flame_material(stem, source, greyscale, palette_color, palette_alpha,
                                                               color_row, alpha_row, tint, scroll, kind, flicker,
-                                                              vertex_color, flipbook, multiple, crossfade)
+                                                              vertex_color, flipbook, multiple, crossfade,
+                                                              soft_depth)
             self.stats["flame_materials"] = self.stats.get("flame_materials", 0) + 1
         except Exception as e:                                      # noqa: BLE001  (recorded; the shape is skipped)
             self._materials[key] = None
@@ -78,7 +79,8 @@ class FlameMixin:
         return px.reshape(h["height"], h["width"], 4)
 
     def _write_flame_material(self, stem, source, greyscale, palette_color, palette_alpha, color_row, alpha_row,
-                              tint, scroll, kind, flicker, vertex_color, flipbook, multiple=1.0, crossfade=None) -> str:
+                              tint, scroll, kind, flicker, vertex_color, flipbook, multiple=1.0, crossfade=None,
+                              soft_depth=None) -> str:
         import tempfile
         import numpy as np
         from . import convert_material as cm, textures
@@ -114,7 +116,8 @@ class FlameMixin:
                                          {"Albedo": files["color"], "Emissive": files["color"],
                                           "Opacity": files["opacity"]},
                                          kind=kind, scroll=scroll, flicker=flicker, vertex_color=vertex_color,
-                                         flipbook=flipbook, multiple=multiple, crossfade=crossfade)
+                                         flipbook=flipbook, multiple=multiple, crossfade=crossfade,
+                                         soft_depth=soft_depth)
         mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
         p = os.path.join(self.staging, *mat_rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)

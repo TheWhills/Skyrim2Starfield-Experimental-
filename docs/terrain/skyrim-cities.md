@@ -298,6 +298,19 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   WRMainRoadPlainsRiver01 0..63, mean 21), the fall's sheet's is 0..127, mean 79 (verified, the NIFs); the sheet
   material blends by vertex alpha and alpha-tests at 0.1, so nearly every pixel was cut (supported hypothesis). The
   sloped shapes' vertex alpha is now scaled by `SLOPED_WATER_ALPHA_GAIN` 4 (clamped 255) to the fall's level.
+  **Still nothing (owner, same day).** The stream models are placed (one reference each, at the channel's own position,
+  no root transforms) and their files are in the city's archive (verified). The foam lies 2 cm above the channel floor,
+  the water 1.2 cm (measured over the channel's triangles, WRStairsWater01River01 on WRStairsWater01). Our water effect
+  materials kept the effect template's soft edge (SoftEffect, SoftFalloffDepth 0.35 m: an effect fades out where a
+  surface is that close behind it), so the stream foam drew at ~6 % (verified: the converted .mat; the cause:
+  supported hypothesis). Skyrim's stream foam is not soft (effect flags1 A0000038, bit 30 clear); the rocks' foam is
+  (C0000078). `water_effect_soft_depth`: the template's soft edge only where Skyrim's shader has Soft_Effect, else none
+  (the candles' soft edge was the same problem, 2026-11-21). The water sheet itself is near white (FXwaterTile01, mean
+  229) at about a third opacity and does not scroll: the moving white in Skyrim's streams is the foam.
+* **Colour (owner, 2026-11-27):** "the upper pool is a much better color than the lower one". Upper: the Water1024
+  pair (357 m), WaterOceanDark 0560D0; lower: WRWaterPool01 (347 m), WaterOceanClear 0560CF. `--water-type city`
+  (WATER_TYPE_CITY, now the default of tools/owner/cities.ps1): WaterOceanDark everywhere but the Gildergreen's ring
+  (WaterClearSterile, not judged yet); `--water-type probe` keeps the three-type test.
 * **Softer splash** (supported hypothesis, unverified): the water models are now copies of Water16m1mDepthFountain
   03084F, Bethesda's own shallow city water (1 m deep, the calmer `materials/water/watersmooth.mat`, WaterClearSterile;
   New Atlantis's canal pools use the same material) instead of the lake piece 039FD6 (no water material of its own); the

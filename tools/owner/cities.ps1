@@ -24,9 +24,10 @@ param(
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$Texconv = "C:\Modding\tools\texconv.exe",
-    # water type of the cities' water (make_skyrim_objects.py stage --water-type): "probe" = three types side by side in
-    # Whiterun (pool WaterOceanClear, Gildergreen ring WaterClearSterile, the rest WaterOceanDark), or one WATR hex
-    [string]$WaterType = "probe",
+    # water type of the cities' water (make_skyrim_objects.py stage --water-type): "city" = WaterOceanDark (the owner's
+    # pick, 2026-11-27: the upper pool's) but the Gildergreen ring WaterClearSterile; "probe" = the three-type test
+    # (lower pool WaterOceanClear, ring WaterClearSterile, the rest WaterOceanDark), or one WATR hex
+    [string]$WaterType = "city",
     [switch]$NoInstall,
     [switch]$Uninstall
 )

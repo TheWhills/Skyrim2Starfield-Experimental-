@@ -227,6 +227,17 @@ def swap_textures(paths: list, alt: Optional[list]) -> list:
     return out
 
 
+SLSF1_SOFT_EFFECT = 0x40000000   # Skyrim effect shader flags 1 bit 30 (nif.xml SkyrimShaderPropertyFlags1 Soft_Effect)
+
+
+def water_effect_soft_depth(info: dict) -> Optional[float]:
+    """The soft edge of a Skyrim water effect's material: the effect template's (None: SoftFalloffDepth 0.35 m) only
+    where Skyrim's shader is soft, else none (0). 2026-11-27, owner: nothing on the sloped streams. Their foam lies
+    2 cm over the stone (WRStairsWater01River01 "foam" over WRStairsWater01, measured) and is not soft in Skyrim
+    (flags1 A0000038); with the template's 35 cm soft edge it faded to ~6 %. WRRapidRocks01's foam is soft (C0000078)."""
+    return None if int(info.get("flags1") or 0) & SLSF1_SOFT_EFFECT else 0.0
+
+
 def sloped_sheet_alpha(s: nifmod.Fo4Shape, gain: Optional[float] = None) -> nifmod.Fo4Shape:
     """A sloped water shape's vertex alpha raised to the lit water sheet's level (SLOPED_WATER_ALPHA_GAIN); RGB kept."""
     if not s.colors:
@@ -771,7 +782,7 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
             return None
         return self.flame_material(info["source"], **skyrimfire.bake_params(info),
                                    scroll=skyrimfire.uv_scroll(info["controllers"]), kind="water",
-                                   vertex_color=info["vertex_alpha"])
+                                   vertex_color=info["vertex_alpha"], soft_depth=water_effect_soft_depth(info))
 
     def _threshold_material(self, mat: str, ref: int) -> Optional[str]:
         """The cutout material `mat` (skyrim_material: materials\\<prefix>\\<stem>.mat over textures\\<prefix>\\<stem>_*)

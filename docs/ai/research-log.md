@@ -421,3 +421,9 @@ supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and d
   WRTerWind01Waterfall01 WATER 0..127 (mean 79), RGB (70, 102, 110): **verified** (NIFs, probe_uv). The converted sheet
   material (fxwatertile01_b550d9b7.mat) has AlphaBlenderSettings UseVertexColor true and AlphaTestThreshold 0.1:
   **verified**; that this cut the streams' sheet to nothing: **supported hypothesis** (owner: nothing visible).
+- WRStairsWater01River01 on WRStairsWater01: water 1.2 cm, foam 2.1 cm (medians) above the channel's own triangles:
+  **verified** (point-in-triangle over the source NIFs). Converted water effect materials carried the template's
+  SoftEffect / SoftFalloffDepth 0.35: **verified** (.mat); that this faded the stream foam: **supported hypothesis**.
+  Skyrim effect flags1: stream foam A0000038 (Soft_Effect clear), rapid rocks C0000078 (set): **verified**.
+- Whiterun water heights: Water1024 x2 at 357.2 m (WaterOceanDark in the probe), WRWaterPool01 at 347.1 m
+  (WaterOceanClear): **verified** (objects.json); the owner's "upper pool" read as the former.

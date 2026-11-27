@@ -980,6 +980,11 @@ WATER_EDID_SUFFIX = "_Water"
 # owner 2026-11-26: "still so green", wants blue; three water types side by side in Whiterun (types the owner has not
 # compared yet: WaterOceanClear, WaterClearSterile; WaterOceanDark is the one picked for Tamriel's rivers)
 WATER_TYPE_PROBE = "wrwaterpool=0560CF;wrtreecirclewater=062BE5;0560D0"
+# owner 2026-11-27: "the upper pool is a much better color than the lower one": the upper pool (Water1024 x2, 357 m) is
+# WaterOceanDark 0560D0, the lower (WRWaterPool01, 347 m) WaterOceanClear 0560CF. 'city': WaterOceanDark everywhere but
+# the Gildergreen's ring (WaterClearSterile, not judged yet)
+WATER_TYPE_CITY = "wrtreecirclewater=062BE5;0560D0"
+WATER_TYPE_NAMED = {"probe": WATER_TYPE_PROBE, "city": WATER_TYPE_CITY}
 # the vanilla water activator each Skyrim water model is a copy of (2026-11-26, owner: the splash is "a bit aggressive
 # for walking through really shallow water"): Water16m1mDepthFountain, Bethesda's own shallow city water (1 m deep, the
 # calmer materials/water/watersmooth.mat, WaterClearSterile; New Atlantis's canal pools use the same material) instead
@@ -1095,7 +1100,7 @@ def cmd_stage(a):
                   + (f"; {wr['tilted']} tilted references left without water" if wr["tilted"] else ""))
     else:
         spec = getattr(a, "water_type", "") or ""
-        wr = model_water_exact(objects, bases, placed, items, WATER_TYPE_PROBE if spec == "probe" else spec,
+        wr = model_water_exact(objects, bases, placed, items, WATER_TYPE_NAMED.get(spec, spec),
                                getattr(a, "water_template", None) or WATER_TEMPLATE)
         if wr["refs"]:
             print(f"water: {wr['refs']:,} references of {wr['bases']} water models, each a copy of the vanilla water "
@@ -1350,7 +1355,7 @@ def main(argv=None):
                          "each model's own water surface on a copy of the vanilla water activator")
     ap.add_argument("--water-type", default="",
                     help="stage: WATR FormID (hex, Starfield.esm) for the water activators, or per model "
-                         "'pattern=hex;...;default' (water_type_for; 'probe' = WATER_TYPE_PROBE); default the vanilla "
+                         "'pattern=hex;...;default' (water_type_for; 'probe' = WATER_TYPE_PROBE, 'city' = WATER_TYPE_CITY); default the vanilla "
                          "activator's own (the fountain's WaterClearSterile 062BE5)")
     ap.add_argument("--water-template", default=WATER_TEMPLATE,
                     help="stage: the vanilla water activator (hex, Starfield.esm) the water models are copies of "
