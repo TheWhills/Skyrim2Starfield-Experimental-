@@ -321,6 +321,11 @@ Skyrim's ("fine leaving it"); the foam round the stream's rocks "is static"; "sl
   verified, the NIF), scrolling with the model's foam at the same ground speed (`sheet_scroll`: the foam's axis, its
   period x |grad foam UV| / |grad sheet UV|, sign by their directions). Unlit (the water effects' dim emittance), so
   it stays visible in shade as Skyrim's reflecting water does. Unverified in game.
+  **Owner, in game:** the layer shows (blue-grey, moving), but "this middle part keeps flickering": a sharp-edged
+  block of the main road stream showing and hiding. Not meshlet culling (its two meshlet boxes cover the whole
+  stream, 3 m tall: verified, the .mesh); the water lies 0..1.5 cm over the stone in places (median 1.0 cm, some points
+  under the curb stones), close enough for the depth test to flip (supported hypothesis: z-fighting). A sloped water
+  sheet and its foam are lifted 5 cm (`lift_shape`, `SHEET_LIFT_M`).
 * **Colour (owner, 2026-11-27):** "the upper pool is a much better color than the lower one". Upper: the Water1024
   pair (357 m), WaterOceanDark 0560D0; lower: WRWaterPool01 (347 m), WaterOceanClear 0560CF. `--water-type city`
   (WATER_TYPE_CITY, now the default of tools/owner/cities.ps1): WaterOceanDark everywhere but the Gildergreen's ring

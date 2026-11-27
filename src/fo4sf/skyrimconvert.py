@@ -289,6 +289,25 @@ def raise_alpha_mean(s: nifmod.Fo4Shape, target: float = SHEET_FOAM_ALPHA_MEAN) 
     return sloped_sheet_alpha(s, target / mean)
 
 
+# 2026-11-27, owner on the main road stream's flowing layer: "this middle part keeps flickering" (a sharp-edged block
+# of the stream showing and hiding). Skyrim's stream water lies 0..1.5 cm over the stone in places (WRMainRoadPlainsRiver01
+# WATER on WRMainRoadPlains: median 1.0 cm, some points under the curb stones; measured), close enough for the depth
+# test to flip between the two (supported hypothesis: z-fighting; the meshlet boxes cover the whole stream, 3 m tall,
+# so not culling). A sloped water sheet and its foam are lifted this far (world up, metres).
+SHEET_LIFT_M = 0.05
+
+
+def lift_shape(s: nifmod.Fo4Shape, metres: float = None) -> nifmod.Fo4Shape:
+    """The shape moved straight up (world z of its model) by metres (SHEET_LIFT_M), through its own transform."""
+    metres = SHEET_LIFT_M if metres is None else metres
+    if not s.positions or not metres:
+        return s
+    r = s.rotation                     # row-major; world = scale * R @ p + t, so p moves by R^T (0, 0, d) / scale
+    d = metres * 70.0 / (s.scale or 1.0)
+    off = (r[6] * d, r[7] * d, r[8] * d)
+    return dataclasses.replace(s, positions=[(x + off[0], y + off[1], z + off[2]) for x, y, z in s.positions])
+
+
 def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
     """The shape plus a mirrored copy of every triangle (reversed winding, normals negated, tangents kept so the
     recomputed handedness flips with the normal): a double-sided Skyrim surface as plain one-sided Starfield geometry,
@@ -1026,7 +1045,9 @@ class SkyrimConverter(FlameMixin, pipeline.Converter):
                 for i, s in enumerate(shapes):
                     m = mats[i]
                     if m and m not in sheets and "\\effects\\" in m.lower() and re.search(WATER_EFFECT, m, re.I):
-                        shapes[i] = raise_alpha_mean(s)
+                        shapes[i] = lift_shape(raise_alpha_mean(s))
+                    elif m in sheets:                     # both clear of the stone (SHEET_LIFT_M: z-fighting)
+                        shapes[i] = lift_shape(s)
             water_only = bool(water) and all(m is None or is_water_shader(src, s.shader_ref)
                                              for s, m in zip(shapes, mats))
             va_report = {}

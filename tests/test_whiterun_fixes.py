@@ -396,6 +396,14 @@ class SlopedWaterTests(unittest.TestCase):
         against = dataclasses.replace(base, uvs=[(0.0, -p[1] * 0.002) for p in pts])
         self.assertEqual(sc.sheet_scroll(sheet, against, ("V", -1.0, 4.0)), ("V", 1.0, 8.0))
         self.assertEqual(sc.sheet_scroll(sheet, None, ("V", -1.0, 4.0)), ("V", -1.0, 4.0))
+        # sheet and foam lifted 5 cm straight up in the model (3.5 Skyrim units), through the shape's own transform
+        up = sc.lift_shape(base)
+        self.assertEqual([p[2] for p in up.positions], [3.5] * 4)
+        tilted = dataclasses.replace(base, rotation=(1, 0, 0, 0, 0, -1, 0, 1, 0), scale=0.5)   # local y is world z
+        moved = sc.lift_shape(tilted)
+        world_z = [0.5 * (0 * p[0] + 1 * p[1] + 0 * p[2]) for p in moved.positions]
+        world_z0 = [0.5 * p[1] for p in tilted.positions]
+        self.assertEqual([round(a - b, 6) for a, b in zip(world_z, world_z0)], [3.5] * 4)
         strong = dataclasses.replace(s, colors=[(1, 2, 3, 140), (1, 2, 3, 150)])
         self.assertIs(sc.raise_alpha_mean(strong), strong)
         self.assertIs(sc.raise_alpha_mean(bare), bare)

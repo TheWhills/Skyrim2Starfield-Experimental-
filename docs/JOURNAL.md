@@ -701,3 +701,7 @@ Rebuilt and installed; **not seen in game yet**.
 **Owner:** the main road stream "does look a good deal better"; agreed to try a darker, bluer, moving water layer.
 **Now:** sloped water is FXwaterTile01 as an alpha-blended effect tinted with the Wind District fall's vertex colour,
 scrolling with its foam at the same ground speed. Rebuilt and installed; **not seen in game yet**.
+
+**Owner:** the moving blue-grey layer shows; a block in the middle of the main road stream flickers. **Now:** the
+sloped water sheet and its foam lifted 5 cm off the stone (z-fighting, supported hypothesis). Rebuilt; **not seen in
+game yet**.
